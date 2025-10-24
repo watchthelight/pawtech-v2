@@ -150,3 +150,74 @@ export function logActionJSON(params: {
     "[logger] action logged as JSON (embed unavailable)"
   );
 }
+
+/**
+ * WHAT: Post audit event embed to guild logging channel.
+ * WHY: Provides transparency for sensitive admin operations (e.g., /modstats reset).
+ * HOW: Resolves logging channel, posts structured embed with action details.
+ *
+ * @param guild - Discord guild where event occurred
+ * @param params - Audit event parameters
+ * @example
+ * await postAuditEmbed(guild, {
+ *   action: 'modstats_reset',
+ *   userId: '123456789',
+ *   userTag: 'admin#1234',
+ *   result: 'success',
+ *   details: 'Cache cleared, 5 guilds affected',
+ * });
+ */
+export async function postAuditEmbed(
+  guild: Guild,
+  params: {
+    action: string;
+    userId: string;
+    userTag?: string;
+    result: "success" | "denied" | "error";
+    details?: string;
+  }
+): Promise<void> {
+  const channel = await getLoggingChannel(guild);
+
+  // If no channel available, log to console as JSON
+  if (!channel) {
+    console.log(
+      JSON.stringify({
+        level: "info",
+        module: "audit_log",
+        guildId: guild.id,
+        timestamp: Date.now(),
+        ...params,
+      })
+    );
+    return;
+  }
+
+  // Build embed with color based on result
+  const { EmbedBuilder } = await import("discord.js");
+  const color = params.result === "success" ? 0x57f287 : params.result === "denied" ? 0xed4245 : 0xfee75c;
+
+  const embed = new EmbedBuilder()
+    .setTitle(`🔐 Admin Action: ${params.action}`)
+    .setColor(color)
+    .addFields(
+      { name: "User", value: `<@${params.userId}> (${params.userTag ?? params.userId})`, inline: true },
+      { name: "Result", value: params.result.toUpperCase(), inline: true },
+      { name: "Time", value: `<t:${Math.floor(Date.now() / 1000)}:F>`, inline: true }
+    )
+    .setTimestamp();
+
+  if (params.details) {
+    embed.addFields({ name: "Details", value: params.details });
+  }
+
+  try {
+    await channel.send({ embeds: [embed] });
+    logger.info(
+      { guildId: guild.id, action: params.action, userId: params.userId, result: params.result },
+      "[logger] audit embed posted"
+    );
+  } catch (err) {
+    logger.error({ err, guildId: guild.id, action: params.action }, "[logger] failed to post audit embed");
+  }
+}

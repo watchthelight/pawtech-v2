@@ -70,6 +70,14 @@ export const data = new SlashCommandBuilder()
           .setMaxValue(365)
           .setRequired(false)
       )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("reset")
+      .setDescription("Clear and rebuild moderator statistics (password required)")
+      .addStringOption((opt) =>
+        opt.setName("password").setDescription("Admin reset password").setRequired(true)
+      )
   );
 
 /**
@@ -490,6 +498,134 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
  * WHY: Routes to leaderboard or user subcommand.
  */
 /**
+ * WHAT: Rate limiter for /modstats reset attempts.
+ * WHY: Prevents brute-force password guessing attacks.
+ * HOW: In-memory map of userId -> last attempt timestamp.
+ * SECURITY: 30-second cooldown per user after failed attempt.
+ */
+const resetRateLimiter = new Map<string, number>();
+const RESET_RATE_LIMIT_MS = 30000; // 30 seconds
+
+/**
+ * WHAT: Handle /modstats reset subcommand.
+ * WHY: Allows admins to clear corrupted/stale cache and force recomputation.
+ * SECURITY: Password-protected, rate-limited, audit-logged.
+ */
+async function handleReset(interaction: ChatInputCommandInteraction): Promise<void> {
+  await interaction.deferReply({ ephemeral: true });
+
+  const userId = interaction.user.id;
+  const now = Date.now();
+
+  // Check rate limit (per user)
+  const lastAttempt = resetRateLimiter.get(userId);
+  if (lastAttempt && now - lastAttempt < RESET_RATE_LIMIT_MS) {
+    await interaction.editReply({
+      content: "❌ Too many attempts. Please wait 30 seconds before trying again.",
+    });
+    return;
+  }
+
+  // Get provided password (never log this value!)
+  const providedPassword = interaction.options.getString("password", true);
+
+  // Get expected password from config
+  const { RESET_PASSWORD } = await import("../config.js");
+
+  if (!RESET_PASSWORD) {
+    await interaction.editReply({
+      content: "❌ Reset not configured. Contact server administrator.",
+    });
+    logger.warn({ userId }, "[modstats:reset] attempted but RESET_PASSWORD not set");
+    return;
+  }
+
+  // Constant-time password comparison
+  const { secureCompare } = await import("../lib/secureCompare.js");
+  const passwordMatches = secureCompare(providedPassword, RESET_PASSWORD);
+
+  if (!passwordMatches) {
+    // Record failed attempt for rate limiting
+    resetRateLimiter.set(userId, now);
+
+    await interaction.editReply({
+      content: "❌ Unauthorized. Reset password invalid.",
+    });
+
+    // Audit log (denied)
+    if (interaction.guild) {
+      const { postAuditEmbed } = await import("../features/logger.js");
+      await postAuditEmbed(interaction.guild, {
+        action: "modstats_reset",
+        userId,
+        userTag: interaction.user.tag,
+        result: "denied",
+      });
+    }
+
+    logger.warn({ userId, userTag: interaction.user.tag }, "[modstats:reset] unauthorized attempt");
+    return;
+  }
+
+  // Password correct - proceed with reset
+  try {
+    const { resetModstats } = await import("../features/modstats/reset.js");
+    const result = await resetModstats(db, logger, {});
+
+    await interaction.editReply({
+      content: `✅ **Modstats cache reset complete**\n\n` +
+        `• Cache cleared: ${result.cacheDropped ? "Yes" : "No"}\n` +
+        `• Guilds affected: ${result.guildsAffected}\n` +
+        `• Recomputation: Will occur lazily on next \`/modstats\` call\n\n` +
+        `${result.errors && result.errors.length > 0 ? `⚠️ Warnings:\n${result.errors.map(e => `- ${e}`).join('\n')}` : ''}`,
+    });
+
+    // Audit log (success)
+    if (interaction.guild) {
+      const { postAuditEmbed } = await import("../features/logger.js");
+      await postAuditEmbed(interaction.guild, {
+        action: "modstats_reset",
+        userId,
+        userTag: interaction.user.tag,
+        result: "success",
+        details: `Cache cleared, ${result.guildsAffected} guilds affected`,
+      });
+    }
+
+    logger.info(
+      {
+        userId,
+        userTag: interaction.user.tag,
+        guildId: interaction.guildId,
+        guildsAffected: result.guildsAffected,
+      },
+      "[modstats:reset] cache reset successful"
+    );
+
+    // Clear rate limit on successful auth
+    resetRateLimiter.delete(userId);
+  } catch (err) {
+    logger.error({ err, userId }, "[modstats:reset] reset failed");
+
+    await interaction.editReply({
+      content: "❌ Reset failed. Check logs for details.",
+    });
+
+    // Audit log (error)
+    if (interaction.guild) {
+      const { postAuditEmbed } = await import("../features/logger.js");
+      await postAuditEmbed(interaction.guild, {
+        action: "modstats_reset",
+        userId,
+        userTag: interaction.user.tag,
+        result: "error",
+        details: (err as Error).message,
+      });
+    }
+  }
+}
+
+/**
  * WHAT: Handle /modstats export subcommand.
  * WHY: Provides full CSV export for external analysis.
  */
@@ -582,6 +718,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     await handleUser(interaction);
   } else if (subcommand === "export") {
     await handleExport(interaction);
+  } else if (subcommand === "reset") {
+    await handleReset(interaction);
   } else {
     await interaction.reply({
       content: "❌ Unknown subcommand.",

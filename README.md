@@ -184,7 +184,7 @@ npm run format
 | `SENTRY_ENVIRONMENT`    | No       | Sentry environment label (default: `production`)                   |
 | `LOG_LEVEL`             | No       | Pino log level: `trace`, `debug`, `info`, `warn`, `error`, `fatal` |
 | `GATE_SHOW_AVATAR_RISK` | No       | Show NSFW risk percentage on review cards (1=show, 0=hide)         |
-| `RESET_PASSWORD`        | No       | Plaintext password for `/gate reset` command                       |
+| `RESET_PASSWORD`        | No       | Password for `/gate reset` and `/modstats reset` commands          |
 
 ---
 
@@ -227,6 +227,14 @@ After deployment and command registration, configure the gate system:
 - `/modstats` — View personal moderator statistics
 - `/modstats leaderboard` — View top moderators
 - `/send channel:#general message:"..."` — Send anonymous staff message
+
+**Admin Operations:**
+- `/modstats reset password:"..."` — Clear and rebuild moderator statistics cache
+  - Requires `RESET_PASSWORD` environment variable to be set
+  - Password is validated using constant-time comparison (secure against timing attacks)
+  - Rate-limited to 1 attempt per 30 seconds per user
+  - All attempts are audit-logged to the configured logging channel
+  - The provided password is never logged or persisted
 
 For full command reference, see [docs/context/03_Slash_Commands_and_UX.md](docs/context/03_Slash_Commands_and_UX.md).
 
