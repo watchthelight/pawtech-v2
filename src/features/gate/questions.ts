@@ -44,6 +44,35 @@ export function getQuestionCount(guildId: string) {
   return row?.n ?? 0;
 }
 
+export function upsertQuestion(
+  guildId: string,
+  qIndex: number,
+  prompt: string,
+  required: 0 | 1,
+  ctx?: SqlTrackingCtx
+): void {
+  // Validate q_index is in range 0-4
+  if (qIndex < 0 || qIndex > 4) {
+    throw new Error(`Question index must be between 0 and 4, got ${qIndex}`);
+  }
+
+  const sql = `
+    INSERT INTO guild_question (guild_id, q_index, prompt, required)
+    VALUES (?, ?, ?, ?)
+    ON CONFLICT(guild_id, q_index) DO UPDATE SET
+      prompt = excluded.prompt,
+      required = excluded.required
+  `;
+
+  const run = () => db.prepare(sql).run(guildId, qIndex, prompt, required);
+
+  if (ctx) {
+    withSql(ctx, sql, run);
+  } else {
+    run();
+  }
+}
+
 export function seedDefaultQuestionsIfEmpty(
   guildId: string,
   ctx?: SqlTrackingCtx

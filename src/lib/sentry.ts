@@ -57,9 +57,16 @@ function getVersion(): string {
 
 /**
  * Initialize Sentry error tracking
- * Only activates if SENTRY_DSN is provided in environment
+ * Only activates if SENTRY_DSN is provided in environment and not running tests
  */
 export function initializeSentry() {
+  const isVitest = !!process.env.VITEST_WORKER_ID;
+
+  if (isVitest) {
+    // Skip Sentry during tests to reduce noise
+    return;
+  }
+
   if (!hasValidDsn(env.SENTRY_DSN)) {
     logger.info("Sentry DSN missing or invalid, error tracking disabled");
     return;

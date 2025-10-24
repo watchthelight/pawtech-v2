@@ -252,26 +252,42 @@ export function ensureApplicationStatusIndex() {
 
 /**
  * runReviewActionMigration
- * WHAT: Performs the copy-swap migration to remove CHECK constraint and convert created_at to INTEGER.
- * WHY: Inline implementation avoids module resolution issues in tests; keeps migration logic close to ensure.
- * HOW: Same logic as migrations/2025-10-20_review_action_free_text.ts but inlined.
+ * WHAT: Performs backup/drop/recreate migration to remove CHECK constraint and convert created_at to INTEGER.
+ * WHY: Avoids ALTER TABLE RENAME which triggers legacy SQL guard; uses backup table pattern instead.
+ * HOW: Backup existing data → drop old table → create final schema → restore data → drop backup.
  */
 function runReviewActionMigration(db: any) {
   const migrate = db.transaction(() => {
-    const countBefore = db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
-      count: number;
-    };
-    logger.info(`[migrate] review_action row count before: ${countBefore.count}`);
+    // Check if review_action exists before attempting backup
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='review_action'`)
+      .get();
 
-    // Drop existing indexes
-    db.prepare(`DROP INDEX IF EXISTS idx_review_action_app_time`).run();
-    db.prepare(`DROP INDEX IF EXISTS idx_review_app`).run();
-    db.prepare(`DROP INDEX IF EXISTS idx_review_moderator`).run();
+    let countBefore = 0;
 
-    // Create new table with no CHECK constraint and INTEGER created_at
-    db.prepare(
-      `
-      CREATE TABLE review_action_new (
+    if (tableExists) {
+      countBefore = (db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
+        count: number;
+      }).count;
+      logger.info(`[migrate] review_action row count before: ${countBefore}`);
+
+      // 1) Create backup snapshot
+      db.exec(`
+        CREATE TABLE IF NOT EXISTS review_action_bak AS
+          SELECT * FROM review_action
+      `);
+      logger.info(`[migrate] created review_action_bak with ${countBefore} rows`);
+
+      // 2) Drop existing indexes and table
+      db.exec(`DROP INDEX IF EXISTS idx_review_action_app_time`);
+      db.exec(`DROP INDEX IF EXISTS idx_review_app`);
+      db.exec(`DROP INDEX IF EXISTS idx_review_moderator`);
+      db.exec(`DROP TABLE review_action`);
+    }
+
+    // 3) Create FINAL schema with no CHECK constraint and INTEGER created_at
+    db.exec(`
+      CREATE TABLE review_action (
         id            INTEGER PRIMARY KEY AUTOINCREMENT,
         app_id        TEXT NOT NULL,
         moderator_id  TEXT NOT NULL,
@@ -282,65 +298,66 @@ function runReviewActionMigration(db: any) {
         created_at    INTEGER NOT NULL DEFAULT (strftime('%s','now')),
         FOREIGN KEY (app_id) REFERENCES application(id) ON DELETE CASCADE
       )
-    `
-    ).run();
+    `);
+    logger.info(`[migrate] created final review_action table`);
 
-    // Copy rows with created_at conversion
-    db.prepare(
+    // 4) Restore data from backup (if backup exists)
+    const backupExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='review_action_bak'`)
+      .get();
+
+    if (backupExists) {
+      db.prepare(
+        `
+        INSERT INTO review_action (id, app_id, moderator_id, action, reason, message_link, meta, created_at)
+        SELECT
+          id,
+          app_id,
+          moderator_id,
+          action,
+          reason,
+          message_link,
+          meta,
+          COALESCE(
+            CASE
+              WHEN created_at IS NOT NULL AND created_at != ''
+              THEN CAST(strftime('%s', created_at) AS INTEGER)
+              ELSE NULL
+            END,
+            CAST(strftime('%s', 'now') AS INTEGER)
+          ) as created_at
+        FROM review_action_bak
       `
-      INSERT INTO review_action_new (id, app_id, moderator_id, action, reason, message_link, meta, created_at)
-      SELECT
-        id,
-        app_id,
-        moderator_id,
-        action,
-        reason,
-        message_link,
-        meta,
-        COALESCE(
-          CASE
-            WHEN created_at IS NOT NULL AND created_at != ''
-            THEN strftime('%s', created_at)
-            ELSE NULL
-          END,
-          strftime('%s', 'now')
-        ) as created_at
-      FROM review_action
-    `
-    ).run();
+      ).run();
 
-    const countAfter = db.prepare(`SELECT COUNT(*) as count FROM review_action_new`).get() as {
-      count: number;
-    };
-    logger.info(`[migrate] review_action_new row count after copy: ${countAfter.count}`);
+      const countAfter = (db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
+        count: number;
+      }).count;
+      logger.info(`[migrate] restored ${countAfter} rows to review_action`);
 
-    if (countBefore.count !== countAfter.count) {
-      throw new Error(
-        `[migrate] row count mismatch: before=${countBefore.count}, after=${countAfter.count}`
-      );
+      if (countBefore !== countAfter) {
+        throw new Error(
+          `[migrate] row count mismatch: before=${countBefore}, after=${countAfter}`
+        );
+      }
+
+      // 5) Drop backup
+      db.exec(`DROP TABLE review_action_bak`);
     }
 
-    // Drop old table and rename new table
-    db.prepare(`DROP TABLE review_action`).run();
-    db.prepare(`ALTER TABLE review_action_new RENAME TO review_action`).run();
-
-    // Recreate indexes
-    db.prepare(
-      `
+    // 6) Recreate indexes
+    db.exec(`
       CREATE INDEX IF NOT EXISTS idx_review_action_app_time
       ON review_action(app_id, created_at DESC)
-    `
-    ).run();
+    `);
 
-    db.prepare(
-      `
+    db.exec(`
       CREATE INDEX IF NOT EXISTS idx_review_moderator
       ON review_action(moderator_id, created_at DESC)
-    `
-    ).run();
+    `);
 
     logger.info(
-      `[migrate] review_action migration completed successfully (${countAfter.count} rows)`
+      `[migrate] review_action migration completed successfully (${countBefore} rows preserved)`
     );
   });
 

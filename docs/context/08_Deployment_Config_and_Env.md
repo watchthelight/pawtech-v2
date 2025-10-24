@@ -112,6 +112,9 @@ RESET_PASSWORD=YOUR_SECURE_PASSWORD_HERE
 # Owner user IDs (comma-separated, bypass all permission checks)
 OWNER_IDS=YOUR_USER_ID_HERE,ANOTHER_USER_ID
 
+# Gate admin role IDs (comma-separated, can modify gate questions)
+GATE_ADMIN_ROLE_IDS=ROLE_ID_1,ROLE_ID_2
+
 # ============================================
 # Feature Flags and Tuning
 # ============================================
@@ -166,6 +169,7 @@ TRACE_INTERACTIONS=0
 - `DASHBOARD_PORT` (default: `3000`)
 - `SENTRY_DSN` (error tracking disabled if not set)
 - `OWNER_IDS` (no owner overrides)
+- `GATE_ADMIN_ROLE_IDS` (no gate admin role restrictions)
 
 ---
 

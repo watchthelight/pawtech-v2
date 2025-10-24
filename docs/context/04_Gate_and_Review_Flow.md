@@ -132,7 +132,7 @@ for all members.
 
 ## Verification Questions
 
-**Count:** 5 questions (configurable in code)
+**Count:** Up to 5 questions (configurable per guild)
 **Format:** Modal with text input fields
 **Validation:**
 
@@ -140,39 +140,63 @@ for all members.
 - Maximum 1024 characters per answer (Discord limit)
 - Minimum 10 characters per answer (prevents spam)
 
-**Default Questions:**
+**Configuration:**
 
-1. **What brings you to our community?**
-   - Purpose: Gauge genuine interest vs. bot/spam
-   - Expected: 2-3 sentences about interests
+Questions can be customized per guild using the `/gate set-questions` command:
 
-2. **How did you find us?**
+```
+/gate set-questions q1:"What is your age?" q2:"How did you find this server?"
+```
+
+**Features:**
+- Supports up to 5 questions (q1 through q5)
+- Only provided questions are updated (omitted ones remain unchanged)
+- Questions are required by default
+- Maximum 500 characters per question prompt
+
+**Viewing Current Questions:**
+
+Run `/gate set-questions` without any parameters to view all current questions:
+
+```
+/gate set-questions
+```
+
+This will display an ephemeral message showing all configured questions.
+
+**Default Questions (seeded on `/gate setup`):**
+
+1. **What is your age?**
+   - Purpose: Age verification for community safety
+   - Expected: Numeric age or age range
+
+2. **How did you find this server?**
    - Purpose: Track discovery channels (Reddit, friend invite, search)
    - Expected: Short answer (e.g., "Reddit post", "Friend recommendation")
 
-3. **Have you read our rules?**
-   - Purpose: Verify rules acknowledgment
-   - Expected: "Yes" or confirmation statement
+3. **What tend to be your goals here?**
+   - Purpose: Gauge genuine interest and community fit
+   - Expected: 2-3 sentences about interests/goals
 
-4. **What are your hobbies/interests?**
-   - Purpose: Assess cultural fit and conversation starters
-   - Expected: List of interests (art, gaming, tech, etc.)
+4. **What does a furry mean to you?**
+   - Purpose: Community-specific context and understanding
+   - Expected: Personal perspective on furry culture
 
-5. **Anything else you'd like us to know?**
-   - Purpose: Optional context (pronouns, timezone, special needs)
-   - Expected: Freeform text or "N/A"
+5. **What is the password stated in our rules?**
+   - Purpose: Verify rules were read completely
+   - Expected: Exact password from rules channel
 
 **Storage:**
-Answers saved as JSON blob in `applications.answer_data`:
+Answers saved per question index in `application_response` table:
 
-```json
-{
-  "q1": "I'm interested in furry art and looking for a friendly community",
-  "q2": "Found through Reddit r/furry",
-  "q3": "Yes, I've read and agree to follow all rules",
-  "q4": "Digital art, gaming (FFXIV), hiking",
-  "q5": "They/them pronouns, EST timezone"
-}
+```sql
+-- Each answer stored as a separate row
+app_id | q_index | question              | answer
+-------|---------|----------------------|--------
+abc123 | 0       | What is your age?    | 24
+abc123 | 1       | How did you find us? | Reddit
+abc123 | 2       | What are your goals? | Looking for art community
+...
 ```
 
 ---

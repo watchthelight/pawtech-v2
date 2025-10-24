@@ -32,6 +32,7 @@ import {
   hasManageGuild,
   isReviewer,
   canRunAllCommands,
+  hasGateAdmin,
   type GuildConfig,
 } from "../lib/config.js";
 import { ensureGateEntry } from "../features/gate.js";
@@ -54,7 +55,7 @@ import {
   claimGuard,
 } from "../features/review.js";
 import { postWelcomeCard } from "../features/welcome.js";
-import { seedDefaultQuestionsIfEmpty } from "../features/gate/questions.js";
+import { seedDefaultQuestionsIfEmpty, getQuestions, upsertQuestion } from "../features/gate/questions.js";
 import { postGateConfigCard } from "../lib/configCard.js";
 import {
   wrapCommand,
@@ -159,6 +160,16 @@ export const data = new SlashCommandBuilder()
             o.setName("role").setDescription("Role to ping in welcome message").setRequired(true)
           )
       )
+  )
+  .addSubcommand((sc) =>
+    sc
+      .setName("set-questions")
+      .setDescription("Set (update) gate questions q1..q5. Omit any to leave unchanged.")
+      .addStringOption((o) => o.setName("q1").setDescription("Question 1").setRequired(false).setMaxLength(500))
+      .addStringOption((o) => o.setName("q2").setDescription("Question 2").setRequired(false).setMaxLength(500))
+      .addStringOption((o) => o.setName("q3").setDescription("Question 3").setRequired(false).setMaxLength(500))
+      .addStringOption((o) => o.setName("q4").setDescription("Question 4").setRequired(false).setMaxLength(500))
+      .addStringOption((o) => o.setName("q5").setDescription("Question 5").setRequired(false).setMaxLength(500))
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
@@ -484,6 +495,80 @@ async function executeConfigView(ctx: CommandContext<ChatInputCommandInteraction
   await replyOrEdit(interaction, { content: lines.join("\n") });
 }
 
+async function executeSetQuestions(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executeSetQuestions
+   * WHAT: Updates gate questions (q1-q5) via upsert; only provided values change.
+   * WHY: Lets admins customize application questions without resetting all data.
+   * PARAMS: ctx — command context with interaction containing optional q1..q5 strings.
+   * RETURNS: Promise<void> after ephemeral reply showing updated questions.
+   * THROWS: Exceptions propagate to wrapCommand which posts error cards.
+   */
+  const { interaction } = ctx;
+
+  ctx.step("defer");
+  await ensureDeferred(interaction);
+
+  ctx.step("validate_permission");
+  // Check if user has gate admin permissions (owner, bot owners, admin roles, or ManageGuild)
+  if (!(await hasGateAdmin(interaction))) {
+    await replyOrEdit(interaction, {
+      flags: MessageFlags.Ephemeral,
+      content:
+        "You need owner/admin privileges to modify gate questions (guild owner, bot owners, configured admin roles, or Manage Server permission).",
+    });
+    return;
+  }
+
+  const guildId = interaction.guildId!;
+
+  ctx.step("parse_input");
+  // Collect provided question updates (q1..q5)
+  const updates: Array<{ index: number; prompt: string }> = [];
+  for (let i = 1; i <= 5; i++) {
+    const val = interaction.options.getString(`q${i}`, false);
+    if (val && val.trim()) {
+      updates.push({ index: i - 1, prompt: val.trim() });
+    }
+  }
+
+  // If no options provided, show current questions as helpful hint
+  if (updates.length === 0) {
+    ctx.step("load_current");
+    const current = getQuestions(guildId).filter(q => q.q_index >= 0 && q.q_index <= 4);
+    const preview = current.length > 0
+      ? current.map((q, i) => `${i + 1}) ${q.prompt}`).join("\n")
+      : "(No questions set)";
+    await replyOrEdit(interaction, {
+      flags: MessageFlags.Ephemeral,
+      content: `No changes provided.\n\n**Current questions:**\n${preview}\n\nTo update, use: \`/gate set-questions q1:"Your question here"\``,
+    });
+    return;
+  }
+
+  ctx.step("upsert_questions");
+  // Use transaction for atomicity
+  const tx = db.transaction(() => {
+    for (const u of updates) {
+      upsertQuestion(guildId, u.index, u.prompt, 1, ctx);
+    }
+  });
+  tx();
+
+  ctx.step("load_updated");
+  const current = getQuestions(guildId).filter(q => q.q_index >= 0 && q.q_index <= 4);
+  const updated = updates.map((u) => `q${u.index + 1}`).join(", ");
+  const preview = current.length > 0
+    ? current.map((q, i) => `${i + 1}) ${q.prompt}`).join("\n")
+    : "(No questions)";
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    flags: MessageFlags.Ephemeral,
+    content: `✅ Updated: **${updated}**\n\n**Current questions:**\n${preview}`,
+  });
+}
+
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
   const { interaction } = ctx;
   if (!interaction.guildId || !interaction.guild) {
@@ -508,6 +593,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeStatus(ctx);
     } else if (subcommand === "config") {
       await executeConfigView(ctx);
+    } else if (subcommand === "set-questions") {
+      await executeSetQuestions(ctx);
     }
     return;
   }

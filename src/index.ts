@@ -154,6 +154,7 @@ client.once(Events.ClientReady, async () => {
       ensureActionLogSchema,
       ensureManualFlagColumns,
     } = await import("./db/ensure.js");
+    const { ensureBotStatusSchema } = await import("./features/statusStore.js");
     ensureAvatarScanSchema();
     ensureApplicationPermaRejectColumn();
     ensureOpenModmailTable();
@@ -161,6 +162,7 @@ client.once(Events.ClientReady, async () => {
     ensureApplicationStatusIndex();
     ensureActionLogSchema();
     ensureManualFlagColumns();
+    ensureBotStatusSchema();
   } catch (err) {
     logger.error({ err }, "[startup] schema ensure failed");
   }
@@ -266,34 +268,66 @@ client.once(Events.ClientReady, async () => {
     level: "info",
   });
 
+  // Restore saved bot status/presence from DB
+  // WHAT: Load last status from /statusupdate and apply it
+  // WHY: Keeps status consistent across restarts
+  // DOCS: See src/features/statusStore.ts
+  try {
+    const { getStatus } = await import("./features/statusStore.js");
+    const saved = getStatus("global");
+    if (saved && client.user) {
+      await client.user.setPresence({
+        status: saved.status,
+        activities: [{ type: saved.activityType, name: saved.activityText }],
+      });
+      logger.info(
+        {
+          activityType: saved.activityType,
+          activityText: saved.activityText,
+          status: saved.status,
+        },
+        "[startup] bot presence restored from DB"
+      );
+    } else {
+      logger.debug("[startup] no saved presence found, using default");
+    }
+  } catch (err) {
+    logger.warn({ err }, "[startup] failed to restore bot presence - continuing with default");
+  }
+
   console.info("[owner] configured owners", { OWNER_IDS });
   console.info("[trace] interaction tracing enabled", { TRACE_INTERACTIONS });
 
-  // speedrun% finding legacy SQL before prod does
-  try {
-    const bad: string[] = [];
-    const walk = (dir: string) => {
-      for (const entry of readdirSync(dir, { withFileTypes: true })) {
-        const full = join(dir, entry.name);
-        if (entry.isDirectory()) {
-          walk(full);
-        } else if (entry.isFile() && full.endsWith(".js")) {
-          const text = readFileSync(full, "utf8");
-          const hasLegacy = /__old/.test(text) && !/legacyRe/.test(text);
-          const hasRename = /RENAME\s+TO/i.test(text);
-          if (hasLegacy || hasRename) bad.push(full);
+  // speedrun% finding legacy SQL before prod does (only in dev, skip in prod/tests)
+  // Skip in production to avoid runtime scanning overhead
+  // Skip in tests to reduce noise
+  const isVitest = !!process.env.VITEST_WORKER_ID;
+  if (env.NODE_ENV !== "production" && !isVitest) {
+    try {
+      const bad: string[] = [];
+      const walk = (dir: string) => {
+        for (const entry of readdirSync(dir, { withFileTypes: true })) {
+          const full = join(dir, entry.name);
+          if (entry.isDirectory()) {
+            walk(full);
+          } else if (entry.isFile() && full.endsWith(".js")) {
+            const text = readFileSync(full, "utf8");
+            const hasLegacy = /__old/.test(text) && !/legacyRe/.test(text);
+            const hasRename = /RENAME\s+TO/i.test(text);
+            if (hasLegacy || hasRename) bad.push(full);
+          }
+        }
+      };
+      const distRoot = join(process.cwd(), "dist");
+      if (existsSync(distRoot)) {
+        walk(distRoot);
+        if (bad.length) {
+          logger.warn({ evt: "dist_scan_legacy_sql", files: bad }, "dist contains __old references");
         }
       }
-    };
-    const distRoot = join(process.cwd(), "dist");
-    if (existsSync(distRoot)) {
-      walk(distRoot);
-      if (bad.length) {
-        logger.warn({ evt: "dist_scan_legacy_sql", files: bad }, "dist contains __old references");
-      }
+    } catch {
+      // best-effort scan only
     }
-  } catch {
-    // best-effort scan only
   }
 
   const questionStats = db

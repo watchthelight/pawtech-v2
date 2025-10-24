@@ -188,6 +188,50 @@ npm run format
 
 ---
 
+## Quick Start
+
+After deployment and command registration, configure the gate system:
+
+### Initial Setup
+
+```bash
+# 1. Run /gate setup in your server
+/gate setup review_channel:#staff-review gate_channel:#gate general_channel:#general accepted_role:@Verified
+
+# 2. Customize gate questions (optional)
+/gate set-questions q1:"What is your age?" q2:"How did you find us?" q3:"Why do you want to join?"
+
+# 3. Preview current questions
+/gate set-questions
+
+# 4. Test the welcome message
+/gate welcome preview
+```
+
+### Common Commands
+
+**Gate Management:**
+- `/gate setup` — Initialize guild configuration
+- `/gate set-questions` — Update verification questions (q1..q5)
+- `/gate status` — View application statistics
+- `/gate config` — Display current configuration
+- `/gate welcome set` — Update welcome message template
+
+**Review Workflow:**
+- `/accept @user [reason]` — Approve application
+- `/reject @user reason:"Account too new"` — Reject with reason
+- `/kick @user reason:"Spam"` — Reject and kick
+- `/unclaim @user` — Release claimed application
+
+**Moderation:**
+- `/modstats` — View personal moderator statistics
+- `/modstats leaderboard` — View top moderators
+- `/send channel:#general message:"..."` — Send anonymous staff message
+
+For full command reference, see [docs/context/03_Slash_Commands_and_UX.md](docs/context/03_Slash_Commands_and_UX.md).
+
+---
+
 ## Remote Deployment
 
 The bot includes PowerShell-based remote deployment automation for Windows servers.

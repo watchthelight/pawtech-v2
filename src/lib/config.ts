@@ -16,6 +16,8 @@ import type { ChatInputCommandInteraction, GuildMember } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { db } from "../db/db.js";
 import { logger } from "./logger.js";
+import { env } from "./env.js";
+import { isOwner } from "../utils/owner.js";
 
 export type GuildConfig = {
   guild_id: string;
@@ -440,4 +442,124 @@ export function requireStaff(interaction: ChatInputCommandInteraction): boolean 
       .catch((err) => logger.warn({ err }, "Failed to send permission denied message"));
   }
   return ok;
+}
+
+function getBotOwnerIds(): string[] {
+  /**
+   * getBotOwnerIds
+   * WHAT: Returns list of bot owner user IDs from environment.
+   * WHY: Centralizes bot owner ID parsing for permission checks.
+   * RETURNS: Array of user IDs (empty array if not configured)
+   */
+  const raw = env.OWNER_IDS ?? "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+function getGuildAdminRoleIds(guildId: string): string[] {
+  /**
+   * getGuildAdminRoleIds
+   * WHAT: Returns list of gate admin role IDs for a guild.
+   * WHY: Supports per-guild admin role configuration for gate commands.
+   * RETURNS: Array of role IDs (falls back to env GATE_ADMIN_ROLE_IDS if no guild config)
+   * FUTURE: Could be enhanced to read from guild_config table instead of env
+   */
+  // For now, use environment variable as a temporary implementation
+  // In the future, this could read from guild_config table
+  const raw = env.GATE_ADMIN_ROLE_IDS ?? "";
+  return raw
+    .split(",")
+    .map((s) => s.trim())
+    .filter(Boolean);
+}
+
+export async function hasGateAdmin(interaction: ChatInputCommandInteraction): Promise<boolean> {
+  /**
+   * hasGateAdmin
+   * WHAT: Checks if user has permission to modify gate questions.
+   * WHY: Provides fine-grained permission control for gate administration.
+   * LOGIC:
+   *  1. Bot owner override (OWNER_IDS env)
+   *  2. Guild owner override (guild.ownerId)
+   *  3. Configured admin roles (GATE_ADMIN_ROLE_IDS env or guild config)
+   *  4. Manage Server permission (ManageGuild fallback)
+   * RETURNS: true if user has any of the above permissions
+   * DOCS:
+   *  - Discord permissions: https://discord.js.org/#/docs/discord.js/main/class/PermissionsBitField
+   *  - Guild owner: https://discord.js.org/#/docs/discord.js/main/class/Guild?scrollTo=ownerId
+   */
+  const userId = interaction.user.id;
+  const guild = interaction.guild;
+  if (!guild) return false;
+
+  // 1) Bot owner override
+  const botOwners = getBotOwnerIds();
+  if (botOwners.includes(userId)) {
+    logger.debug(
+      { evt: "gate_admin_check", userId, guildId: guild.id, result: true, reason: "bot_owner" },
+      "[hasGateAdmin] user is bot owner"
+    );
+    return true;
+  }
+
+  // 2) Guild owner override
+  const ownerId = guild.ownerId;
+  if (userId === ownerId) {
+    logger.debug(
+      { evt: "gate_admin_check", userId, guildId: guild.id, result: true, reason: "guild_owner" },
+      "[hasGateAdmin] user is guild owner"
+    );
+    return true;
+  }
+
+  // 3) Configured admin roles for this guild
+  const adminRoleIds = getGuildAdminRoleIds(guild.id);
+  const member = interaction.member as GuildMember | null;
+  if (member && adminRoleIds.length > 0) {
+    for (const roleId of adminRoleIds) {
+      if (member.roles.cache.has(roleId)) {
+        logger.debug(
+          {
+            evt: "gate_admin_check",
+            userId,
+            guildId: guild.id,
+            roleId,
+            result: true,
+            reason: "admin_role",
+          },
+          "[hasGateAdmin] user has configured admin role"
+        );
+        return true;
+      }
+    }
+  }
+
+  // 4) Manage Server fallback
+  if (member && hasManageGuild(member)) {
+    logger.debug(
+      {
+        evt: "gate_admin_check",
+        userId,
+        guildId: guild.id,
+        result: true,
+        reason: "manage_guild",
+      },
+      "[hasGateAdmin] user has ManageGuild permission"
+    );
+    return true;
+  }
+
+  logger.debug(
+    {
+      evt: "gate_admin_check",
+      userId,
+      guildId: guild.id,
+      result: false,
+      reason: "no_matching_permission",
+    },
+    "[hasGateAdmin] user does not have gate admin permissions"
+  );
+  return false;
 }

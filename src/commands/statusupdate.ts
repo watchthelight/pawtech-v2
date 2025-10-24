@@ -17,6 +17,7 @@ import {
 } from "discord.js";
 import { requireStaff } from "../lib/config.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
+import { upsertStatus } from "../features/statusStore.js";
 
 export const data = new SlashCommandBuilder()
   .setName("statusupdate")
@@ -66,8 +67,23 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     });
   });
 
+  await withStep(ctx, "persist_status", async () => {
+    // Persist status to DB so it survives restarts
+    // Use global scope since Discord presence is per-bot, not per-guild
+    upsertStatus({
+      scopeKey: "global",
+      activityType: ActivityType.Playing,
+      activityText: text,
+      status: "online",
+      updatedAt: Date.now(),
+    });
+  });
+
   await withStep(ctx, "final_reply", async () => {
     // ephemeral ack keeps channels clean, especially when multiple staff use this command
-    await interaction.reply({ flags: MessageFlags.Ephemeral, content: "Status updated." });
+    await interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      content: "Status updated (and saved for restarts).",
+    });
   });
 }

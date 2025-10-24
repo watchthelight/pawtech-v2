@@ -34,7 +34,9 @@ export function redact(value: string): string {
 }
 
 const logLevel = process.env.LOG_LEVEL ?? "info";
-const wantPretty = process.env.LOG_PRETTY === "true" && process.stdout.isTTY;
+const isVitest = !!process.env.VITEST_WORKER_ID;
+const wantPretty =
+  isVitest || (process.env.LOG_PRETTY === "true" && process.stdout.isTTY);
 
 export const logger = pino({
   level: logLevel,
@@ -44,7 +46,9 @@ export const logger = pino({
           target: "pino-pretty",
           options: {
             colorize: true,
-            translateTime: "SYS:standard",
+            translateTime: "HH:MM:ss.l",
+            ignore: "pid,hostname", // drop noisy fields
+            singleLine: false,
           },
         },
       }

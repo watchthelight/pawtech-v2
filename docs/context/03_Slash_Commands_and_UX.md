@@ -5,7 +5,7 @@
 
 ## Summary
 
-- **Total Commands:** 14 slash commands registered to guild
+- **Total Commands:** 14 slash commands registered to guild (with multiple subcommands)
 - **Authentication:** Role-based permissions (moderator, admin, owner overrides)
 - **UX Patterns:** Ephemeral replies, interactive buttons/modals, color-coded action badges
 - **Identity Rendering:** Discord avatars + display names with fallback to username#discriminator
@@ -80,24 +80,67 @@ Node: v20.11.0
 ### `/gate`
 
 **Purpose:** Gate system management and configuration
-**Permissions:** Moderator role
+**Permissions:** Moderator role (see `/gate set-questions` for enhanced permission model)
 **Subcommands:**
 
-- `/gate questions` — View current verification questions
-- `/gate welcome [role|channels|set|test]` — Manage welcome message
-- `/gate reset <password>` — Reset all applications (requires `RESET_PASSWORD`)
+- `/gate setup` — Initialize guild configuration with channels and roles
+- `/gate status` — View application statistics
+- `/gate config` — Display current gate configuration
+- `/gate reset` — Reset all applications (password-protected via modal)
+- `/gate welcome set` — Update welcome message template
+- `/gate welcome preview` — Preview welcome message
+- `/gate welcome channels` — Configure info/rules channels
+- `/gate welcome role` — Set ping role for welcome messages
+- `/gate set-questions` — Update gate questions (q1..q5)
 
-**UX Notes:**
+**`/gate set-questions` Details:**
 
-- Reset command requires password confirmation (same as `/resetdata`)
-- Warns before destructive operations
-- Shows question count and preview in questions subcommand
+**Purpose:** Configure custom verification questions for the guild
 
-**Example:**
+**Parameters:** `q1` through `q5` (all optional, 500 char max per question)
+
+**Permissions:** Enhanced permission model allowing any of:
+- Guild owner
+- Bot owners (configured in `OWNER_IDS` env)
+- Configured admin roles (`GATE_ADMIN_ROLE_IDS` env)
+- Members with Manage Server permission (fallback)
+
+**Behavior:**
+- Only provided questions are updated (omitted parameters leave questions unchanged)
+- Questions are required by default
+- Running without parameters shows current questions
+
+**Examples:**
 
 ```
-/gate reset MySecretPassword123
-✓ Gate reset complete. Cleared 42 pending applications.
+# Update just q1 and q3 (others remain unchanged)
+/gate set-questions q1:"What is your age?" q3:"Why do you want to join?"
+
+# View current questions
+/gate set-questions
+
+# Update all questions at once
+/gate set-questions q1:"Q1" q2:"Q2" q3:"Q3" q4:"Q4" q5:"Q5"
+```
+
+**Success Reply:**
+```
+✅ Updated: q1, q3
+
+Current questions:
+1) What is your age?
+2) How did you find this server?
+3) Why do you want to join?
+4) What does a furry mean to you?
+5) What is the password stated in our rules?
+```
+
+**Reset Command:**
+
+```
+/gate reset
+# Opens modal requiring password confirmation
+✓ Gate reset complete. Questions seeded: 5. Gate Entry ensured.
 ```
 
 ---
