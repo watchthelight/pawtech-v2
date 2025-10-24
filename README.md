@@ -257,7 +257,7 @@ This project is licensed under the **Attribution–No Wholesale Copying License 
 
 **Pawtropolis Tech Gatekeeper**
 © 2025 watchthelight / Bash
-<https://github.com/watchthelight/pawtropolis-tech>
+<[https://github.com/watchthelight/pawtropolis-tech](https://github.com/watchthelight/pawtech-v2?tab=readme-ov-file)>
 
 You are free to:
 
@@ -275,7 +275,7 @@ See [LICENSE](LICENSE) for full terms.
 
 ## Contributing
 
-This is a private project built for specific community needs. While contributions are not actively solicited, bug reports and security disclosures are welcome via [GitHub Issues](https://github.com/watchthelight/pawtropolis-tech/issues).
+This is a private project built for specific community needs. While contributions are not actively solicited, bug reports and security disclosures are welcome via [GitHub Issues](https://github.com/watchthelight/pawtech-v2/issues).
 
 ---
 
@@ -289,7 +289,7 @@ AI is partially used in this project: It is used to make immediate repairs on CR
 
 **Author:** watchthelight (Bash)
 **Email:** <admin@watchthelight.org>
-**Repository:** <https://github.com/watchthelight/pawtropolis-tech>
+**Repository:** <[https://github.com/watchthelight/pawtropolis-tech](https://github.com/watchthelight/pawtech-v2?tab=readme-ov-file>
 **Website:** <https://watchthelight.org>
 
 ---
