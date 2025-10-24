@@ -1,0 +1,13 @@
+# Pawtropolis Tech - SPA Fallback Rules
+# Optional: This is redundant if vhost rules are configured
+# but provides directory-level control if needed
+
+RewriteEngine On
+
+# Bypass rewrite for API/AUTH routes and static assets
+RewriteCond %{REQUEST_URI} ^/(api|auth)/ [OR]
+RewriteCond %{REQUEST_URI} \.(css|js|png|webp|jpg|jpeg|svg|ico|txt|json|map|webmanifest)$ [NC]
+RewriteRule ^ - [L]
+
+# Fallback everything else to index.html (SPA routing)
+RewriteRule ^ /index.html [L]

@@ -1,0 +1,483 @@
+/**
+ * Pawtropolis Tech — website/app.js
+ * WHAT: Tiny admin panel SPA (vanilla JS)
+ * WHY: Connect static site to OAuth2 backend APIs
+ * FLOWS:
+ *  - Check auth status on load
+ *  - Show admin drawer if authenticated
+ *  - Render dashboard/logs/metrics/config views
+ *  - Handle API calls with cookie-based sessions
+ */
+
+// --- API client (same-origin, cookie-based auth) ---
+const API = {
+  async get(path, params = {}) {
+    const url = new URL(path, location.origin);
+    for (const [k, v] of Object.entries(params)) {
+      if (v != null && v !== "") url.searchParams.set(k, v);
+    }
+
+    const res = await fetch(url, { credentials: "include" });
+
+    // Handle auth errors
+    if (res.status === 401 || res.status === 403) {
+      // Don't auto-redirect - let caller handle it
+      throw new Error(`Unauthorized: ${res.status}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(`GET ${path} → ${res.status}`);
+    }
+
+    return res.headers.get("content-type")?.includes("application/json")
+      ? res.json()
+      : res.text();
+  },
+
+  async post(path, body) {
+    const res = await fetch(path, {
+      method: "POST",
+      credentials: "include",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+
+    // Handle auth errors
+    if (res.status === 401 || res.status === 403) {
+      // Don't auto-redirect - let caller handle it
+      throw new Error(`Unauthorized: ${res.status}`);
+    }
+
+    if (!res.ok) {
+      throw new Error(`POST ${path} → ${res.status}`);
+    }
+
+    return res.json();
+  },
+};
+
+// --- UI helpers ---
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+const show = (el) => el.classList.remove("hidden");
+const hide = (el) => el.classList.add("hidden");
+
+const setActiveTab = (name) => {
+  $$(".tab").forEach((t) =>
+    t.classList.toggle("is-active", t.dataset.view === name)
+  );
+  $$(".view").forEach((v) => hide(v));
+  show(document.getElementById(`view-${name}`));
+};
+
+// --- Views ---
+
+/**
+ * Dashboard view - shows quick stats and recent activity
+ */
+async function renderDashboard() {
+  const el = $("#view-dashboard");
+  el.innerHTML = `<span class="spinner" aria-label="Loading dashboard"></span>`;
+
+  try {
+    // Get guild ID from env or use default
+    const guildId = window.GUILD_ID || "896070888594759740";
+
+    // Fetch metrics and logs in parallel
+    const [metricsData, logsData] = await Promise.all([
+      API.get("/api/metrics", { guild_id: guildId, limit: 10 }),
+      API.get("/api/logs", { guild_id: guildId, limit: 10 }),
+    ]);
+
+    const metrics = metricsData?.items || [];
+    const logs = logsData?.items || [];
+    const top = metrics[0];
+
+    el.innerHTML = `
+      <h2 style="margin-bottom: 1.5rem; color: var(--text-primary)">Dashboard</h2>
+
+      <div class="cards">
+        <article class="feature-card">
+          <h3 class="feature-card__title">Top Moderator</h3>
+          <p class="feature-card__description">${
+            top ? `<code>${top.moderator_id.slice(0, 18)}...</code>` : "—"
+          }</p>
+          <p class="feature-card__description" style="font-size: 0.85rem; margin-top: 0.5rem">
+            ${top ? `${top.total_accepts} approvals` : "No data yet"}
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <h3 class="feature-card__title">Response Times</h3>
+          <p class="feature-card__description">
+            ${
+              top && top.p50_response_time_s
+                ? `
+              <strong>P50:</strong> ${Math.round(top.p50_response_time_s)}s<br>
+              <strong>P95:</strong> ${Math.round(top.p95_response_time_s)}s
+            `
+                : "—"
+            }
+          </p>
+        </article>
+
+        <article class="feature-card">
+          <h3 class="feature-card__title">Total Activity</h3>
+          <p class="feature-card__description">
+            ${metrics.length ? `${metrics.length} moderators` : "—"}
+          </p>
+          <p class="feature-card__description" style="font-size: 0.85rem; margin-top: 0.5rem">
+            ${logs.length} recent actions
+          </p>
+        </article>
+      </div>
+
+      <h3 style="margin: 1.5rem 0 0.5rem; color: var(--text-primary)">Recent Activity</h3>
+      ${renderLogsTable(logs)}
+    `;
+  } catch (e) {
+    console.error("Dashboard render error:", e);
+    el.innerHTML = `
+      <div class="empty-state">
+        <p>Failed to load dashboard.</p>
+        <p style="font-size: 0.85rem; margin-top: 0.5rem">${e.message}</p>
+      </div>
+    `;
+  }
+}
+
+/**
+ * Render logs table with color-coded badges
+ */
+function renderLogsTable(items) {
+  if (!items.length) {
+    return `<p class="feature-card__description">No recent activity.</p>`;
+  }
+
+  // Action badge styles (matching Discord embed colors)
+  const badge = (action) => {
+    if (action === "approve" || action === "accept") return "badge badge--ok";
+    if (action === "reject" || action === "kick") return "badge badge--err";
+    if (
+      action === "claim" ||
+      action === "config_change" ||
+      action === "modmail_open"
+    )
+      return "badge badge--info";
+    if (action === "unclaim" || action === "need_info") return "badge badge--warn";
+    return "badge";
+  };
+
+  const rows = items
+    .map(
+      (i) => `
+    <tr>
+      <td>${new Date(i.timestamp).toLocaleString()}</td>
+      <td><span class="${badge(i.action)}">${i.action}</span></td>
+      <td><code style="font-size: 0.85rem">${i.moderator_id?.slice(0, 16) || "—"}</code></td>
+      <td><code style="font-size: 0.85rem">${
+        i.app_code || i.app_id?.slice(0, 12) || "—"
+      }</code></td>
+      <td title="${i.reason || ""}">${(i.reason || "—").slice(0, 64)}</td>
+    </tr>
+  `
+    )
+    .join("");
+
+  return `
+    <table class="table">
+      <thead>
+        <tr>
+          <th>Time</th>
+          <th>Action</th>
+          <th>Moderator</th>
+          <th>App/Thread</th>
+          <th>Reason</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>
+  `;
+}
+
+/**
+ * Logs view - filterable action log
+ */
+async function renderLogs() {
+  const el = $("#view-logs");
+  const guildId = window.GUILD_ID || "896070888594759740";
+
+  el.innerHTML = `
+    <h2 style="margin-bottom: 1rem; color: var(--text-primary)">Action Logs</h2>
+
+    <form id="logs-f" style="display: flex; gap: 0.5rem; flex-wrap: wrap; margin: 0.5rem 0 1rem">
+      <input type="hidden" name="guild_id" value="${guildId}" />
+      <input type="text" name="moderator_id" placeholder="Moderator ID" style="min-width: 200px" />
+      <select name="action">
+        <option value="">Any action</option>
+        <option>app_submitted</option>
+        <option>claim</option>
+        <option>unclaim</option>
+        <option>approve</option>
+        <option>reject</option>
+        <option>kick</option>
+        <option>modmail_open</option>
+        <option>modmail_close</option>
+      </select>
+      <select name="limit">
+        <option>10</option>
+        <option>25</option>
+        <option selected>50</option>
+        <option>100</option>
+      </select>
+      <button class="btn btn--primary" type="submit">Filter</button>
+    </form>
+
+    <div id="logs-out"><span class="spinner" aria-label="Loading logs"></span></div>
+  `;
+
+  const out = $("#logs-out");
+
+  async function load(q = {}) {
+    out.innerHTML = `<span class="spinner"></span>`;
+    try {
+      const data = await API.get("/api/logs", q);
+      out.innerHTML = renderLogsTable(data.items || []);
+    } catch (e) {
+      console.error("Logs load error:", e);
+      out.innerHTML = `<p class="feature-card__description">Failed to load logs.</p>`;
+    }
+  }
+
+  $("#logs-f").onsubmit = (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    load(Object.fromEntries(fd.entries()));
+  };
+
+  // Initial load
+  load({ guild_id: guildId, limit: 50 });
+}
+
+/**
+ * Metrics view - moderator performance leaderboard
+ */
+async function renderMetrics() {
+  const el = $("#view-metrics");
+  const guildId = window.GUILD_ID || "896070888594759740";
+
+  el.innerHTML = `<span class="spinner" aria-label="Loading metrics"></span>`;
+
+  try {
+    const data = await API.get("/api/metrics", { guild_id: guildId });
+    const items = data?.items || [];
+
+    if (items.length === 0) {
+      el.innerHTML = `
+        <h2 style="margin-bottom: 1rem; color: var(--text-primary)">Moderator Metrics</h2>
+        <div class="empty-state">
+          <p>No metrics available yet.</p>
+          <p style="font-size: 0.85rem; margin-top: 0.5rem">Metrics will appear once moderators start processing applications.</p>
+        </div>
+      `;
+      return;
+    }
+
+    const rows = items
+      .map(
+        (m) => `
+      <tr>
+        <td><code style="font-size: 0.85rem">${m.moderator_id.slice(0, 18)}...</code></td>
+        <td>${m.total_accepts}</td>
+        <td>${m.total_rejects}</td>
+        <td>${m.total_kicks}</td>
+        <td>${m.avg_response_time_s ? Math.round(m.avg_response_time_s) + "s" : "—"}</td>
+        <td>${m.p50_response_time_s ? Math.round(m.p50_response_time_s) + "s" : "—"}</td>
+        <td>${m.p95_response_time_s ? Math.round(m.p95_response_time_s) + "s" : "—"}</td>
+      </tr>
+    `
+      )
+      .join("");
+
+    el.innerHTML = `
+      <h2 style="margin-bottom: 1rem; color: var(--text-primary)">Moderator Metrics</h2>
+
+      <div style="margin: 0.5rem 0 1rem; display: flex; gap: 0.5rem; flex-wrap: wrap">
+        <p class="feature-card__description">
+          Showing ${items.length} moderator${items.length !== 1 ? "s" : ""}
+        </p>
+      </div>
+
+      <table class="table">
+        <thead>
+          <tr>
+            <th>Moderator</th>
+            <th>Accepts</th>
+            <th>Rejects</th>
+            <th>Kicks</th>
+            <th>Avg (s)</th>
+            <th>P50 (s)</th>
+            <th>P95 (s)</th>
+          </tr>
+        </thead>
+        <tbody>${rows}</tbody>
+      </table>
+    `;
+  } catch (e) {
+    console.error("Metrics render error:", e);
+    el.innerHTML = `
+      <h2 style="margin-bottom: 1rem; color: var(--text-primary)">Moderator Metrics</h2>
+      <p class="feature-card__description">Failed to load metrics.</p>
+    `;
+  }
+}
+
+/**
+ * Config view - guild configuration editor
+ */
+async function renderConfig() {
+  const el = $("#view-config");
+  const guildId = window.GUILD_ID || "896070888594759740";
+
+  el.innerHTML = `<span class="spinner" aria-label="Loading config"></span>`;
+
+  try {
+    const cfg = await API.get("/api/config", { guild_id: guildId });
+
+    el.innerHTML = `
+      <h2 style="margin-bottom: 1rem; color: var(--text-primary)">Configuration</h2>
+
+      <form id="cfg-f" class="feature-card" style="max-width: 560px">
+        <h3 class="feature-card__title">Guild Settings</h3>
+
+        <input type="hidden" name="guild_id" value="${guildId}" />
+
+        <label class="feature-card__description" style="display: block; margin-top: 1rem">
+          <strong>Logging Channel ID</strong>
+          <p style="font-size: 0.85rem; margin: 0.25rem 0 0.5rem; opacity: 0.8">
+            Discord channel ID for action logs (leave empty to use LOGGING_CHANNEL env var)
+          </p>
+          <input
+            type="text"
+            name="logging_channel_id"
+            value="${cfg.logging_channel_id ?? ""}"
+            style="display: block; width: 100%; margin-top: 0.5rem"
+            placeholder="1234567890"
+          />
+        </label>
+
+        <div style="margin-top: 1.5rem; display: flex; gap: 0.5rem">
+          <button class="btn btn--primary" type="submit">Save Changes</button>
+          <a class="btn btn--secondary" href="#" id="cfg-reload">Reload</a>
+        </div>
+
+        <p id="cfg-status" style="margin-top: 1rem; font-size: 0.9rem"></p>
+      </form>
+    `;
+
+    // Handle form submission
+    $("#cfg-f").onsubmit = async (e) => {
+      e.preventDefault();
+      const status = $("#cfg-status");
+      const btn = e.target.querySelector('button[type="submit"]');
+
+      try {
+        btn.disabled = true;
+        btn.textContent = "Saving...";
+        status.textContent = "";
+
+        const fd = new FormData(e.target);
+        await API.post("/api/config", Object.fromEntries(fd.entries()));
+
+        status.style.color = "var(--accent)";
+        status.textContent = "✓ Configuration saved successfully";
+        btn.textContent = "Save Changes";
+        btn.disabled = false;
+      } catch (err) {
+        console.error("Config save error:", err);
+        status.style.color = "#cc2936";
+        status.textContent = "✗ Failed to save configuration";
+        btn.textContent = "Save Changes";
+        btn.disabled = false;
+      }
+    };
+
+    // Handle reload button
+    $("#cfg-reload").onclick = (e) => {
+      e.preventDefault();
+      renderConfig();
+    };
+  } catch (e) {
+    console.error("Config render error:", e);
+    el.innerHTML = `
+      <h2 style="margin-bottom: 1rem; color: var(--text-primary)">Configuration</h2>
+      <p class="feature-card__description">Failed to load configuration.</p>
+    `;
+  }
+}
+
+// --- Tiny router for the admin drawer ---
+
+function mountTabs() {
+  $$(".admin__tabs .tab[data-view]").forEach((btn) => {
+    btn.onclick = () => {
+      const view = btn.dataset.view;
+      setActiveTab(view);
+
+      if (view === "dashboard") renderDashboard();
+      if (view === "logs") renderLogs();
+      if (view === "metrics") renderMetrics();
+      if (view === "config") renderConfig();
+    };
+  });
+}
+
+/**
+ * Initialize admin panel
+ */
+async function init() {
+  console.log("[app.js] Initializing admin panel");
+
+  try {
+    // Check if user is authenticated
+    const me = await API.get("/auth/me");
+
+    if (me && me.user) {
+      console.log("[app.js] User authenticated:", me.user.username);
+
+      // Show admin drawer
+      const adminApp = $("#admin-app");
+      if (adminApp) {
+        show(adminApp);
+
+        // Update logout button with username
+        const logoutBtn = $("#btn-logout");
+        if (logoutBtn) {
+          logoutBtn.textContent = `Logout (${me.user.username})`;
+        }
+      }
+
+      // Hide login button, show admin panel
+      const loginBtn = $("#btn-login");
+      if (loginBtn) {
+        hide(loginBtn);
+      }
+
+      // Mount tabs and render initial view
+      mountTabs();
+      setActiveTab("dashboard");
+      renderDashboard();
+    }
+  } catch (e) {
+    console.log("[app.js] Not authenticated or error:", e.message);
+    // User not authenticated - drawer stays hidden
+    // Next API call will redirect to /auth/login if needed
+  }
+}
+
+// Start on DOM ready
+if (document.readyState === "loading") {
+  document.addEventListener("DOMContentLoaded", init);
+} else {
+  init();
+}

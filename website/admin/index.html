@@ -1,0 +1,108 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Admin Panel • Pawtropolis</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/admin/admin.css?v=1729622400" />
+    <link rel="icon" type="image/png" href="/assets/avatar.png" />
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+    <!-- React & Three (ESM CDN) -->
+    <script type="module">
+      // Deduplicate singleton modules across pages by attaching to window
+      if (!window.__R3F_LOADED__) {
+        window.__R3F_LOADED__ = true;
+        // Preload modules (improves TTI)
+        const preloads = [
+          "https://esm.sh/react@18?external=react-dom",
+          "https://esm.sh/react-dom@18/client",
+          "https://esm.sh/three@0.161",
+          "https://esm.sh/@react-three/fiber@8?external=react,react-dom,three",
+          "https://esm.sh/@react-three/drei@9?external=react,react-dom,three,@react-three/fiber",
+          "https://esm.sh/maath@0.10?external=three",
+        ];
+        preloads.forEach((href) => {
+          const l = document.createElement("link");
+          l.rel = "modulepreload";
+          l.href = href;
+          document.head.appendChild(l);
+        });
+      }
+    </script>
+  </head>
+  <body class="page-admin">
+    <header class="admin-header">
+      <div class="container">
+        <div class="row between center">
+          <a class="brand" href="/">Pawtropolis Admin</a>
+          <div class="user-info">
+            <span class="user-chip">
+              <img id="user-avatar" class="avatar" alt="User avatar" src="" />
+              <span id="user-name">Loading...</span>
+            </span>
+            <button
+              id="theme-toggle"
+              class="btn btn-icon"
+              title="Toggle custom theme"
+              aria-label="Toggle custom theme"
+            >
+              <svg
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+                stroke-linecap="round"
+                stroke-linejoin="round"
+              >
+                <circle cx="12" cy="12" r="5"></circle>
+                <line x1="12" y1="1" x2="12" y2="3"></line>
+                <line x1="12" y1="21" x2="12" y2="23"></line>
+                <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+                <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+                <line x1="1" y1="12" x2="3" y2="12"></line>
+                <line x1="21" y1="12" x2="23" y2="12"></line>
+                <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+                <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+              </svg>
+            </button>
+            <a href="/auth/logout" class="btn btn-sm">Logout</a>
+          </div>
+        </div>
+      </div>
+    </header>
+
+    <main class="admin-main">
+      <div class="container">
+        <nav class="admin-tabs">
+          <button class="tab active" data-view="dashboard">Dashboard</button>
+          <button class="tab" data-view="logs">Logs</button>
+          <button class="tab" data-view="metrics">Metrics</button>
+          <button class="tab" data-view="config">Config</button>
+        </nav>
+
+        <div class="admin-content">
+          <div id="view-dashboard" class="view active">
+            <div class="spinner-wrap"><span class="spinner"></span></div>
+          </div>
+          <div id="view-logs" class="view">
+            <div class="spinner-wrap"><span class="spinner"></span></div>
+          </div>
+          <div id="view-metrics" class="view">
+            <div class="spinner-wrap"><span class="spinner"></span></div>
+          </div>
+          <div id="view-config" class="view">
+            <h2>Config</h2>
+            <p>Configuration panel coming soon...</p>
+          </div>
+        </div>
+      </div>
+    </main>
+
+    <script type="module" src="/admin/admin-v2.js"></script>
+  </body>
+</html>

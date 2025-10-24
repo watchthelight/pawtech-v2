@@ -1,0 +1,229 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Admin Panel Debug</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/app.css" />
+    <style>
+      body {
+        padding: 2rem;
+        max-width: 1200px;
+        margin: 0 auto;
+      }
+      .debug-section {
+        background: var(--panel, #171b22);
+        border: 1px solid var(--border, #2a303b);
+        padding: 1.5rem;
+        margin-bottom: 1.5rem;
+        border-radius: 8px;
+      }
+      .debug-section h2 {
+        margin-top: 0;
+        color: var(--text, #e7ecf3);
+      }
+      pre {
+        background: var(--bg, #11141a);
+        padding: 1rem;
+        border-radius: 4px;
+        overflow-x: auto;
+        color: var(--muted, #a9b0c0);
+      }
+      .status {
+        display: inline-block;
+        padding: 0.25rem 0.75rem;
+        border-radius: 999px;
+        font-weight: 600;
+        font-size: 0.875rem;
+      }
+      .status.ok {
+        background: color-mix(in oklab, var(--chip-approve) 25%, transparent);
+        border: 1px solid var(--chip-approve);
+      }
+      .status.error {
+        background: color-mix(in oklab, var(--chip-reject) 25%, transparent);
+        border: 1px solid var(--chip-reject);
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Admin Panel Diagnostic</h1>
+
+    <div class="debug-section">
+      <h2>1. Authentication Status</h2>
+      <p id="auth-status">Checking...</p>
+      <pre id="auth-data"></pre>
+    </div>
+
+    <div class="debug-section">
+      <h2>2. JavaScript Loaded</h2>
+      <p id="js-status">Checking...</p>
+      <ul id="js-functions"></ul>
+    </div>
+
+    <div class="debug-section">
+      <h2>3. DOM Elements</h2>
+      <p id="dom-status">Checking...</p>
+      <ul id="dom-elements"></ul>
+    </div>
+
+    <div class="debug-section">
+      <h2>4. API Endpoints</h2>
+      <p id="api-status">Checking...</p>
+      <ul id="api-tests"></ul>
+    </div>
+
+    <div class="debug-section">
+      <h2>5. CSS Variables</h2>
+      <pre id="css-vars"></pre>
+    </div>
+
+    <script>
+      // 1. Check auth
+      fetch("/auth/me", { credentials: "include" })
+        .then((res) => res.json())
+        .then((data) => {
+          const status = document.getElementById("auth-status");
+          const dataEl = document.getElementById("auth-data");
+          if (data.user) {
+            status.innerHTML = '<span class="status ok">✓ Authenticated</span>';
+            dataEl.textContent = JSON.stringify(data, null, 2);
+          } else {
+            status.innerHTML =
+              '<span class="status error">✗ Not authenticated</span> - <a href="/auth/login">Login</a>';
+          }
+        })
+        .catch((err) => {
+          document.getElementById("auth-status").innerHTML =
+            '<span class="status error">✗ Error</span>';
+          document.getElementById("auth-data").textContent = err.toString();
+        });
+
+      // 2. Check JavaScript functions
+      const jsStatus = document.getElementById("js-status");
+      const jsFunctions = document.getElementById("js-functions");
+      const expectedFunctions = [
+        "resolveUsers",
+        "userTag",
+        "renderActivityChart",
+        "renderLatencyChart",
+        "mkChart",
+        "escapeHtml",
+      ];
+
+      let foundCount = 0;
+      expectedFunctions.forEach((fn) => {
+        const li = document.createElement("li");
+        if (typeof window[fn] === "function") {
+          li.innerHTML = `<span class="status ok">✓</span> ${fn}`;
+          foundCount++;
+        } else {
+          li.innerHTML = `<span class="status error">✗</span> ${fn} (missing)`;
+        }
+        jsFunctions.appendChild(li);
+      });
+
+      if (foundCount === expectedFunctions.length) {
+        jsStatus.innerHTML = '<span class="status ok">✓ All functions loaded</span>';
+      } else {
+        jsStatus.innerHTML = `<span class="status error">✗ Missing ${expectedFunctions.length - foundCount} functions</span>`;
+      }
+
+      // 3. Check DOM elements
+      const domStatus = document.getElementById("dom-status");
+      const domElements = document.getElementById("dom-elements");
+      const expectedElements = [
+        "#admin-app",
+        ".admin__tabs",
+        "#view-dashboard",
+        "#view-logs",
+        "#view-metrics",
+        "#view-config",
+      ];
+
+      let domFoundCount = 0;
+      expectedElements.forEach((sel) => {
+        const li = document.createElement("li");
+        const el = document.querySelector(sel);
+        if (el) {
+          li.innerHTML = `<span class="status ok">✓</span> ${sel}`;
+          domFoundCount++;
+        } else {
+          li.innerHTML = `<span class="status error">✗</span> ${sel} (missing)`;
+        }
+        domElements.appendChild(li);
+      });
+
+      if (domFoundCount === expectedElements.length) {
+        domStatus.innerHTML = '<span class="status ok">✓ All elements found</span>';
+      } else {
+        domStatus.innerHTML = `<span class="status error">✗ Missing ${expectedElements.length - domFoundCount} elements</span>`;
+      }
+
+      // 4. Check API endpoints
+      const apiStatus = document.getElementById("api-status");
+      const apiTests = document.getElementById("api-tests");
+      const endpoints = [
+        "/health",
+        "/api/metrics/timeseries?guild_id=896070888594759740&window=7d&bucket=1h",
+        "/api/metrics/latency?guild_id=896070888594759740&window=7d&bucket=1h",
+        "/api/users/resolve?guild_id=896070888594759740&ids=697169405422862417",
+      ];
+
+      Promise.all(
+        endpoints.map((url) =>
+          fetch(url, { credentials: "include" })
+            .then((res) => ({ url, status: res.status, ok: res.ok }))
+            .catch((err) => ({ url, status: "error", ok: false, error: err.message }))
+        )
+      ).then((results) => {
+        results.forEach((result) => {
+          const li = document.createElement("li");
+          if (result.ok) {
+            li.innerHTML = `<span class="status ok">✓ ${result.status}</span> ${result.url}`;
+          } else {
+            li.innerHTML = `<span class="status error">✗ ${result.status}</span> ${result.url}`;
+          }
+          apiTests.appendChild(li);
+        });
+
+        const allOk = results.every((r) => r.ok || r.status === 401);
+        if (allOk) {
+          apiStatus.innerHTML = '<span class="status ok">✓ All endpoints responding</span>';
+        } else {
+          apiStatus.innerHTML = '<span class="status error">✗ Some endpoints failing</span>';
+        }
+      });
+
+      // 5. Show CSS variables
+      const cssVars = document.getElementById("css-vars");
+      const computedStyle = getComputedStyle(document.documentElement);
+      const vars = [
+        "--bg",
+        "--panel",
+        "--text",
+        "--muted",
+        "--border",
+        "--brand",
+        "--chip-approve",
+        "--chip-reject",
+        "--focus",
+      ];
+      cssVars.textContent = vars
+        .map((v) => `${v}: ${computedStyle.getPropertyValue(v)}`)
+        .join("\n");
+
+      // Check Chart.js
+      setTimeout(() => {
+        const li = document.createElement("li");
+        if (typeof Chart !== "undefined") {
+          li.innerHTML = '<span class="status ok">✓</span> Chart.js loaded';
+        } else {
+          li.innerHTML = '<span class="status error">✗</span> Chart.js (missing)';
+        }
+        jsFunctions.appendChild(li);
+      }, 1000);
+    </script>
+  </body>
+</html>

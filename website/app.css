@@ -1,0 +1,550 @@
+/**
+ * Pawtropolis Tech — website/app.css
+ * WHAT: Admin panel utilities that complement styles.css
+ * WHY: Lightweight styles for dashboard, tables, badges, and spinners
+ */
+
+/* =========================
+   Discord Glass Theme
+   ========================= */
+:root {
+  /* Discord palette & neutrals */
+  --ds-blurple: #5865f2;
+  --ds-green: #57f287;
+  --ds-fuchsia: #eb459e;
+  --ds-yellow: #fee75c;
+
+  --bg-0: #0f1218; /* page bg */
+  --bg-1: #121620; /* panels */
+  --glass-bg: rgba(18, 22, 32, 0.35); /* frosted film */
+  --glass-border: rgba(255, 255, 255, 0.18);
+  --glass-inner: rgba(255, 255, 255, 0.08);
+  --glass-shadow: 0 10px 30px rgba(0, 0, 0, 0.3), 0 1px 0 rgba(255, 255, 255, 0.03) inset;
+  --glass-highlight: linear-gradient(
+    180deg,
+    rgba(255, 255, 255, 0.24) 0%,
+    rgba(255, 255, 255, 0.06) 100%
+  );
+  --glass-spectrum: conic-gradient(
+    from 210deg at 50% 50%,
+    #5865f220,
+    #57f28720,
+    #eb459e20,
+    #fee75c20,
+    #5865f220
+  );
+
+  --text-primary: #e7ecf3;
+  --text-secondary: #a9b0c0;
+
+  /* Accent used across tabs/buttons you already have */
+  --accent: var(--ds-blurple);
+}
+
+/* Page background subtle texture */
+body {
+  background:
+    radial-gradient(1200px 800px at 10% -10%, #1a2030 0%, transparent 60%), var(--bg-0) !important;
+}
+
+/* -------------------------
+   GLASS SURFACE - Liquid Enhanced
+   ------------------------- */
+.glass {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.08) 0%, rgba(255, 255, 255, 0.02) 100%);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.2);
+  border-radius: 20px;
+  box-shadow:
+    0 8px 32px 0 rgba(0, 0, 0, 0.37),
+    inset 0 1px 0 0 rgba(255, 255, 255, 0.15),
+    inset 0 -1px 0 0 rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.glass::before {
+  /* Liquid shimmer overlay */
+  content: "";
+  position: absolute;
+  inset: 0;
+  background: linear-gradient(
+    135deg,
+    rgba(255, 255, 255, 0.1) 0%,
+    transparent 40%,
+    transparent 60%,
+    rgba(255, 255, 255, 0.05) 100%
+  );
+  mix-blend-mode: overlay;
+  pointer-events: none;
+  opacity: 0.6;
+}
+
+.glass::after {
+  /* Animated spectral glow */
+  content: "";
+  position: absolute;
+  inset: -2px;
+  border-radius: inherit;
+  background: conic-gradient(
+    from 180deg at 50% 50%,
+    rgba(88, 101, 242, 0.4),
+    rgba(87, 242, 135, 0.3),
+    rgba(235, 69, 158, 0.4),
+    rgba(254, 231, 92, 0.3),
+    rgba(88, 101, 242, 0.4)
+  );
+  filter: blur(20px);
+  opacity: 0;
+  transition: opacity 0.4s ease;
+  pointer-events: none;
+  z-index: -1;
+}
+
+/* Hover effects (reduced motion respected) */
+@media (prefers-reduced-motion: no-preference) {
+  .glass:hover {
+    transform: translateY(-2px) scale(1.01);
+    border-color: rgba(255, 255, 255, 0.3);
+    box-shadow:
+      0 12px 48px 0 rgba(0, 0, 0, 0.45),
+      inset 0 1px 0 0 rgba(255, 255, 255, 0.2),
+      inset 0 -1px 0 0 rgba(0, 0, 0, 0.15);
+  }
+
+  .glass:hover::after {
+    opacity: 0.5;
+    animation: glow-rotate 6s linear infinite;
+  }
+
+  @keyframes glow-rotate {
+    0% {
+      filter: blur(20px) hue-rotate(0deg);
+    }
+    100% {
+      filter: blur(20px) hue-rotate(360deg);
+    }
+  }
+}
+
+/* Glass variants for usage */
+.glass--hero {
+  border-radius: 24px;
+  padding: 1.25rem 1.5rem;
+  box-shadow:
+    0 16px 60px 0 rgba(0, 0, 0, 0.5),
+    inset 0 2px 0 0 rgba(255, 255, 255, 0.2);
+}
+
+.glass--card {
+  border-radius: 18px;
+  padding: 1.5rem;
+}
+
+.glass--panel {
+  border-radius: 14px;
+  padding: 1rem 1.25rem;
+}
+
+/* Make your existing cards & chart containers glassy */
+.feature-card,
+.chart-card {
+  position: relative;
+}
+.feature-card.glass,
+.chart-card.glass {
+  padding: 1.25rem;
+  background: var(--glass-bg) !important;
+  border: 1px solid var(--glass-border) !important;
+}
+
+/* Chart wrap border to match */
+.chart-card.glass .chart-wrap {
+  border-radius: 8px;
+}
+
+/* -------------------------
+   BLUR TEXT (enter animation)
+   ------------------------- */
+.blur-text {
+  display: block;
+  will-change: filter, transform, opacity;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  text-align: center;
+  line-height: 1.2;
+}
+
+/* Title should be single line */
+.hero__title.blur-text {
+  white-space: nowrap;
+}
+
+/* Tagline can wrap on small screens */
+.hero__tagline.blur-text {
+  white-space: normal;
+  max-width: 600px;
+  margin-left: auto;
+  margin-right: auto;
+}
+
+.blur-text .bt-char {
+  display: inline-block;
+  filter: blur(16px);
+  transform: translateY(10px);
+  opacity: 0;
+  vertical-align: baseline;
+  white-space: pre;
+}
+
+/* Reduced motion: no entrance animation */
+@media (prefers-reduced-motion: reduce) {
+  .blur-text .bt-char {
+    filter: none !important;
+    transform: none !important;
+    opacity: 1 !important;
+    transition: none !important;
+  }
+}
+
+/* Enhanced typography for glass elements */
+.glass h1,
+.glass h2,
+.glass h3 {
+  letter-spacing: -0.025em;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.95);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+}
+
+.glass p {
+  color: rgba(255, 255, 255, 0.85);
+  line-height: 1.6;
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* -------------------------
+   Buttons that feel glassy
+   ------------------------- */
+.btn--glass {
+  background: color-mix(in oklab, var(--ds-blurple) 12%, transparent);
+  border: 1px solid color-mix(in oklab, white 15%, transparent);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.25);
+}
+.btn--glass:hover {
+  background: color-mix(in oklab, var(--ds-blurple) 20%, transparent);
+}
+
+/* -------------------------
+   Badge palette mapping you already use in JS
+   ------------------------- */
+.badge--ok {
+  background: #24a14822;
+  border-color: #24a14855;
+  color: #24a148;
+}
+.badge--warn {
+  background: #e3b34122;
+  border-color: #e3b34155;
+  color: #e3b341;
+}
+.badge--err {
+  background: #e0526022;
+  border-color: #e0526055;
+  color: #e05260;
+}
+.badge--info {
+  background: #5865f222;
+  border-color: #5865f255;
+  color: #5865f2;
+}
+
+/* Admin panel layout */
+.admin {
+  max-width: 1200px;
+  margin: 2rem auto;
+  padding: 1rem;
+}
+
+.hidden {
+  display: none !important;
+}
+
+/* Tab navigation */
+.admin__tabs {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+  margin-bottom: 1.5rem;
+  border-bottom: 1px solid var(--card-border);
+  padding-bottom: 0.5rem;
+  position: sticky;
+  top: 0;
+  z-index: 20;
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  background: linear-gradient(to bottom, rgba(15, 18, 24, 0.75), rgba(15, 18, 24, 0.35));
+  border-radius: 10px;
+  padding: 0.6rem;
+}
+
+.tab {
+  padding: 0.5rem 1rem;
+  border: 1px solid var(--card-border);
+  background: var(--card-bg);
+  border-radius: 6px;
+  cursor: pointer;
+  color: var(--text-primary);
+  text-decoration: none;
+  font-size: 0.95rem;
+  transition: all 0.2s ease;
+}
+
+.tab:hover {
+  border-color: var(--accent);
+  background: color-mix(in oklab, var(--accent) 5%, var(--card-bg));
+}
+
+.tab.is-active {
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 30%, transparent);
+  background: color-mix(in oklab, var(--accent) 10%, var(--card-bg));
+}
+
+.tab--right {
+  margin-left: auto;
+}
+
+/* Admin content views */
+.admin__content {
+  min-height: 400px;
+}
+
+.view {
+  animation: fadeIn 0.3s ease;
+}
+
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+/* Loading spinner */
+.spinner {
+  display: inline-block;
+  width: 1rem;
+  height: 1rem;
+  border: 2px solid var(--card-border);
+  border-top-color: var(--accent);
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* Data table */
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.95rem;
+  margin-top: 1rem;
+}
+
+.table th,
+.table td {
+  padding: 0.6rem 0.8rem;
+  border-bottom: 1px solid var(--card-border);
+  text-align: left;
+}
+
+.table th {
+  font-weight: 600;
+  color: var(--text-secondary);
+  background: color-mix(in oklab, var(--card-bg) 95%, var(--text-primary));
+}
+
+.table tbody tr:hover {
+  background: color-mix(in oklab, var(--accent) 5%, transparent);
+}
+
+/* Action badges */
+.badge {
+  display: inline-block;
+  padding: 0.125rem 0.5rem;
+  border-radius: 999px;
+  border: 1px solid var(--card-border);
+  font-size: 0.85rem;
+  font-weight: 500;
+}
+
+.badge--ok {
+  background: #1f8b4c22;
+  border-color: #1f8b4c44;
+  color: #1f8b4c;
+}
+
+.badge--warn {
+  background: #f0b42922;
+  border-color: #f0b42944;
+  color: #f0b429;
+}
+
+.badge--err {
+  background: #cc293622;
+  border-color: #cc293644;
+  color: #cc2936;
+}
+
+.badge--info {
+  background: #5865f222;
+  border-color: #5865f244;
+  color: #5865f2;
+}
+
+/* Form controls for admin panel */
+.admin input[type="text"],
+.admin input[type="number"],
+.admin select {
+  padding: 0.5rem;
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.95rem;
+}
+
+.admin input[type="text"]:focus,
+.admin select:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px color-mix(in oklab, var(--accent) 20%, transparent);
+}
+
+/* Dashboard cards grid */
+.cards {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 1rem;
+  margin-bottom: 2rem;
+}
+
+/* Empty state */
+.empty-state {
+  text-align: center;
+  padding: 3rem 1rem;
+  color: var(--text-secondary);
+}
+
+.empty-state svg {
+  width: 64px;
+  height: 64px;
+  opacity: 0.5;
+  margin-bottom: 1rem;
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .admin {
+    padding: 0.5rem;
+  }
+
+  .admin__tabs {
+    flex-wrap: wrap;
+  }
+
+  .tab--right {
+    margin-left: 0;
+    width: 100%;
+  }
+
+  .table {
+    font-size: 0.85rem;
+  }
+
+  .table th,
+  .table td {
+    padding: 0.4rem 0.5rem;
+  }
+}
+
+/* User Identity Tags (Discord-style avatars + names) */
+.user-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.user-tag .avatar {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  object-fit: cover;
+  border: 1px solid var(--border, #2a303b);
+}
+
+.user-tag .display {
+  font-weight: 600;
+  color: var(--text, #e7ecf3);
+}
+
+/* Controls row above charts */
+.controls {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0.25rem 0 1rem;
+}
+
+.controls label {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+}
+
+.controls select {
+  padding: 0.4rem 0.6rem;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  border: 1px solid var(--card-border);
+  border-radius: 6px;
+}
+
+/* Chart Cards */
+.chart-card {
+  min-height: 260px;
+  background: var(--panel, #171b22);
+  border: 1px solid var(--border, #2a303b);
+  border-radius: 8px;
+  padding: 1.5rem;
+  margin-bottom: 1.5rem;
+}
+
+.chart-card h3 {
+  margin-top: 0;
+  margin-bottom: 1rem;
+  color: var(--text, #e7ecf3);
+  font-size: 1.125rem;
+}
+
+.chart-wrap {
+  position: relative;
+  height: 240px;
+  margin-top: 1rem;
+}

@@ -1,0 +1,10 @@
+# Pawtropolis robots.txt
+# Currently disallowing all crawlers until launch.
+# To allow indexing at launch, replace this file with:
+#
+# User-agent: *
+# Allow: /
+# Sitemap: https://pawtropolis.tech/sitemap.xml
+
+User-agent: *
+Disallow: /

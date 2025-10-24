@@ -1,0 +1,180 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Glass Debug - Inline Test</title>
+    <style>
+      body {
+        margin: 0;
+        padding: 2rem;
+        background: #0f1218;
+        color: #e7ecf3;
+        font-family: system-ui, sans-serif;
+      }
+      #test-container {
+        width: 400px;
+        height: 300px;
+        position: relative;
+        background: #1a1d26;
+        border: 2px solid #5865f2;
+        border-radius: 12px;
+        margin: 2rem auto;
+      }
+      #log {
+        background: #000;
+        color: #0f0;
+        padding: 1rem;
+        border-radius: 8px;
+        font-family: monospace;
+        font-size: 12px;
+        white-space: pre-wrap;
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .error {
+        color: #ff5555;
+      }
+      .success {
+        color: #50fa7b;
+      }
+      .info {
+        color: #8be9fd;
+      }
+    </style>
+  </head>
+  <body>
+    <h1>Glass System Debug - Inline Test</h1>
+    <p>This page tests Three.js loading directly without modules</p>
+
+    <div id="test-container">
+      <div style="padding: 2rem; position: relative; z-index: 1">
+        <h2>Test Card</h2>
+        <p>3D glass should appear behind this text</p>
+      </div>
+    </div>
+
+    <div id="log"></div>
+
+    <script type="importmap">
+      {
+        "imports": {
+          "three": "https://esm.sh/three@0.161.0",
+          "three/addons/": "https://esm.sh/three@0.161.0/examples/jsm/"
+        }
+      }
+    </script>
+
+    <script type="module">
+      const log = document.getElementById("log");
+      function addLog(msg, type = "info") {
+        const line = document.createElement("div");
+        line.className = type;
+        line.textContent = `[${new Date().toLocaleTimeString()}] ${msg}`;
+        log.appendChild(line);
+        console.log(msg);
+      }
+
+      addLog("Starting Three.js test...", "info");
+
+      try {
+        addLog("Importing Three.js...", "info");
+
+        const THREE = await import("three");
+        addLog("✓ Three.js imported successfully", "success");
+
+        const { GLTFLoader } = await import("three/addons/loaders/GLTFLoader.js");
+        addLog("✓ GLTFLoader imported successfully", "success");
+
+        const container = document.getElementById("test-container");
+
+        // Create scene
+        const scene = new THREE.Scene();
+        scene.background = null; // Transparent
+        addLog("✓ Scene created", "success");
+
+        // Create camera
+        const camera = new THREE.PerspectiveCamera(50, 400 / 300, 0.1, 1000);
+        camera.position.z = 3;
+        addLog("✓ Camera created", "success");
+
+        // Create renderer
+        const renderer = new THREE.WebGLRenderer({
+          alpha: true,
+          antialias: true,
+        });
+        renderer.setSize(400, 300);
+        renderer.domElement.style.position = "absolute";
+        renderer.domElement.style.top = "0";
+        renderer.domElement.style.left = "0";
+        renderer.domElement.style.pointerEvents = "none";
+        container.appendChild(renderer.domElement);
+        addLog("✓ Renderer created and added to DOM", "success");
+
+        // Add lights
+        scene.add(new THREE.AmbientLight(0xffffff, 0.5));
+        const light = new THREE.DirectionalLight(0x5865f2, 1);
+        light.position.set(2, 2, 5);
+        scene.add(light);
+        addLog("✓ Lights added", "success");
+
+        // Load GLB model
+        addLog("Loading GLB model...", "info");
+        const loader = new GLTFLoader();
+
+        loader.load(
+          "/assets/3d/lens.glb",
+          (gltf) => {
+            addLog("✓ GLB model loaded successfully!", "success");
+
+            const mesh = gltf.scene;
+
+            // Apply glass material
+            mesh.traverse((child) => {
+              if (child.isMesh) {
+                child.material = new THREE.MeshPhysicalMaterial({
+                  color: 0xffffff,
+                  metalness: 0.1,
+                  roughness: 0.1,
+                  transmission: 0.7,
+                  transparent: true,
+                  ior: 1.5,
+                  thickness: 0.5,
+                });
+                addLog("✓ Glass material applied to mesh", "success");
+              }
+            });
+
+            scene.add(mesh);
+            addLog("✓ Mesh added to scene", "success");
+
+            // Animate
+            function animate() {
+              requestAnimationFrame(animate);
+
+              const time = performance.now() * 0.001;
+              mesh.rotation.y = time * 0.2;
+
+              renderer.render(scene, camera);
+            }
+
+            animate();
+            addLog("✓ Animation started - you should see rotating glass!", "success");
+          },
+          (progress) => {
+            const percent = ((progress.loaded / progress.total) * 100).toFixed(0);
+            addLog(`Loading: ${percent}%`, "info");
+          },
+          (error) => {
+            addLog(`✗ Failed to load GLB: ${error.message}`, "error");
+            console.error(error);
+          }
+        );
+      } catch (error) {
+        addLog(`✗ ERROR: ${error.message}`, "error");
+        addLog(`Stack: ${error.stack}`, "error");
+        console.error(error);
+      }
+    </script>
+  </body>
+</html>

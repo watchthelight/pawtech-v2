@@ -1,0 +1,23 @@
+{
+  "name": "Pawtropolis",
+  "short_name": "Pawtropolis",
+  "description": "A Security Focused Discord moderation toolkit",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#313338",
+  "theme_color": "#5865F2",
+  "icons": [
+    {
+      "src": "/assets/avatar.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/avatar.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
+    }
+  ]
+}

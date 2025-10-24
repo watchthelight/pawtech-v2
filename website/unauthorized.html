@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Unauthorized • Pawtropolis Admin</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <style>
+      .unauthorized-page {
+        min-height: 100vh;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        background: linear-gradient(135deg, #1a1d29 0%, #11141a 100%);
+        padding: 2rem;
+      }
+
+      .unauthorized-card {
+        max-width: 500px;
+        background: var(--panel, #171b22);
+        border: 1px solid var(--border, #2a303b);
+        border-radius: 12px;
+        padding: 3rem 2.5rem;
+        text-align: center;
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
+      }
+
+      .unauthorized-icon {
+        width: 80px;
+        height: 80px;
+        margin: 0 auto 2rem;
+        background: color-mix(in oklab, var(--chip-reject, #e3b341) 20%, transparent);
+        border: 2px solid var(--chip-reject, #e3b341);
+        border-radius: 50%;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        font-size: 2.5rem;
+      }
+
+      .unauthorized-card h1 {
+        font-size: 1.75rem;
+        margin-bottom: 1rem;
+        color: var(--text, #e7ecf3);
+      }
+
+      .unauthorized-card p {
+        color: var(--muted, #a9b0c0);
+        line-height: 1.6;
+        margin-bottom: 2rem;
+      }
+
+      .unauthorized-card .highlight {
+        background: color-mix(in oklab, var(--brand, #5865f2) 15%, transparent);
+        border: 1px solid var(--brand, #5865f2);
+        border-radius: 6px;
+        padding: 1rem;
+        margin: 1.5rem 0;
+        font-size: 0.9rem;
+      }
+
+      .unauthorized-card .actions {
+        display: flex;
+        gap: 1rem;
+        justify-content: center;
+        flex-wrap: wrap;
+      }
+
+      .btn {
+        display: inline-block;
+        padding: 0.75rem 1.5rem;
+        border-radius: 8px;
+        font-weight: 600;
+        text-decoration: none;
+        transition: all 0.2s;
+        border: none;
+        cursor: pointer;
+        font-size: 1rem;
+      }
+
+      .btn-primary {
+        background: var(--brand, #5865f2);
+        color: white;
+      }
+
+      .btn-primary:hover {
+        background: color-mix(in oklab, var(--brand, #5865f2) 90%, white);
+      }
+
+      .btn-secondary {
+        background: transparent;
+        border: 1px solid var(--border, #2a303b);
+        color: var(--text, #e7ecf3);
+      }
+
+      .btn-secondary:hover {
+        background: var(--panel, #171b22);
+        border-color: var(--brand, #5865f2);
+      }
+    </style>
+  </head>
+  <body class="unauthorized-page">
+    <div class="unauthorized-card">
+      <div class="unauthorized-icon">🔒</div>
+
+      <h1>Access Denied</h1>
+
+      <p>
+        You're not authorized to access the admin panel. This area is restricted to server
+        administrators only.
+      </p>
+
+      <div class="highlight">
+        <strong>If this is a mistake:</strong><br />
+        Please contact the bot developer or server owner to request admin access.
+      </div>
+
+      <div class="actions">
+        <a href="/" class="btn btn-primary">Back to Home</a>
+        <a href="/auth/logout" class="btn btn-secondary">Logout</a>
+      </div>
+    </div>
+
+    <script>
+      // Auto-clear session after showing this page
+      setTimeout(() => {
+        fetch("/auth/logout", { credentials: "include" }).catch(() => {});
+      }, 500);
+    </script>
+  </body>
+</html>

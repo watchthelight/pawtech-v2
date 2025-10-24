@@ -1,0 +1,307 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Pawtropolis — Discord Bot Web Panel (Coming Soon)</title>
+    <meta
+      name="description"
+      content="Gatekeeper reviews, Modmail, pretty-card audit logs, and ModStats analytics—built for moderators, admins, and community managers."
+    />
+    <meta name="robots" content="noindex, nofollow" />
+
+    <!-- Open Graph / Facebook -->
+    <meta property="og:type" content="website" />
+    <meta property="og:url" content="https://pawtropolis.tech/" />
+    <meta property="og:title" content="Pawtropolis — Discord Bot Web Panel (Coming Soon)" />
+    <meta
+      property="og:description"
+      content="Gatekeeper reviews, Modmail, pretty-card audit logs, and ModStats analytics—built for moderators, admins, and community managers."
+    />
+    <meta property="og:image" content="https://pawtropolis.tech/assets/banner.webp" />
+
+    <!-- Twitter -->
+    <meta property="twitter:card" content="summary_large_image" />
+    <meta property="twitter:url" content="https://pawtropolis.tech/" />
+    <meta property="twitter:title" content="Pawtropolis — Discord Bot Web Panel (Coming Soon)" />
+    <meta
+      property="twitter:description"
+      content="Gatekeeper reviews, Modmail, pretty-card audit logs, and ModStats analytics—built for moderators, admins, and community managers."
+    />
+    <meta property="twitter:image" content="https://pawtropolis.tech/assets/banner.webp" />
+
+    <!-- Favicon & Manifest -->
+    <link rel="icon" type="image/png" href="/assets/avatar.png" />
+    <link rel="manifest" href="/site.webmanifest" />
+
+    <!-- Styles -->
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="stylesheet" href="/app.css" />
+
+    <!-- Theme Color -->
+    <meta name="theme-color" content="#5865F2" />
+
+    <!-- GSAP for animations -->
+    <script defer src="https://cdn.jsdelivr.net/npm/gsap@3.12.5/dist/gsap.min.js"></script>
+
+    <!-- React & Three (ESM CDN) -->
+    <script type="module">
+      // Deduplicate singleton modules across pages by attaching to window
+      if (!window.__R3F_LOADED__) {
+        window.__R3F_LOADED__ = true;
+        // Preload modules (improves TTI)
+        const preloads = [
+          "https://esm.sh/react@18?external=react-dom",
+          "https://esm.sh/react-dom@18/client",
+          "https://esm.sh/three@0.161",
+          "https://esm.sh/@react-three/fiber@8?external=react,react-dom,three",
+          "https://esm.sh/@react-three/drei@9?external=react,react-dom,three,@react-three/fiber",
+          "https://esm.sh/maath@0.10?external=three",
+        ];
+        preloads.forEach((href) => {
+          const l = document.createElement("link");
+          l.rel = "modulepreload";
+          l.href = href;
+          document.head.appendChild(l);
+        });
+      }
+    </script>
+  </head>
+
+  <body>
+    <!-- Hero Section with Banner Background -->
+    <header class="hero" role="banner">
+      <div class="hero__background" aria-hidden="true"></div>
+      <div class="hero__content">
+        <img
+          src="/assets/avatar.png"
+          alt="Pawtropolis bot avatar - circular logo"
+          class="hero__avatar"
+        />
+        <h1 class="hero__title blur-text" data-bt-delay="45" data-bt-duration="0.6">Pawtropolis</h1>
+        <p class="hero__tagline blur-text" data-bt-delay="18" data-bt-duration="0.5">
+          A transparent, secure Discord moderation toolkit.
+        </p>
+
+        <div class="hero__cta glass glass--hero" aria-label="Primary actions">
+          <a
+            href="https://discord.gg/bSPDAFDt7a"
+            class="btn btn--primary"
+            target="_blank"
+            rel="noopener noreferrer"
+            >Join Server</a
+          >
+          <a href="/admin/" class="btn btn--secondary btn--glass" data-testid="cta-admin-login"
+            >Admin Panel</a
+          >
+        </div>
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main id="main-content">
+      <!-- Features Section -->
+      <section class="features" aria-labelledby="features-heading">
+        <h2 id="features-heading" class="features__heading">Core Features</h2>
+
+        <div class="features__grid">
+          <!-- Feature 1: Gatekeeper -->
+          <article class="feature-card glass glass--card">
+            <div class="feature-card__icon" aria-hidden="true">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M16 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"></path>
+                <circle cx="8.5" cy="7" r="4"></circle>
+                <polyline points="17 11 19 13 23 9"></polyline>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Application Review</h3>
+            <p class="feature-card__description">
+              Streamlined application workflow with claim/accept/reject actions, automated DMs, and
+              complete audit trails.
+            </p>
+          </article>
+
+          <!-- Feature 2: Modmail -->
+          <article class="feature-card glass glass--card">
+            <div class="feature-card__icon" aria-hidden="true">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M21 15a2 2 0 0 1-2 2H7l-4 4V5a2 2 0 0 1 2-2h14a2 2 0 0 1 2 2z"></path>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Modmail System</h3>
+            <p class="feature-card__description">
+              Private DM-to-thread system for member support with persistent conversation history.
+            </p>
+          </article>
+
+          <!-- Feature 3: Audit Logging -->
+          <article class="feature-card glass glass--card">
+            <div class="feature-card__icon" aria-hidden="true">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"></path>
+                <polyline points="14 2 14 8 20 8"></polyline>
+                <line x1="16" y1="13" x2="8" y2="13"></line>
+                <line x1="16" y1="17" x2="8" y2="17"></line>
+                <polyline points="10 9 9 9 8 9"></polyline>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Audit Logs</h3>
+            <p class="feature-card__description">
+              Detailed activity tracking with structured embeds for all moderation actions.
+            </p>
+          </article>
+
+          <!-- Feature 4: ModStats -->
+          <article class="feature-card glass glass--card">
+            <div class="feature-card__icon" aria-hidden="true">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <line x1="12" y1="20" x2="12" y2="10"></line>
+                <line x1="18" y1="20" x2="18" y2="4"></line>
+                <line x1="6" y1="20" x2="6" y2="16"></line>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Performance Analytics</h3>
+            <p class="feature-card__description">
+              Track moderator performance with metrics, leaderboards, and exportable reports.
+            </p>
+          </article>
+
+          <!-- Feature 5: Admin & Utilities -->
+          <article class="feature-card glass glass--card">
+            <div class="feature-card__icon" aria-hidden="true">
+              <svg
+                width="32"
+                height="32"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="2"
+              >
+                <circle cx="12" cy="12" r="3"></circle>
+                <path
+                  d="M12 1v6m0 6v6m8.66-12l-3 5.2M8.34 14.8l-3 5.2M23 12h-6m-6 0H5m13.66 8.66l-3-5.2M8.34 9.2l-3-5.2"
+                ></path>
+              </svg>
+            </div>
+            <h3 class="feature-card__title">Admin Tools</h3>
+            <p class="feature-card__description">
+              Configuration management, health monitoring, and custom command utilities.
+            </p>
+          </article>
+        </div>
+      </section>
+
+      <!-- Status Section -->
+      <section class="status" aria-labelledby="status-heading">
+        <div class="status__content">
+          <h2 id="status-heading" class="status__heading">Development Status</h2>
+          <p class="status__message">
+            Web panel is under active development. Follow updates in our Discord.
+          </p>
+        </div>
+      </section>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer" role="contentinfo">
+      <p class="footer__copyright">&copy; 2025 Pawtropolis</p>
+      <nav class="footer__links" aria-label="Footer navigation">
+        <a href="/tools/" class="footer__link">Tools</a>
+        <span aria-hidden="true">•</span>
+        <a
+          href="https://github.com/watchthelight/pawtech"
+          class="footer__link"
+          target="_blank"
+          rel="noopener"
+          >GitHub</a
+        >
+        <span aria-hidden="true">•</span>
+        <a
+          href="https://ko-fi.com/watchthelight"
+          class="footer__link"
+          target="_blank"
+          rel="noopener"
+          >Ko-fi</a
+        >
+      </nav>
+    </footer>
+
+    <script>
+      // Load dynamic banner from Discord server
+      document.addEventListener("DOMContentLoaded", async () => {
+        try {
+          const response = await fetch("/api/banner");
+          if (response.ok) {
+            const data = await response.json();
+            if (data.banner_url) {
+              // Update hero background with dynamic server banner
+              const heroBackground = document.querySelector(".hero__background");
+              if (heroBackground) {
+                heroBackground.style.backgroundImage = `
+                linear-gradient(180deg,
+                  rgba(0, 0, 0, 0.3) 0%,
+                  rgba(0, 0, 0, 0.5) 50%,
+                  rgba(0, 0, 0, 0.7) 100%),
+                url('${data.banner_url}')
+              `;
+              }
+
+              // Update Open Graph meta tags for social media embeds
+              const ogImage = document.querySelector('meta[property="og:image"]');
+              const twitterImage = document.querySelector('meta[property="twitter:image"]');
+              if (ogImage) ogImage.setAttribute("content", data.banner_url);
+              if (twitterImage) twitterImage.setAttribute("content", data.banner_url);
+            }
+          }
+        } catch (err) {
+          console.warn("Failed to load dynamic banner, using fallback:", err);
+        }
+
+        // Initialize blur text animations on page load
+        const initBlurText = () => {
+          if (typeof autoMountBlurText !== "undefined") {
+            autoMountBlurText();
+          }
+        };
+
+        // Check if GSAP loaded
+        if (typeof gsap !== "undefined") {
+          // GSAP is loaded, initialize
+          // Import blur text functions
+          const script = document.createElement("script");
+          script.src = "/blur-text.js";
+          script.onload = initBlurText;
+          document.head.appendChild(script);
+        }
+      });
+    </script>
+  </body>
+</html>

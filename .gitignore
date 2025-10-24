@@ -1,0 +1,59 @@
+﻿# Dependencies and build artifacts
+node_modules/
+dist/
+build/
+.cache/
+coverage/
+.venv/
+__pycache__/
+
+# Environment and sensitive data
+.env
+.env.*
+.env.local
+env/*.env
+config/*.env
+
+# Secrets and credentials
+secrets/
+**/secrets/
+**/*.key
+**/*.pem
+**/*.p12
+
+# Test fixtures with potential secrets
+tests/**/fixtures/**
+tests/**/secrets/**
+
+# Logs
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# Database
+data/
+*.db
+*.db-*
+
+# Deployment archives
+*.tar.gz
+*.zip
+
+# Test directory (use tests/ instead)
+test/
+
+# Temporary files
+.DS_Store
+Thumbs.db
+
+# Claude Code local settings
+.claude/settings.local.json
+context/03_Slash_Commands_and_UX.md
+context/07_Database_Schema_and_Migrations.md
+context/06_Logging_Auditing_and_ModStats.md
+context/03_Slash_Commands_and_UX.md

@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Status — Pawtropolis</title>
+    <link rel="stylesheet" href="/styles.css" />
+    <link rel="icon" type="image/png" href="/assets/avatar.png" />
+  </head>
+  <body>
+    <header class="hero" style="min-height: 200px">
+      <div class="hero__content">
+        <h1 class="hero__title">System Status</h1>
+        <p class="hero__tagline"><a href="/" style="color: #5865f2">← Back to Home</a></p>
+      </div>
+    </header>
+
+    <main id="main-content" style="padding: 2rem; max-width: 800px; margin: 0 auto">
+      <section class="status" id="status-display">
+        <h2>Service Status</h2>
+        <div
+          id="status-indicator"
+          style="padding: 1.5rem; border-radius: 8px; background: #27272a; margin: 1rem 0"
+        >
+          <p style="margin: 0; text-align: center">Loading status...</p>
+        </div>
+
+        <h3 style="margin-top: 2rem">Components</h3>
+        <ul style="list-style: none; padding: 0">
+          <li style="padding: 0.75rem; margin: 0.5rem 0; background: #27272a; border-radius: 4px">
+            <strong>Discord Bot:</strong> <span id="bot-status">Checking...</span>
+          </li>
+          <li style="padding: 0.75rem; margin: 0.5rem 0; background: #27272a; border-radius: 4px">
+            <strong>Web API:</strong> <span id="api-status">Checking...</span>
+          </li>
+          <li style="padding: 0.75rem; margin: 0.5rem 0; background: #27272a; border-radius: 4px">
+            <strong>Database:</strong> <span id="db-status">Operational</span>
+          </li>
+        </ul>
+      </section>
+    </main>
+
+    <footer class="footer">
+      <p class="footer__copyright">&copy; 2025 Pawtropolis</p>
+    </footer>
+
+    <script>
+      // Check health endpoint
+      fetch("/health")
+        .then((res) => res.json())
+        .then((data) => {
+          const indicator = document.getElementById("status-indicator");
+          if (data.ok) {
+            indicator.innerHTML =
+              '<p style="margin: 0; text-align: center; color: #10b981;">✓ All Systems Operational</p>';
+            indicator.style.background = "#064e3b";
+            document.getElementById("bot-status").innerHTML =
+              '<span style="color: #10b981;">✓ Online</span>';
+            document.getElementById("api-status").innerHTML =
+              '<span style="color: #10b981;">✓ Online</span> (v' + data.version + ")";
+          } else {
+            indicator.innerHTML =
+              '<p style="margin: 0; text-align: center; color: #ef4444;">⚠ Degraded Performance</p>';
+            indicator.style.background = "#7f1d1d";
+          }
+        })
+        .catch((err) => {
+          const indicator = document.getElementById("status-indicator");
+          indicator.innerHTML =
+            '<p style="margin: 0; text-align: center; color: #f59e0b;">⚠ Unable to check status</p>';
+          indicator.style.background = "#7c2d12";
+          document.getElementById("api-status").innerHTML =
+            '<span style="color: #f59e0b;">⚠ Unreachable</span>';
+        });
+    </script>
+  </body>
+</html>
