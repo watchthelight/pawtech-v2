@@ -289,7 +289,7 @@ AI is partially used in this project: It is used to make immediate repairs on CR
 
 **Author:** watchthelight (Bash)
 **Email:** <admin@watchthelight.org>
-**Repository:** <[https://github.com/watchthelight/pawtropolis-tech](https://github.com/watchthelight/pawtech-v2?tab=readme-ov-file>
+**Repository:** <https://github.com/watchthelight/pawtech-v2>
 **Website:** <https://watchthelight.org>
 
 ---
