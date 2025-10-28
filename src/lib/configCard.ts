@@ -44,6 +44,12 @@ export async function postGateConfigCard(
     ? `<#${cfg.unverifiedChannelId}>`
     : "not set";
 
+  // Check Google Vision API status
+  const visionApiKey = process.env.GOOGLE_VISION_API_KEY;
+  const visionStatus = visionApiKey
+    ? "✅ Enabled (75% accuracy on NSFW)"
+    : "⚠️ Disabled (set GOOGLE_VISION_API_KEY)";
+
   const embed = new EmbedBuilder()
     .setTitle("Pawtropolis Tech — Gate Configuration")
     .setDescription("Current gate configuration for this server.")
@@ -54,7 +60,8 @@ export async function postGateConfigCard(
       { name: "General Channel", value: `<#${cfg.generalChannelId}>`, inline: true },
       { name: "Unverified Channel", value: unverifiedChannelValue, inline: true },
       { name: "Accepted Role", value: `<@&${cfg.acceptedRoleId}>`, inline: true },
-      { name: "Reviewer Role", value: reviewerRoleValue, inline: true }
+      { name: "Reviewer Role", value: reviewerRoleValue, inline: true },
+      { name: "NSFW Avatar Detection", value: visionStatus, inline: false }
     )
     .setTimestamp()
     .setFooter({ text: `Guild ID: ${guild.id}` });

@@ -44,7 +44,7 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { captureException } from "../lib/sentry.js";
 import { getConfig, hasManageGuild, hasStaffPermissions, isReviewer } from "../lib/config.js";
-import { buildReverseImageUrl, getScan, googleReverseImageUrl } from "./avatarScan.js";
+import { getScan, googleReverseImageUrl } from "./avatarScan.js";
 import { GATE_SHOW_AVATAR_RISK } from "../lib/env.js";
 import type { GuildConfig } from "../lib/config.js";
 import { replyOrEdit, ensureDeferred } from "../lib/cmdWrap.js";
@@ -1704,7 +1704,7 @@ export async function handleAvatarConfirmModal(interaction: ModalSubmitInteracti
     return;
   }
 
-  const link = buildReverseImageUrl(cfg, avatarUrl);
+  const link = googleReverseImageUrl(avatarUrl);
   await replyOrEdit(interaction, { content: link }).catch(() => undefined);
 
   db.prepare(
@@ -2398,6 +2398,9 @@ export function renderReviewEmbed(
           lines.push(` _Evidence (${reasonLabel}): ${evidenceTags.join(", ")}_`);
         }
       }
+
+      // Add API disclaimer
+      lines.push("\\n*Google Vision API - ~75% accuracy on NSFW content*");
 
       embed.addFields({
         name: "Avatar Risk",

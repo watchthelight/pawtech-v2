@@ -76,3 +76,4 @@ assets/e621-nsfw-sample.json
 .claude/avatar-nsfw-roadmap.md
 .claude/avatar-nsfw-implementation-summary.md
 .gitignore
+GOOGLE_VISION_SETUP.md
