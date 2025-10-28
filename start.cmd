@@ -207,22 +207,14 @@ ssh %REMOTE_ALIAS% "timeout 5 sqlite3 %DB_REMOTE% 'PRAGMA wal_checkpoint(PASSIVE
 REM Pull remote → local (with WAL checkpoint and WAL/SHM files)
 echo [sync] Pulling remote database to local...
 
-REM Step 0: Verify remote database integrity BEFORE pulling
+REM Step 0: Verify remote database integrity BEFORE pulling (optional, non-blocking)
 echo [sync] Verifying remote database integrity...
-ssh %REMOTE_ALIAS% "cd %REMOTE_PATH% && node scripts/verify-db-integrity.js %DB_REMOTE%" >nul 2>&1
+ssh -o ConnectTimeout=5 -o BatchMode=yes %REMOTE_ALIAS% "bash -c 'cd %REMOTE_PATH% 2>/dev/null && timeout 10 node scripts/verify-db-integrity.js %DB_REMOTE% 2>/dev/null'" >nul 2>&1
 if errorlevel 1 (
-    echo.
-    echo ╔═══════════════════════════════════════════════════════════════╗
-    echo ║  WARNING: REMOTE DATABASE FAILED INTEGRITY CHECK              ║
-    echo ║  The remote database may be corrupted or have missing data.   ║
-    echo ║  Your local database will NOT be overwritten.                 ║
-    echo ╚═══════════════════════════════════════════════════════════════╝
-    echo.
-    echo [sync] Aborting pull to protect local database
-    echo [sync] To force sync anyway, use: start.cmd --push-remote
-    exit /b 1
+    echo [sync] Remote verification unavailable or failed - will verify after download
+) else (
+    echo [sync] ✓ Remote database passed integrity check
 )
-echo [sync] ✓ Remote database integrity verified
 
 REM Step 1: Checkpoint the WAL on remote to ensure consistency
 REM Use PASSIVE checkpoint with timeout to avoid hanging if DB is locked by running bot

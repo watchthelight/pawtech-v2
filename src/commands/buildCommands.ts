@@ -3,6 +3,7 @@ import { data as gateData, acceptData, rejectData, kickData, unclaimData } from 
 import { data as healthData } from "./health.js";
 import { data as statusupdateData } from "./statusupdate.js";
 import { data as configData } from "./config.js";
+import { data as databaseData } from "./database.js";
 import { modmailCommand } from "../features/modmail.js";
 import { analyticsData, analyticsExportData } from "./analytics.js";
 import { data as modstatsData } from "./modstats.js";
@@ -20,6 +21,7 @@ export function buildCommands() {
     healthData.toJSON(),
     statusupdateData.toJSON(),
     configData.toJSON(),
+    databaseData.toJSON(),
     modmailCommand.toJSON(),
     analyticsData.toJSON(),
     analyticsExportData.toJSON(),

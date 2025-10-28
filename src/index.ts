@@ -52,6 +52,7 @@ import * as health from "./commands/health.js";
 import * as gate from "./commands/gate.js";
 import * as statusupdate from "./commands/statusupdate.js";
 import * as config from "./commands/config.js";
+import * as database from "./commands/database.js";
 import { handleStartButton, handleGateModalSubmit, handleDoneButton } from "./features/gate.js";
 import {
   handleReviewButton,
@@ -115,6 +116,7 @@ commands.set(gate.kickData.name, wrapCommand("kick", gate.executeKick));
 commands.set(gate.unclaimData.name, wrapCommand("unclaim", gate.executeUnclaim));
 commands.set(statusupdate.data.name, wrapCommand("statusupdate", statusupdate.execute));
 commands.set(config.data.name, wrapCommand("config", config.execute));
+commands.set(database.data.name, wrapCommand("database", database.execute));
 commands.set("modmail", wrapCommand("modmail", executeModmailCommand));
 
 // Analytics commands
