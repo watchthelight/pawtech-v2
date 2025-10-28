@@ -63,6 +63,7 @@ import { postWelcomeCard } from "./welcome.js";
 import { closeModmailForApplication } from "./modmail.js";
 import { nowUtc, formatUtc, formatRelative } from "../lib/time.js";
 import { toDiscordAbs, toDiscordRel } from "../lib/timefmt.js";
+import { autoDelete } from "../utils/autoDelete.js";
 
 // In-memory set to track warned users for missing account age
 const missingAccountAgeWarned = new Set<string>();
@@ -2867,7 +2868,8 @@ export async function ensureReviewMessage(
 
 /**
  * Handle "Ping in Unverified" button
- * Posts a ping in the unverified channel, replies ephemerally with link, auto-deletes after 10s
+ * Posts a ping in the unverified channel, replies ephemerally with link
+ * Auto-deletes after 30s (staff can also delete manually via button)
  */
 export async function handlePingInUnverified(interaction: ButtonInteraction) {
   const match = /^v1:ping:(.+)$/.exec(interaction.customId);
@@ -2925,9 +2927,16 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
       const perms = channel.permissionsFor(me);
       const canView = perms?.has(PermissionFlagsBits.ViewChannel) ?? false;
       const canSend = perms?.has(PermissionFlagsBits.SendMessages) ?? false;
+      const canManage = perms?.has(PermissionFlagsBits.ManageMessages) ?? false;
       if (!canView || !canSend) {
         await replyOrEdit(interaction, {
           content: `Bot is missing ViewChannel or SendMessages permission in <#${cfg.unverified_channel_id}>.`,
+        }).catch(() => undefined);
+        return;
+      }
+      if (!canManage) {
+        await replyOrEdit(interaction, {
+          content: `Bot is missing ManageMessages permission in <#${cfg.unverified_channel_id}>. The ping will be posted but cannot be auto-deleted.`,
         }).catch(() => undefined);
         return;
       }
@@ -2953,10 +2962,15 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(deleteButton);
     await pingMessage.edit({ components: [row] }).catch(() => undefined);
 
+    // Schedule auto-deletion after 30 seconds
+    // WHY: Keeps channel clean while giving user time to see notification
+    // SAFETY: Gracefully handles races (manual deletion) and permission errors
+    autoDelete(pingMessage, 30_000);
+
     // Reply ephemerally with link
     const messageUrl = `https://discord.com/channels/${interaction.guildId}/${channel.id}/${pingMessage.id}`;
     await replyOrEdit(interaction, {
-      content: `Ping posted: ${messageUrl}\n\nThe ping will remain until a staff member deletes it using the button.`,
+      content: `Ping posted: ${messageUrl}\n\nThe ping will auto-delete after 30 seconds, or you can delete it immediately using the button.`,
     }).catch(() => undefined);
 
     logger.info(
@@ -2966,7 +2980,7 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
         messageId: pingMessage.id,
         moderatorId: interaction.user.id,
       },
-      "[review] ping posted in unverified (persistent, staff can delete via button)"
+      "[review] ping posted in unverified (auto-deletes after 30s, staff can delete via button)"
     );
   } catch (err) {
     logger.error(

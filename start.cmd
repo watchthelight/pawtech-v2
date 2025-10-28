@@ -41,6 +41,7 @@ set ARG_STOP=0
 set ARG_PUSH_REMOTE=0
 set ARG_RECOVER_DB=0
 set ARG_RECOVER=0
+set ARG_SKIP_SYNC=0
 
 :parse_args
 if "%~1"=="" goto check_args
@@ -76,6 +77,11 @@ if /i "%~1"=="--recover-remote-db" (
 )
 if /i "%~1"=="--recover" (
     set ARG_RECOVER=1
+    shift
+    goto parse_args
+)
+if /i "%~1"=="--skip-sync" (
+    set ARG_SKIP_SYNC=1
     shift
     goto parse_args
 )
@@ -191,18 +197,38 @@ if %L_EXISTS%==1 (
     copy "%DB_LOCAL%" "!LOCAL_BACKUP!" >nul
 )
 
-REM Create remote backup
+REM Create remote backup (include WAL/SHM files)
 for /f "usebackq" %%t in (`ssh %REMOTE_ALIAS% "date +%%Y%%m%%d-%%H%%M%%S"`) do set R_TIMESTAMP=%%t
 set REMOTE_BACKUP=%REMOTE_PATH%/data/backups/data-!R_TIMESTAMP!.remote.db
 echo [sync] Backing up remote → !REMOTE_BACKUP!
-ssh %REMOTE_ALIAS% "cp %DB_REMOTE% !REMOTE_BACKUP!"
+REM Use timeout to prevent hang if DB is locked; passive checkpoint is safe even if it fails
+ssh %REMOTE_ALIAS% "timeout 5 sqlite3 %DB_REMOTE% 'PRAGMA wal_checkpoint(PASSIVE);' 2>/dev/null || true; cp %DB_REMOTE% !REMOTE_BACKUP!; [ -f %DB_REMOTE%-wal ] && cp %DB_REMOTE%-wal !REMOTE_BACKUP!-wal || true; [ -f %DB_REMOTE%-shm ] && cp %DB_REMOTE%-shm !REMOTE_BACKUP!-shm || true"
 
-REM Pull remote → local
+REM Pull remote → local (with WAL checkpoint and WAL/SHM files)
 echo [sync] Pulling remote database to local...
+
+REM Step 1: Checkpoint the WAL on remote to ensure consistency
+REM Use PASSIVE checkpoint with timeout to avoid hanging if DB is locked by running bot
+echo [sync] Checkpointing WAL on remote (passive mode, non-blocking)...
+ssh %REMOTE_ALIAS% "timeout 5 sqlite3 %DB_REMOTE% 'PRAGMA wal_checkpoint(PASSIVE);' 2>/dev/null || echo '[INFO] WAL checkpoint timed out (bot may be running)'"
+
+REM Step 2: Copy main database file
 scp %REMOTE_ALIAS%:%DB_REMOTE% "%DB_LOCAL%"
 if errorlevel 1 (
     echo [ERROR] Failed to pull remote database
     exit /b 1
+)
+
+REM Step 3: Copy WAL file if it exists
+scp %REMOTE_ALIAS%:%DB_REMOTE%-wal "%DB_LOCAL%-wal" 2>nul
+if not errorlevel 1 (
+    echo [sync] WAL file copied
+)
+
+REM Step 4: Copy SHM file if it exists
+scp %REMOTE_ALIAS%:%DB_REMOTE%-shm "%DB_LOCAL%-shm" 2>nul
+if not errorlevel 1 (
+    echo [sync] SHM file copied
 )
 
 echo [sync] ✓ Remote database pulled successfully
@@ -216,6 +242,18 @@ REM ============================================================================
 echo.
 echo === DB SYNC (PUSH TO REMOTE) ===
 echo [sync] Pushing local database to remote (EXPLICIT MODE)...
+
+REM IMPORTANT: Stop remote PM2 process to prevent database corruption during push
+echo [sync] Checking remote PM2 status...
+for /f "usebackq" %%s in (`ssh %REMOTE_ALIAS% "bash -lc 'pm2 jlist 2>/dev/null | grep -c \"\\\"name\\\":\\\"%PM2_NAME%\\\"\" || echo 0'"`) do set PM2_RUNNING=%%s
+
+if %PM2_RUNNING% GTR 0 (
+    echo [sync] Remote PM2 process is running - stopping to prevent corruption...
+    ssh %REMOTE_ALIAS% "bash -lc 'pm2 stop %PM2_NAME%'" >nul 2>&1
+    echo [sync] Remote process stopped
+) else (
+    echo [sync] Remote PM2 process not running (safe to push)
+)
 
 REM Ensure directories exist
 if not exist ".\data" mkdir ".\data"
@@ -234,36 +272,78 @@ for /f "usebackq" %%t in (`powershell -NoProfile -Command "[int][double](Get-Dat
 for /f "usebackq" %%h in (`powershell -NoProfile -Command "(Get-FileHash '%DB_LOCAL%' -Algorithm SHA256).Hash"`) do set L_SHA256=%%h
 echo [sync] local:  mtime=%L_MTIME% size=%L_SIZE% sha256=%L_SHA256%
 
-REM Create local backup
+REM Checkpoint local WAL before push
+echo [sync] Checkpointing local WAL...
+powershell -NoProfile -Command "& { try { $db = New-Object System.Data.SQLite.SQLiteConnection('Data Source=%DB_LOCAL%'); $db.Open(); $cmd = $db.CreateCommand(); $cmd.CommandText = 'PRAGMA wal_checkpoint(TRUNCATE)'; $cmd.ExecuteNonQuery() | Out-Null; $db.Close(); Write-Host '[sync] WAL checkpoint complete' } catch { Write-Host '[WARN] WAL checkpoint failed - trying sqlite3 command' } }" 2>nul
+if errorlevel 1 (
+    REM Fallback to sqlite3 command if available
+    where sqlite3 >nul 2>&1
+    if not errorlevel 1 (
+        sqlite3 "%DB_LOCAL%" "PRAGMA wal_checkpoint(TRUNCATE);" 2>nul
+    )
+)
+
+REM Create local backup (including WAL/SHM files)
 for /f "usebackq" %%t in (`powershell -NoProfile -Command "Get-Date -Format 'yyyyMMdd-HHmmss'"`) do set TIMESTAMP=%%t
 set LOCAL_BACKUP=data\backups\data-!TIMESTAMP!.local.db
 echo [sync] Backing up local → !LOCAL_BACKUP!
 copy "%DB_LOCAL%" "!LOCAL_BACKUP!" >nul
+if exist "%DB_LOCAL%-wal" (
+    copy "%DB_LOCAL%-wal" "!LOCAL_BACKUP!-wal" >nul
+    echo [sync] Backed up local WAL file
+)
+if exist "%DB_LOCAL%-shm" (
+    copy "%DB_LOCAL%-shm" "!LOCAL_BACKUP!-shm" >nul
+    echo [sync] Backed up local SHM file
+)
 
-REM Check if remote exists and back it up
+REM Check if remote exists and back it up (including WAL/SHM)
 for /f "usebackq" %%e in (`ssh %REMOTE_ALIAS% "bash -c 'if [ -f %DB_REMOTE% ]; then echo 1; else echo 0; fi'"`) do set R_EXISTS=%%e
 if %R_EXISTS%==1 (
     for /f "usebackq" %%t in (`ssh %REMOTE_ALIAS% "date +%%Y%%m%%d-%%H%%M%%S"`) do set R_TIMESTAMP=%%t
     set REMOTE_BACKUP=%REMOTE_PATH%/data/backups/data-!R_TIMESTAMP!.remote.db
     echo [sync] Backing up remote → !REMOTE_BACKUP!
-    ssh %REMOTE_ALIAS% "cp %DB_REMOTE% !REMOTE_BACKUP!"
+    ssh %REMOTE_ALIAS% "sqlite3 %DB_REMOTE% 'PRAGMA wal_checkpoint(TRUNCATE);' 2>/dev/null; cp %DB_REMOTE% !REMOTE_BACKUP!; [ -f %DB_REMOTE%-wal ] && cp %DB_REMOTE%-wal !REMOTE_BACKUP!-wal || true; [ -f %DB_REMOTE%-shm ] && cp %DB_REMOTE%-shm !REMOTE_BACKUP!-shm || true"
 )
 
-REM Push local → remote
+REM Push local → remote (including WAL/SHM files)
 echo.
 echo ╔════════════════════════════════════════════════════════════╗
 echo ║  PUSHING LOCAL DATABASE TO REMOTE                         ║
 echo ║  This will overwrite the remote database!                 ║
 echo ╚════════════════════════════════════════════════════════════╝
 echo.
+
+REM Step 1: Push main database file
 scp "%DB_LOCAL%" %REMOTE_ALIAS%:%DB_REMOTE%
 if errorlevel 1 (
     echo [ERROR] Failed to push database to remote
     exit /b 1
 )
 
+REM Step 2: Push WAL file if it exists
+if exist "%DB_LOCAL%-wal" (
+    scp "%DB_LOCAL%-wal" %REMOTE_ALIAS%:%DB_REMOTE%-wal
+    if not errorlevel 1 (
+        echo [sync] WAL file pushed
+    )
+)
+
+REM Step 3: Push SHM file if it exists
+if exist "%DB_LOCAL%-shm" (
+    scp "%DB_LOCAL%-shm" %REMOTE_ALIAS%:%DB_REMOTE%-shm
+    if not errorlevel 1 (
+        echo [sync] SHM file pushed
+    )
+)
+
 echo.
 echo [sync] ✓ Local database pushed to remote successfully
+echo.
+echo [IMPORTANT] Remote PM2 process was stopped to prevent corruption.
+echo [IMPORTANT] To restart the remote bot, run:
+echo [IMPORTANT]   start.cmd --remote
+echo.
 set SYNC_MODE=push-remote
 
 REM Collect remote metadata after push
@@ -394,8 +474,13 @@ REM ============================================================================
 REM LOCAL START
 REM ============================================================================
 :local_start
-REM Sync database before starting (remote-preferred)
-call :sync_db_remote_preferred
+REM Sync database before starting (remote-preferred) unless --skip-sync
+if %ARG_SKIP_SYNC%==0 (
+    call :sync_db_remote_preferred
+) else (
+    echo.
+    echo [SKIP] Database sync skipped (--skip-sync flag)
+)
 
 if %ARG_FRESH%==1 (
     echo.
@@ -473,8 +558,13 @@ REM ============================================================================
 REM REMOTE START
 REM ============================================================================
 :remote_start
-REM Sync database before starting remote (remote-preferred)
-call :sync_db_remote_preferred
+REM Sync database before starting remote (remote-preferred) unless --skip-sync
+if %ARG_SKIP_SYNC%==0 (
+    call :sync_db_remote_preferred
+) else (
+    echo.
+    echo [SKIP] Database sync skipped (--skip-sync flag)
+)
 
 if %ARG_FRESH%==1 (
     echo.
@@ -600,19 +690,15 @@ REM Stop remote PM2 process
 echo [4/4] Stopping remote PM2 process...
 where ssh >nul 2>&1
 if not errorlevel 1 (
-    ssh %REMOTE_ALIAS% "bash -lc 'pm2 stop %PM2_NAME% && pm2 save'" >nul 2>&1
-    if errorlevel 1 (
-        echo [WARN] Failed to stop remote process ^(may not be running^)
-    ) else (
-        echo Remote PM2 process stopped
-    )
+    ssh %REMOTE_ALIAS% "bash -lc 'pm2 stop %PM2_NAME% 2>/dev/null || true; pm2 save 2>/dev/null || true'" >nul 2>&1
+    echo Remote PM2 process stopped ^(if it was running^)
 ) else (
     echo SSH not found, skipping remote stop
 )
 
 echo.
 echo [SUCCESS] Stop operation complete
-exit /b 0
+goto :eof
 
 REM ============================================================================
 REM INTERACTIVE RECOVERY
@@ -649,6 +735,7 @@ echo   --stop               Stop all local and remote processes
 echo   --push-remote        Push local database to remote ^(explicit only^)
 echo   --recover            Interactive DB recovery ^(evaluate and restore from any backup^)
 echo   --recover-remote-db  Download all remote DB candidates for recovery
+echo   --skip-sync          Skip database sync ^(use existing local DB^)
 echo.
 echo Examples:
 echo   start.cmd --local                  # Dev mode with hot reload ^(pulls remote DB^)

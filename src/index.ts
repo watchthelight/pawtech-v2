@@ -1018,6 +1018,20 @@ client.on("messageCreate", async (message) => {
       }
     }
 
+    // Dad Mode: Respond to "I'm..." messages with dad jokes
+    // WHAT: Playful feature that replies "Hi <name>, I'm dad" to messages like "I'm tired"
+    // WHY: Adds personality and community engagement in guilds
+    // HOW: Checks guild config for enabled state and odds, then triggers dad joke
+    // DOCS: See src/listeners/messageDadMode.ts
+    if (message.guildId && !message.webhookId) {
+      try {
+        const { execute: executeDadMode } = await import("./listeners/messageDadMode.js");
+        await executeDadMode(message);
+      } catch (err) {
+        logger.debug({ err, messageId: message.id }, "[dadmode] handler failed");
+      }
+    }
+
     // Check if message is in a modmail thread
     if (message.channel.isThread() && message.guildId) {
       const ticket = getTicketByThread(message.channel.id);
@@ -1076,7 +1090,10 @@ async function main() {
   await client.login(DISCORD_TOKEN);
 }
 
-main().catch((err) => {
-  logger.error({ err }, "Fatal startup error");
-  process.exit(1);
-});
+// Only start the bot if not running in test environment
+if (!process.env.VITEST_WORKER_ID) {
+  main().catch((err) => {
+    logger.error({ err }, "Fatal startup error");
+    process.exit(1);
+  });
+}

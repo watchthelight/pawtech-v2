@@ -112,6 +112,26 @@ export const data = new SlashCommandBuilder()
               .setMaxValue(365)
           )
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("dadmode")
+          .setDescription("Toggle Dad Mode (playful I'm/Im responses)")
+          .addStringOption((o) =>
+            o
+              .setName("state")
+              .setDescription("Enable or disable Dad Mode")
+              .setRequired(true)
+              .addChoices({ name: "On", value: "on" }, { name: "Off", value: "off" })
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("chance")
+              .setDescription("Odds (1 in N). Default: 1000. Min: 2, Max: 100000")
+              .setRequired(false)
+              .setMinValue(2)
+              .setMaxValue(100000)
+          )
+      )
   )
   .addSubcommandGroup((group) =>
     group
@@ -621,9 +641,73 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
   lines.push("");
   lines.push("**Feature Settings:**");
   lines.push(`Avatar scan enabled: ${cfg.avatar_scan_enabled ? "yes" : "no"}`);
+  lines.push(
+    `Dad Mode: ${cfg.dadmode_enabled ? `ON (1 in ${cfg.dadmode_odds ?? 1000})` : "OFF"}`
+  );
 
   ctx.step("reply");
   await replyOrEdit(interaction, { content: lines.join("\n") });
+}
+
+async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executeSetDadMode
+   * WHAT: Toggle Dad Mode (playful "Hi <name>, I'm dad" responses).
+   * WHY: Provides lighthearted engagement; configurable per-guild with adjustable odds.
+   * PARAMS: ctx — command context; extracts state and optional chance.
+   * RETURNS: Promise<void> after confirming update.
+   * DOCS:
+   *  - Dad Mode responds to messages like "I'm tired" with "Hi tired, I'm dad"
+   *  - Odds default to 1 in 1000 (adjustable 2-100000)
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const state = interaction.options.getString("state", true); // "on" | "off"
+  const chance = interaction.options.getInteger("chance");
+
+  ctx.step("update_config");
+  const cfg = getConfig(interaction.guildId!) ?? { guild_id: interaction.guildId! };
+
+  if (state === "off") {
+    cfg.dadmode_enabled = false;
+    upsertConfig(interaction.guildId!, { dadmode_enabled: false });
+  } else {
+    cfg.dadmode_enabled = true;
+    if (chance !== null) {
+      // Validate and clamp (redundant with Discord's validation, but safe)
+      const validChance = Math.min(100000, Math.max(2, chance));
+      cfg.dadmode_odds = validChance;
+      upsertConfig(interaction.guildId!, { dadmode_enabled: true, dadmode_odds: validChance });
+    } else {
+      // Use existing or default to 1000
+      if (!cfg.dadmode_odds) {
+        cfg.dadmode_odds = 1000;
+      }
+      upsertConfig(interaction.guildId!, {
+        dadmode_enabled: true,
+        dadmode_odds: cfg.dadmode_odds,
+      });
+    }
+  }
+
+  ctx.step("reply");
+  const statusText = cfg.dadmode_enabled
+    ? `**ON** (1 in **${cfg.dadmode_odds ?? 1000}**)`
+    : "**OFF**";
+  await replyOrEdit(interaction, {
+    content: `Dad Mode: ${statusText}`,
+  });
+
+  logger.info(
+    {
+      guildId: interaction.guildId,
+      enabled: cfg.dadmode_enabled,
+      odds: cfg.dadmode_odds,
+      moderatorId: interaction.user.id,
+    },
+    "[config] dadmode updated"
+  );
 }
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
@@ -663,6 +747,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetFlagsChannel(ctx);
     } else if (subcommand === "flags_threshold") {
       await executeSetFlagsThreshold(ctx);
+    } else if (subcommand === "dadmode") {
+      await executeSetDadMode(ctx);
     }
   } else if (subcommandGroup === "get") {
     if (subcommand === "logging") {

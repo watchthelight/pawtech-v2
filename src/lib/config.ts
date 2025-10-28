@@ -36,6 +36,8 @@ export type GuildConfig = {
   modmail_log_channel_id?: string | null;
   modmail_delete_on_close?: boolean | null;
   review_roles_mode?: string | null;
+  dadmode_enabled?: boolean | null;
+  dadmode_odds?: number | null;
   image_search_url_template: string;
   reapply_cooldown_hours: number;
   min_account_age_hours: number;
@@ -61,6 +63,7 @@ let welcomeTemplateEnsured = false;
 let welcomeChannelsEnsured = false;
 let unverifiedChannelEnsured = false;
 let modRolesColumnsEnsured = false;
+let dadmodeColumnsEnsured = false;
 
 function ensureUnverifiedChannelColumn() {
   if (unverifiedChannelEnsured) return;
@@ -168,6 +171,40 @@ function ensureModRolesColumns() {
   }
 }
 
+function ensureDadModeColumns() {
+  /**
+   * ensureDadModeColumns
+   * WHAT: Migration helper to add dadmode_enabled and dadmode_odds columns.
+   * WHY: Supports Dad Mode feature (playful I'm/Im responses).
+   * DOCS:
+   *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
+   *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
+   */
+  if (dadmodeColumnsEnsured) return;
+  try {
+    const exists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
+      .get() as { name: string } | undefined;
+    if (!exists) {
+      return;
+    }
+    const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
+    const missing = ["dadmode_enabled", "dadmode_odds"].filter(
+      (col) => !cols.some((c) => c.name === col)
+    );
+    for (const col of missing) {
+      logger.info({ table: "guild_config", column: col }, "[ensure] adding dadmode column");
+      // dadmode_enabled is INTEGER (boolean 0/1), dadmode_odds is INTEGER (1 in N)
+      const colDef =
+        col === "dadmode_enabled" ? "INTEGER DEFAULT 0" : "INTEGER DEFAULT 1000";
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN ${col} ${colDef}`).run();
+    }
+    dadmodeColumnsEnsured = true;
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure dadmode columns");
+  }
+}
+
 function invalidateCache(guildId: string) {
   configCache.delete(guildId);
 }
@@ -186,6 +223,7 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
   ensureWelcomeTemplateColumn();
   ensureWelcomeChannelsColumns();
   ensureModRolesColumns();
+  ensureDadModeColumns();
   // Read presence of row to decide INSERT vs UPDATE
   const existing = db.prepare("SELECT * FROM guild_config WHERE guild_id = ?").get(guildId);
   if (!existing) {
@@ -227,7 +265,11 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
     const keys = Object.keys(partial) as Array<keyof typeof partial>;
     if (keys.length === 0) return;
     const sets = keys.map((k) => `${k} = ?`).join(", ") + ", updated_at = datetime('now')";
-    const vals = keys.map((k) => partial[k]);
+    // Convert boolean values to integers for SQLite (true -> 1, false -> 0)
+    const vals = keys.map((k) => {
+      const val = partial[k];
+      return typeof val === "boolean" ? (val ? 1 : 0) : val;
+    });
     // UPDATE path with dynamic SET list; safe values substituted via prepare(...).run(...)
     db.prepare(`UPDATE guild_config SET ${sets} WHERE guild_id = ?`).run(...vals, guildId);
   }
@@ -245,6 +287,7 @@ export function getConfig(guildId: string): GuildConfig | undefined {
   ensureWelcomeTemplateColumn();
   ensureWelcomeChannelsColumns();
   ensureModRolesColumns();
+  ensureDadModeColumns();
   const cached = configCache.get(guildId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.config;
@@ -344,9 +387,8 @@ export function canRunAllCommands(member: GuildMember | null, guildId: string): 
 
   const userId = member.user.id;
 
-  // Import isOwner from utils/owner.ts to check OWNER_IDS
+  // Check if user is owner (OWNER_IDS from utils/owner.ts)
   // DOCS: https://discord.com/developers/docs/resources/user#user-object
-  const { isOwner } = require("../utils/owner.js");
   if (isOwner(userId)) {
     logger.debug(
       { evt: "permission_check", userId, guildId, result: true, reason: "owner" },
