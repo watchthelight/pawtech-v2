@@ -207,17 +207,55 @@ ssh %REMOTE_ALIAS% "timeout 5 sqlite3 %DB_REMOTE% 'PRAGMA wal_checkpoint(PASSIVE
 REM Pull remote → local (with WAL checkpoint and WAL/SHM files)
 echo [sync] Pulling remote database to local...
 
+REM Step 0: Verify remote database integrity BEFORE pulling
+echo [sync] Verifying remote database integrity...
+ssh %REMOTE_ALIAS% "cd %REMOTE_PATH% && node scripts/verify-db-integrity.js %DB_REMOTE%" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo ╔═══════════════════════════════════════════════════════════════╗
+    echo ║  WARNING: REMOTE DATABASE FAILED INTEGRITY CHECK              ║
+    echo ║  The remote database may be corrupted or have missing data.   ║
+    echo ║  Your local database will NOT be overwritten.                 ║
+    echo ╚═══════════════════════════════════════════════════════════════╝
+    echo.
+    echo [sync] Aborting pull to protect local database
+    echo [sync] To force sync anyway, use: start.cmd --push-remote
+    exit /b 1
+)
+echo [sync] ✓ Remote database integrity verified
+
 REM Step 1: Checkpoint the WAL on remote to ensure consistency
 REM Use PASSIVE checkpoint with timeout to avoid hanging if DB is locked by running bot
 echo [sync] Checkpointing WAL on remote (passive mode, non-blocking)...
 ssh %REMOTE_ALIAS% "timeout 5 sqlite3 %DB_REMOTE% 'PRAGMA wal_checkpoint(PASSIVE);' 2>/dev/null || echo '[INFO] WAL checkpoint timed out (bot may be running)'"
 
-REM Step 2: Copy main database file
-scp %REMOTE_ALIAS%:%DB_REMOTE% "%DB_LOCAL%"
+REM Step 2: Copy main database file to temporary location first
+set TEMP_DB=%DB_LOCAL%.temp
+scp %REMOTE_ALIAS%:%DB_REMOTE% "%TEMP_DB%"
 if errorlevel 1 (
     echo [ERROR] Failed to pull remote database
     exit /b 1
 )
+
+REM Step 2.5: Verify the downloaded database before replacing local
+echo [sync] Verifying downloaded database...
+node scripts/verify-db-integrity.js "%TEMP_DB%" >nul 2>&1
+if errorlevel 1 (
+    echo.
+    echo ╔═══════════════════════════════════════════════════════════════╗
+    echo ║  ERROR: DOWNLOADED DATABASE IS CORRUPTED                      ║
+    echo ║  The remote database copy failed integrity check.             ║
+    echo ║  Your local database has NOT been overwritten.                ║
+    echo ╚═══════════════════════════════════════════════════════════════╝
+    echo.
+    del "%TEMP_DB%" >nul 2>&1
+    exit /b 1
+)
+echo [sync] ✓ Downloaded database verified
+
+REM Step 2.6: Replace local database with verified copy
+move /Y "%TEMP_DB%" "%DB_LOCAL%" >nul
+echo [sync] ✓ Local database replaced
 
 REM Step 3: Copy WAL file if it exists
 scp %REMOTE_ALIAS%:%DB_REMOTE%-wal "%DB_LOCAL%-wal" 2>nul

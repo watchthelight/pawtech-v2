@@ -1080,13 +1080,21 @@ client.on("messageCreate", async (message) => {
 });
 
 async function main() {
-  // Fail fast if critical env vars are missing
+  // Step 1: Database health check (fail fast if corrupted)
+  // WHAT: Verifies database integrity before bot starts
+  // WHY: Prevents running with corrupted data that could cause further issues
+  // DOCS: See src/lib/dbHealthCheck.ts
+  const { requireHealthyDatabase } = await import("./lib/dbHealthCheck.js");
+  requireHealthyDatabase();
+
+  // Step 2: Fail fast if critical env vars are missing
   const DISCORD_TOKEN = requireEnv("DISCORD_TOKEN");
   requireEnv("CLIENT_ID");
   if (!env.GUILD_ID) {
     logger.warn("[startup] GUILD_ID not set - commands will register globally");
   }
 
+  // Step 3: Login to Discord
   await client.login(DISCORD_TOKEN);
 }
 
