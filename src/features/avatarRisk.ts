@@ -9,43 +9,44 @@ import type { TagResult } from "./avatarTagger.js";
 const RISK_DEBUG = process.env.RISK_DEBUG === "1";
 
 const SOFT_DAMPEN = clamp01(Number.parseFloat(process.env.AVATAR_RISK_SOFT_DAMPEN ?? "0.45"));
-const MIN_HARD_FLOOR = clamp01(Number.parseFloat(process.env.AVATAR_RISK_MIN_HARD ?? "0.90"));
+// Lower MIN_HARD_FLOOR from 0.90 to 0.40 (40%) to avoid overflagging on weak signals
+const MIN_HARD_FLOOR = clamp01(Number.parseFloat(process.env.AVATAR_RISK_MIN_HARD ?? "0.40"));
 const { trigger: GENERAL_CLAMP_TRIGGER, clamp: GENERAL_CLAMP_VALUE } = parseClampPair(
   process.env.AVATAR_RISK_GENERAL_CLAMP,
   { trigger: 0.45, clamp: 0.15 }
 );
 
 const EVIDENCE_HARD = [
-  "areola",
+  // Verified WD v3 tags for explicit NSFW content
   "nipples",
-  "nipple",
-  "areolae",
   "breasts",
-  "genitals",
-  "vulva",
   "pussy",
-  "labia",
   "clitoris",
   "penis",
   "erection",
   "testicles",
-  "scrotum",
-  "semen",
   "cum",
   "anal",
   "anus",
   "fellatio",
   "cunnilingus",
   "sex",
-  "intercourse",
-  "penetration",
   "fingering",
   "handjob",
   "footjob",
-  "boobjob",
+  // Additional WD v3 explicit tags
+  "completely_nude",
+  "nude",
+  "breasts_out",
+  "spread_pussy",
+  "cum_in_pussy",
+  "sex_from_behind",
+  "group_sex",
+  "after_sex",
 ];
 
 const EVIDENCE_SOFT = [
+  // Verified WD v3 tags for suggestive/soft NSFW content
   "underwear",
   "lingerie",
   "bikini",
@@ -53,30 +54,34 @@ const EVIDENCE_SOFT = [
   "sideboob",
   "cameltoe",
   "ass",
-  "butt",
   "thong",
   "pasties",
-  "nip_slip",
   "topless",
   "spread_legs",
   "open_clothes",
-  "nsfw",
-  "rating:sensitive",
+  // Additional WD v3 suggestive tags
+  "see-through",
+  "underboob",
+  "bottomless",
+  "large_breasts",
+  "huge_breasts",
+  "covered_nipples",
 ];
 
 const FURRY_SAFE = [
-  "kemono",
+  // Verified WD v3 tags indicating safe furry/scalie context
   "furry",
-  "anthro",
-  "anthropomorphic",
   "mascot",
   "animal_ears",
   "portrait",
-  "headshot",
   "profile",
-  "shoulders",
-  "icon",
-  "avatar",
+  // Additional WD v3 furry/scalie context tags
+  "furry_female",
+  "furry_male",
+  "dragon",
+  "dragon_girl",
+  "dragon_horns",
+  "dragon_tail",
 ];
 
 const ROUND_DECIMALS = 1000;
@@ -152,13 +157,25 @@ export function computeRisk(
   const hardEv = sumTop(hardScores, 3);
   const softEv = sumTop(softScores, 5);
   const furrySafe = sumTop(safeScores, 4);
-  const hasHard = maxValue(hardScores) >= 0.2;
+
+  // WD v3 model often returns weak false positives on non-NSFW content
+  // Require EITHER strong hard evidence (>10%) OR significant weak clustering:
+  // - At least 3 hard tags detected (>=1%)
+  // - Total hardEv >= 6% (0.06)
+  // - At least one tag >= 3% (to filter pure noise)
+  const maxHard = maxValue(hardScores);
+  const countWeakHard = hardScores.filter(s => s >= 0.01).length;
+  const hasStrongHard = maxHard >= 0.10;
+  const hasMultipleWeakHard = countWeakHard >= 3 && hardEv >= 0.06 && maxHard >= 0.03;
+  const hasHard = hasStrongHard || hasMultipleWeakHard;
 
   let reason: RiskReason = "none";
   let pctScore = 0;
 
   if (hasHard) {
-    const score = clamp01(0.7 * pExplicit + 0.5 * softEv + 0.2 * pNSFW);
+    // Boost scoring to include hardEv (sum of top 3 hard evidence tags)
+    // Multiply hardEv by 10 to amplify weak signals (e.g., 0.05 * 10 = 0.50 = 50%)
+    const score = clamp01(0.7 * pExplicit + 0.5 * softEv + 0.2 * pNSFW + 10.0 * hardEv);
     pctScore = clamp01(Math.max(score, MIN_HARD_FLOOR));
     reason = "hard_evidence";
   } else {

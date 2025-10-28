@@ -53,6 +53,11 @@ const raw = {
 
   // Gate admin roles (optional, comma-separated role IDs)
   GATE_ADMIN_ROLE_IDS: process.env.GATE_ADMIN_ROLE_IDS?.trim(),
+
+  // NSFW avatar tagger (optional)
+  NSFW_TAGGER_ENABLE: process.env.NSFW_TAGGER_ENABLE?.trim(),
+  NSFW_TAGGER_MODEL: process.env.NSFW_TAGGER_MODEL?.trim(),
+  NSFW_TAGGER_TAGS: process.env.NSFW_TAGGER_TAGS?.trim(),
 };
 
 const schema = z.object({
@@ -93,6 +98,11 @@ const schema = z.object({
 
   // Gate admin roles (optional, comma-separated role IDs)
   GATE_ADMIN_ROLE_IDS: z.string().optional(),
+
+  // NSFW avatar tagger (optional)
+  NSFW_TAGGER_ENABLE: z.string().optional(),
+  NSFW_TAGGER_MODEL: z.string().default("./models/wd-v3-tagger.onnx"),
+  NSFW_TAGGER_TAGS: z.string().default("./models/wd-v3-tags.csv"),
 });
 
 const parsed = schema.safeParse(raw);

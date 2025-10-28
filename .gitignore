@@ -40,6 +40,10 @@ data/
 *.db
 *.db-*
 
+# ONNX models (download separately, see models/README.md)
+models/*.onnx
+models/*.csv
+
 # Deployment archives
 *.tar.gz
 *.zip
@@ -60,3 +64,15 @@ context/03_Slash_Commands_and_UX.md
 nul
 DATABASE_PROTECTION.md
 DATABASE_CHECK_COMMAND.md
+
+assets/testing-nsfw-e621
+assets/testing-safe
+assets/testing
+
+docs/AVATAR_SCANNING_ADMIN.md
+docs/AVATAR_SCANNING.md
+.gitignore
+assets/e621-nsfw-sample.json
+.claude/avatar-nsfw-roadmap.md
+.claude/avatar-nsfw-implementation-summary.md
+.gitignore

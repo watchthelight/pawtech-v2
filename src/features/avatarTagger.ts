@@ -5,75 +5,83 @@
  */
 
 import { logger } from "../lib/logger.js";
+import { parse } from "csv-parse/sync";
+import fs from "node:fs";
+import { env } from "../lib/env.js";
 
 export type Tag = {
   name: string;
   prob: number;
 };
 
+type TagMetadata = {
+  tag_id: number;
+  name: string;
+  category: number; // 0=general, 4=character, 9=rating
+  count: number;
+};
+
 const TAGGER_ENABLED = process.env.NSFW_TAGGER_ENABLE === "1";
-const MODEL_PATH = process.env.NSFW_TAGGER_MODEL || "./models/wd-v3-tagger.onnx";
+const MODEL_PATH = env.NSFW_TAGGER_MODEL;
 const INPUT_SIZE = 448;
 const THRESHOLD = 0.1;
 const PER_CROP_BUDGET_MS = 200;
 const EARLY_EXIT_EXPLICIT = 0.95;
 const RISK_DEBUG = process.env.RISK_DEBUG === "1";
 
-// WD v3 tag labels (comprehensive set for furry/scalie NSFW detection)
-// Export as both TAG_NAMES (legacy) and TAG_LABELS (new standard)
-export const TAG_NAMES = [
-  // Rating tags
-  "rating:general",
-  "rating:sensitive",
-  "rating:questionable",
-  "rating:explicit",
-  // NSFW anatomy/acts
-  "nsfw",
-  "explicit",
-  "porn",
-  "nude",
-  "naked",
-  "nipples",
-  "areola",
-  "breasts",
-  "genitals",
-  "penis",
-  "vulva",
-  "vagina",
-  "pussy",
-  "crotch",
-  "anus",
-  "spread_legs",
-  "fellatio",
-  "cunnilingus",
-  "sex",
-  "cum",
-  "erection",
-  "genital_focused",
-  "crotch_shot",
-  // Furry/scalie context
-  "furry",
-  "anthro",
-  "feral",
-  "kemono",
-  "dragon",
-  "scalie",
-  "reptile",
-  "lizard",
-  "kobold",
-  "werewolf",
-  "taur",
-  "mammal",
-  "muzzle",
-  "snout",
-  // Pose/intent
-  "presenting",
-  "crotch_grab",
-  "exhibitionism",
-];
+// WD v3 tag labels - loaded from CSV at runtime
+// Previously hardcoded, now dynamic to support full 9000+ tag vocabulary
+let TAG_LABELS: string[] = [];
+let tagsLoaded = false;
 
-// Alias for standard naming
-export const TAG_LABELS = TAG_NAMES;
+/**
+ * Load tag labels from WD v3 CSV file
+ * WHAT: Parses selected_tags.csv and populates TAG_LABELS array
+ * WHY: WD v3 has 9000+ tags; hardcoding is unmaintainable
+ * RETURNS: Array of tag names in model output order
+ * THROWS: Never; logs error and returns empty array on failure
+ */
+async function loadTagLabels(): Promise<string[]> {
+  if (tagsLoaded && TAG_LABELS.length > 0) {
+    return TAG_LABELS;
+  }
+
+  try {
+    const csvPath = env.NSFW_TAGGER_TAGS;
+
+    if (!fs.existsSync(csvPath)) {
+      logger.warn({ csvPath }, "[avatarTagger] tags CSV not found");
+      return [];
+    }
+
+    const content = fs.readFileSync(csvPath, "utf-8");
+    const rows = parse(content, {
+      columns: true,
+      skip_empty_lines: true,
+    }) as TagMetadata[];
+
+    // Sort by tag_id to match model output order
+    rows.sort((a, b) => a.tag_id - b.tag_id);
+    TAG_LABELS = rows.map((r) => r.name);
+    tagsLoaded = true;
+
+    logger.info(
+      { tagCount: TAG_LABELS.length, csvPath },
+      "[avatarTagger] loaded WD v3 tags"
+    );
+
+    return TAG_LABELS;
+  } catch (err) {
+    logger.error({ err, csvPath: env.NSFW_TAGGER_TAGS }, "[avatarTagger] failed to load tags");
+    return [];
+  }
+}
+
+// Legacy export for compatibility
+export const TAG_NAMES = TAG_LABELS;
+
+// Export tag labels and loader
+export { TAG_LABELS, loadTagLabels };
 
 let modelSession: any | null = null;
 let modelLoadError: Error | null = null;
@@ -98,6 +106,11 @@ async function getSession(): Promise<any | null> {
     return null;
   }
 
+  // Load tag labels before loading model
+  if (!tagsLoaded) {
+    await loadTagLabels();
+  }
+
   if (modelSession) {
     return modelSession;
   }
@@ -115,8 +128,8 @@ async function getSession(): Promise<any | null> {
     modelLoadError = err as Error;
     const downloadCmd =
       process.platform === "win32"
-        ? `Invoke-WebRequest -Uri "https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx" -OutFile "${MODEL_PATH}"`
-        : `curl -L "https://huggingface.co/SmilingWolf/wd-v1-4-moat-tagger-v2/resolve/main/model.onnx" -o "${MODEL_PATH}"`;
+        ? `Invoke-WebRequest -Uri "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/model.onnx" -OutFile "${MODEL_PATH}"`
+        : `curl -L "https://huggingface.co/SmilingWolf/wd-vit-tagger-v3/resolve/main/model.onnx" -o "${MODEL_PATH}"`;
 
     logger.warn(
       { error: modelLoadError.message, modelPath: MODEL_PATH },
