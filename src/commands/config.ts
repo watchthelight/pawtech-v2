@@ -577,7 +577,11 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
    * RETURNS: Promise<void> after displaying config.
    */
   const { interaction } = ctx;
-  await ensureDeferred(interaction);
+
+  // Defer reply without ephemeral flag so everyone can see it
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferReply();
+  }
 
   ctx.step("load_config");
   const cfg = getConfig(interaction.guildId!);
@@ -587,66 +591,71 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
   }
 
   ctx.step("format_display");
-  const lines = ["**Guild Configuration**", "", "**Permission Settings:**"];
+  const { EmbedBuilder, Colors } = await import("discord.js");
+  const embed = new EmbedBuilder()
+    .setTitle("Guild Configuration")
+    .setColor(Colors.Blue)
+    .setTimestamp();
 
-  // Show mod roles
+  // Permission Settings
+  let permValue = "";
   if (cfg.mod_role_ids && cfg.mod_role_ids.trim().length > 0) {
     const roleIds = cfg.mod_role_ids
       .split(",")
       .map((id) => id.trim())
       .filter((id) => id.length > 0);
     const roleList = roleIds.map((id) => `<@&${id}>`).join(", ");
-    lines.push(`Moderator roles: ${roleList}`);
+    permValue += `**Moderator roles:** ${roleList}\n`;
   } else {
-    lines.push("Moderator roles: not set");
+    permValue += "**Moderator roles:** not set\n";
   }
 
   if (cfg.gatekeeper_role_id) {
-    lines.push(`Gatekeeper role: <@&${cfg.gatekeeper_role_id}>`);
+    permValue += `**Gatekeeper role:** <@&${cfg.gatekeeper_role_id}>`;
   } else {
-    lines.push("Gatekeeper role: not set");
+    permValue += "**Gatekeeper role:** not set";
   }
 
-  lines.push("");
-  lines.push("**Channel Settings:**");
+  embed.addFields({ name: "Permission Settings", value: permValue, inline: false });
 
+  // Channel Settings
+  let channelValue = "";
   if (cfg.modmail_log_channel_id) {
-    lines.push(`Modmail log channel: <#${cfg.modmail_log_channel_id}>`);
+    channelValue += `**Modmail log channel:** <#${cfg.modmail_log_channel_id}>\n`;
   } else {
-    lines.push("Modmail log channel: not set");
+    channelValue += "**Modmail log channel:** not set\n";
   }
 
-  lines.push(
-    `Review channel: ${cfg.review_channel_id ? `<#${cfg.review_channel_id}>` : "not set"}`,
-    `Gate channel: ${cfg.gate_channel_id ? `<#${cfg.gate_channel_id}>` : "not set"}`,
-    `General channel: ${cfg.general_channel_id ? `<#${cfg.general_channel_id}>` : "not set"}`,
-    `Unverified channel: ${cfg.unverified_channel_id ? `<#${cfg.unverified_channel_id}>` : "not set"}`
-  );
+  channelValue += `**Review channel:** ${cfg.review_channel_id ? `<#${cfg.review_channel_id}>` : "not set"}\n`;
+  channelValue += `**Gate channel:** ${cfg.gate_channel_id ? `<#${cfg.gate_channel_id}>` : "not set"}\n`;
+  channelValue += `**General channel:** ${cfg.general_channel_id ? `<#${cfg.general_channel_id}>` : "not set"}\n`;
+  channelValue += `**Unverified channel:** ${cfg.unverified_channel_id ? `<#${cfg.unverified_channel_id}>` : "not set"}`;
 
-  lines.push("");
-  lines.push("**Role Settings:**");
-  lines.push(
-    `Accepted role: ${cfg.accepted_role_id ? `<@&${cfg.accepted_role_id}>` : "not set"}`,
-    `Reviewer role: ${cfg.reviewer_role_id ? `<@&${cfg.reviewer_role_id}>` : "not set (uses channel perms)"}`
-  );
+  embed.addFields({ name: "Channel Settings", value: channelValue, inline: false });
 
-  // Show logging channel
+  // Role Settings
+  let roleValue = "";
+  roleValue += `**Accepted role:** ${cfg.accepted_role_id ? `<@&${cfg.accepted_role_id}>` : "not set"}\n`;
+  roleValue += `**Reviewer role:** ${cfg.reviewer_role_id ? `<@&${cfg.reviewer_role_id}>` : "not set (uses channel perms)"}`;
+
   const loggingChannelId = getLoggingChannelId(interaction.guildId!);
   if (loggingChannelId) {
-    lines.push(`Action logging channel: <#${loggingChannelId}>`);
+    roleValue += `\n**Action logging channel:** <#${loggingChannelId}>`;
   } else {
-    lines.push("Action logging channel: not set (using env default)");
+    roleValue += "\n**Action logging channel:** not set (using env default)";
   }
 
-  lines.push("");
-  lines.push("**Feature Settings:**");
-  lines.push(`Avatar scan enabled: ${cfg.avatar_scan_enabled ? "yes" : "no"}`);
-  lines.push(
-    `Dad Mode: ${cfg.dadmode_enabled ? `ON (1 in ${cfg.dadmode_odds ?? 1000})` : "OFF"}`
-  );
+  embed.addFields({ name: "Role Settings", value: roleValue, inline: false });
+
+  // Feature Settings
+  let featureValue = "";
+  featureValue += `**Avatar scan enabled:** ${cfg.avatar_scan_enabled ? "yes" : "no"}\n`;
+  featureValue += `**Dad Mode:** ${cfg.dadmode_enabled ? `ON (1 in ${cfg.dadmode_odds ?? 1000})` : "OFF"}`;
+
+  embed.addFields({ name: "Feature Settings", value: featureValue, inline: false });
 
   ctx.step("reply");
-  await replyOrEdit(interaction, { content: lines.join("\n") });
+  await replyOrEdit(interaction, { embeds: [embed] });
 }
 
 async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction>) {
