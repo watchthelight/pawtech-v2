@@ -97,7 +97,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     );
 
     // Send confirmation to moderator
-    const flaggedAtDisplay = new Date(flag.flagged_at * 1000).toISOString();
     await interaction.editReply({
       content: `✅ Flag recorded for <@${targetUser.id}> (ID ${targetUser.id}). Reason: "${reason}"`,
     });

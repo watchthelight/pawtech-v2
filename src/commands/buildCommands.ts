@@ -2,6 +2,7 @@
 import { data as gateData, acceptData, rejectData, kickData, unclaimData } from "./gate.js";
 import { data as healthData } from "./health.js";
 import { data as statusupdateData } from "./statusupdate.js";
+import { data as updateData } from "./update.js";
 import { data as configData } from "./config.js";
 import { data as databaseData } from "./database.js";
 import { modmailCommand } from "../features/modmail.js";
@@ -21,6 +22,7 @@ export function buildCommands() {
     unclaimData.toJSON(),
     healthData.toJSON(),
     statusupdateData.toJSON(),
+    updateData.toJSON(),
     configData.toJSON(),
     databaseData.toJSON(),
     modmailCommand.toJSON(),

@@ -17,7 +17,7 @@ const HEALTH_THRESHOLDS = {
 };
 
 function verifyDatabase(dbPath, options = {}) {
-  const { strictMode = false, verbose = false } = options;
+  const { strictMode = false } = options;
 
   const result = {
     path: dbPath,

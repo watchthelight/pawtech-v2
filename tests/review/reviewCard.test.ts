@@ -112,18 +112,19 @@ describe("review card UI", () => {
       expect(embed.footer?.text).toContain("App ID:");
       expect(embed.thumbnail?.url).toBe(app.avatarUrl);
 
-      const riskField = embed.fields?.find((field) => field.name === "Avatar Risk");
-      expect(riskField).toBeDefined();
+      const statusField = embed.fields?.find((field) => field.name === "Status");
+      expect(statusField).toBeDefined();
 
       const expectedLink = googleReverseImageUrl(app.avatarUrl);
-      expect(riskField?.value).toBe(
-        `NSFW Avatar Chance: **${avatarScan.finalPct}%**  [Reverse Search Avatar](${expectedLink})`
-      );
+      expect(statusField?.value).toContain(`**Avatar risk:** ${avatarScan.finalPct}%`);
+      expect(statusField?.value).toContain(`[Reverse Search](${expectedLink})`);
+      expect(statusField?.value).toContain("*Google Vision API - 75% accuracy on NSFW content*");
 
-      const accountField = embed.fields?.find((field) => field.name === "Account");
-      expect(accountField).toBeDefined();
-      expect(accountField?.value).toBe(`Created <t:${accountSeconds}:f> • <t:${accountSeconds}:R>`);
-      expect(accountField?.inline).toBe(true);
+      // Account age moved to Application: field, Account created in Status
+      const appInfoField = embed.fields?.find((field) => field.name === "Application:");
+      expect(appInfoField).toBeDefined();
+      expect(appInfoField?.value).toContain("**Account age:**");
+      expect(statusField?.value).toContain("**Account created:**");
     } finally {
       vi.doUnmock("../../src/lib/env.js");
       vi.resetModules();
@@ -173,12 +174,11 @@ describe("review card UI", () => {
       const embed = renderReviewEmbed(app, [], [], avatarScan, null, accountCreatedAt).toJSON();
       const expectedLink = googleReverseImageUrl(app.avatarUrl!);
 
-      const riskField = embed.fields?.find((field) => field.name === "Avatar Risk");
-      expect(riskField).toBeUndefined();
-
-      const avatarField = embed.fields?.find((field) => field.name === "Avatar");
-      expect(avatarField?.value).toBe(`[Reverse Search Avatar](${expectedLink})`);
-      expect(avatarField?.value).not.toContain("NSFW Avatar Chance");
+      // When toggle disabled, Status field should not contain avatar risk
+      const statusField = embed.fields?.find((field) => field.name === "Status");
+      expect(statusField).toBeDefined();
+      expect(statusField?.value).not.toContain("Avatar risk");
+      expect(statusField?.value).not.toContain("NSFW");
     } finally {
       vi.doUnmock("../../src/lib/env.js");
       vi.resetModules();

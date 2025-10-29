@@ -14,7 +14,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import { SlashCommandBuilder, type ChatInputCommandInteraction, MessageFlags } from "discord.js";
 import { requireStaff, upsertConfig, getConfig } from "../lib/config.js";
-import { wrapCommand, type CommandContext, ensureDeferred, replyOrEdit } from "../lib/cmdWrap.js";
+import { type CommandContext, replyOrEdit } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import { retrofitModmailParentsForGuild } from "../features/modmail.js";
 import { setLoggingChannelId, getLoggingChannelId } from "../config/loggingStore.js";

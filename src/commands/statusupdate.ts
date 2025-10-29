@@ -74,6 +74,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       scopeKey: "global",
       activityType: ActivityType.Playing,
       activityText: text,
+      customStatus: null,  // This command doesn't set custom status
       status: "online",
       updatedAt: Date.now(),
     });

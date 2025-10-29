@@ -1151,9 +1151,9 @@ export async function handleGateModalSubmit(
     });
   }
 
-  let reviewCardInfo: { channelId: string; messageId: string } | null = null;
+  // Ensure review card is created (fire-and-forget)
   try {
-    reviewCardInfo = await ensureReviewMessage(interaction.client, draftRow.id);
+    await ensureReviewMessage(interaction.client, draftRow.id);
   } catch (err) {
     logger.warn({ err, appId: draftRow.id }, "Failed to ensure review card after submission");
   }

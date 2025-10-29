@@ -4,9 +4,9 @@
  */
 
 import fs from "node:fs";
-import path from "node:path";
-import { detectNsfwVision, calculateVisionScore } from "../src/features/googleVision.js";
-import { logger } from "../src/lib/logger.js";
+// Unused imports removed - this is a demo script showing API usage
+// import { detectNsfwVision, calculateVisionScore } from "../src/features/googleVision.js";
+// import { logger } from "../src/lib/logger.js";
 
 const testDir = process.argv[2] || "./assets/testing-safe";
 
@@ -35,20 +35,9 @@ const files = fs.readdirSync(testDir)
 
 console.log(`Found ${files.length} images to test\n`);
 
-type TestResult = {
-  filename: string;
-  adultScore: number;
-  racyScore: number;
-  violenceScore: number;
-  combinedScore: number;
-  adult: string;
-  racy: string;
-  violence: string;
-  inferenceTime: number;
-  error?: string;
-};
-
-const results: TestResult[] = [];
+// Type definition removed - this is a demo script showing API usage
+// type TestResult = { ... };
+// const results: TestResult[] = [];
 
 // Note: Google Vision requires publicly accessible URLs
 // For testing local files, we need to upload them to a temporary URL

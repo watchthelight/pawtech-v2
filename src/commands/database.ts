@@ -18,12 +18,10 @@ import { requireStaff } from "../lib/config.js";
 import {
   wrapCommand,
   type CommandContext,
-  ensureDeferred,
   replyOrEdit,
 } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import { checkDatabaseHealth } from "../lib/dbHealthCheck.js";
-import { db } from "../db/db.js";
 import fs from "fs";
 import path from "path";
 import { exec } from "child_process";

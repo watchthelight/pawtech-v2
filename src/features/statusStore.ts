@@ -15,8 +15,9 @@ import { logger } from "../lib/logger.js";
 
 export type SavedStatus = {
   scopeKey: string;
-  activityType: number;
-  activityText: string;
+  activityType: number | null;
+  activityText: string | null;
+  customStatus: string | null;  // For ActivityType.Custom state
   status: "online" | "idle" | "dnd" | "invisible";
   updatedAt: number;
 };
@@ -33,17 +34,19 @@ export type SavedStatus = {
 export function upsertStatus(status: SavedStatus): void {
   try {
     db.prepare(
-      `INSERT INTO bot_status (scope_key, activity_type, activity_text, status, updated_at)
-       VALUES (?, ?, ?, ?, ?)
+      `INSERT INTO bot_status (scope_key, activity_type, activity_text, custom_status, status, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?)
        ON CONFLICT(scope_key) DO UPDATE SET
          activity_type = excluded.activity_type,
          activity_text = excluded.activity_text,
+         custom_status = excluded.custom_status,
          status = excluded.status,
          updated_at = excluded.updated_at`
     ).run(
       status.scopeKey,
       status.activityType,
       status.activityText,
+      status.customStatus,
       status.status,
       status.updatedAt
     );
@@ -53,6 +56,7 @@ export function upsertStatus(status: SavedStatus): void {
         scopeKey: status.scopeKey,
         activityType: status.activityType,
         activityText: status.activityText,
+        customStatus: status.customStatus,
         status: status.status,
       },
       "[statusStore] status persisted"
@@ -76,7 +80,7 @@ export function getStatus(scopeKey: string): SavedStatus | null {
   try {
     const row = db
       .prepare(
-        `SELECT scope_key, activity_type, activity_text, status, updated_at
+        `SELECT scope_key, activity_type, activity_text, custom_status, status, updated_at
          FROM bot_status
          WHERE scope_key = ?
          ORDER BY updated_at DESC
@@ -85,8 +89,9 @@ export function getStatus(scopeKey: string): SavedStatus | null {
       .get(scopeKey) as
       | {
           scope_key: string;
-          activity_type: number;
-          activity_text: string;
+          activity_type: number | null;
+          activity_text: string | null;
+          custom_status: string | null;
           status: string;
           updated_at: number;
         }
@@ -101,6 +106,7 @@ export function getStatus(scopeKey: string): SavedStatus | null {
       scopeKey: row.scope_key,
       activityType: row.activity_type,
       activityText: row.activity_text,
+      customStatus: row.custom_status,
       status: row.status as "online" | "idle" | "dnd" | "invisible",
       updatedAt: row.updated_at,
     };
@@ -110,6 +116,7 @@ export function getStatus(scopeKey: string): SavedStatus | null {
         scopeKey: saved.scopeKey,
         activityType: saved.activityType,
         activityText: saved.activityText,
+        customStatus: saved.customStatus,
         status: saved.status,
       },
       "[statusStore] status retrieved"
@@ -140,8 +147,9 @@ export function ensureBotStatusSchema(): void {
       db.prepare(
         `CREATE TABLE IF NOT EXISTS bot_status (
           scope_key TEXT NOT NULL PRIMARY KEY,
-          activity_type INTEGER NOT NULL,
-          activity_text TEXT NOT NULL,
+          activity_type INTEGER,
+          activity_text TEXT,
+          custom_status TEXT,
           status TEXT NOT NULL,
           updated_at INTEGER NOT NULL
         )`

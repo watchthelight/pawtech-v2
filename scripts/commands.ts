@@ -70,6 +70,8 @@ export function formatCommandTree(commands: CommandSpec): string[] {
   return lines;
 }
 
+// Unused utility function - kept for potential future use
+// eslint-disable-next-line @typescript-eslint/no-unused-vars
 function collectGroupNames(command: any): string[] {
   return (command.options ?? [])
     .filter((opt: any) => opt.type === OPTION.SubcommandGroup)

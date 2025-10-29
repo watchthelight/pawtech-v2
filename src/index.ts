@@ -51,6 +51,7 @@ import { requireEnv } from "./util/ensureEnv.js";
 import * as health from "./commands/health.js";
 import * as gate from "./commands/gate.js";
 import * as statusupdate from "./commands/statusupdate.js";
+import * as update from "./commands/update.js";
 import * as config from "./commands/config.js";
 import * as database from "./commands/database.js";
 import { handleStartButton, handleGateModalSubmit, handleDoneButton } from "./features/gate.js";
@@ -115,6 +116,7 @@ commands.set(gate.rejectData.name, wrapCommand("reject", gate.executeReject));
 commands.set(gate.kickData.name, wrapCommand("kick", gate.executeKick));
 commands.set(gate.unclaimData.name, wrapCommand("unclaim", gate.executeUnclaim));
 commands.set(statusupdate.data.name, wrapCommand("statusupdate", statusupdate.execute));
+commands.set(update.data.name, wrapCommand("update", update.execute));
 commands.set(config.data.name, wrapCommand("config", config.execute));
 commands.set(database.data.name, wrapCommand("database", database.execute));
 commands.set("modmail", wrapCommand("modmail", executeModmailCommand));
@@ -281,18 +283,35 @@ client.once(Events.ClientReady, async () => {
     const { getStatus } = await import("./features/statusStore.js");
     const saved = getStatus("global");
     if (saved && client.user) {
-      await client.user.setPresence({
-        status: saved.status,
-        activities: [{ type: saved.activityType, name: saved.activityText }],
-      });
-      logger.info(
-        {
-          activityType: saved.activityType,
-          activityText: saved.activityText,
+      const activities = [];
+
+      // Add regular activity if present
+      if (saved.activityType !== null && saved.activityText) {
+        activities.push({ type: saved.activityType, name: saved.activityText });
+      }
+
+      // Add custom status if present
+      if (saved.customStatus) {
+        activities.push({ type: 4, state: saved.customStatus }); // ActivityType.Custom = 4
+      }
+
+      if (activities.length > 0) {
+        await client.user.setPresence({
           status: saved.status,
-        },
-        "[startup] bot presence restored from DB"
-      );
+          activities,
+        });
+        logger.info(
+          {
+            activityType: saved.activityType,
+            activityText: saved.activityText,
+            customStatus: saved.customStatus,
+            status: saved.status,
+          },
+          "[startup] bot presence restored from DB"
+        );
+      } else {
+        logger.debug("[startup] no activities to restore, using default");
+      }
     } else {
       logger.debug("[startup] no saved presence found, using default");
     }

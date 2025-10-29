@@ -5,7 +5,6 @@
 import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
-  PermissionFlagsBits,
   MessageFlags,
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";

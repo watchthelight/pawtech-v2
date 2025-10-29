@@ -230,7 +230,6 @@ async function runMigrations(): Promise<void> {
     console.log(`\n✅ Successfully applied ${pendingMigrations.length} migration(s)\n`);
 
     // Show final applied versions
-    const finalApplied = getAppliedVersions();
     console.log("All applied migrations:");
     const rows = db
       .prepare(`SELECT version, name, applied_at FROM schema_migrations ORDER BY version`)

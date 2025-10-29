@@ -10,6 +10,38 @@ A production-ready Discord moderation bot designed for transparent, auditable co
 
 ---
 
+## Dev Quick Start
+
+```bash
+# 1. Clone and install
+git clone https://github.com/watchthelight/pawtropolis-tech.git
+cd pawtropolis-tech
+npm install
+
+# 2. Configure environment
+cp .env.example .env
+# Edit .env with your DISCORD_TOKEN and CLIENT_ID
+
+# 3. Run all checks (typecheck + lint + format + test)
+npm run check
+
+# 4. Start development server
+npm run dev
+```
+
+**Key Scripts:**
+- `npm run dev` — Development mode with hot reload
+- `npm run build` — Build for production
+- `npm run test` — Run test suite
+- `npm run check` — Run all quality checks (typecheck, lint, format, test)
+- `npm run lint` — Check code with ESLint
+- `npm run format` — Format code with Prettier
+- `npm run deploy:cmds` — Deploy slash commands to Discord
+
+**Database Backups:** Automatic backups are saved to `data/backups/` (not committed to git)
+
+---
+
 ## Overview
 
 Pawtropolis Tech Gatekeeper is a server-owned verification system that modernizes community onboarding through structured application flows. It replaces manual DM-based screening with an elegant, permission-gated workflow that keeps staff accountable and applicants informed.
@@ -156,17 +188,15 @@ npm run deploy:cmds
 ### Testing
 
 ```bash
-# Run test suite
-npm test
-
-# Type checking
+# Run all checks (recommended before committing)
 npm run check
 
-# Lint code
-npm run lint
-
-# Format code
-npm run format
+# Individual checks
+npm test              # Run test suite
+npm run typecheck     # TypeScript type checking
+npm run lint          # ESLint code analysis
+npm run format        # Format code with Prettier
+npm run format:check  # Check formatting without modifying files
 ```
 
 ---

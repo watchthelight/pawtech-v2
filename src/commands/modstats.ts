@@ -15,7 +15,6 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   EmbedBuilder,
-  User,
   AttachmentBuilder,
 } from "discord.js";
 import { db } from "../db/db.js";
