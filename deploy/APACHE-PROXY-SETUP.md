@@ -15,7 +15,7 @@ User → Apache (443) → Static files (/var/www/pawtropolis/website)
 - Ubuntu 22.04+ server with Apache 2.4
 - Domain: `pawtropolis.tech` with DNS pointing to server
 - SSL certificate installed (certbot/Let's Encrypt)
-- Node.js app deployed at `/home/ubuntu/pawtropolis-tech`
+- Node.js app deployed at `/home/ubuntu/pawtech-v2`
 - Static website files at `/var/www/pawtropolis/website`
 
 ## Quick Setup (Automated)
@@ -41,7 +41,7 @@ User → Apache (443) → Static files (/var/www/pawtropolis/website)
 3. **Update environment variables:**
 
    ```bash
-   cd ~/pawtropolis-tech
+   cd ~/pawtech-v2
    nano .env
    ```
 
@@ -57,7 +57,7 @@ User → Apache (443) → Static files (/var/www/pawtropolis/website)
 4. **Restart Node app:**
 
    ```bash
-   pm2 restart pawtropolis-tech
+   pm2 restart pawtech-v2
    # OR
    npm run start
    ```
@@ -163,7 +163,7 @@ sudo systemctl reload apache2
 ss -tlnp | grep 3000
 
 # If not, start it
-cd ~/pawtropolis-tech
+cd ~/pawtech-v2
 pm2 start ecosystem.config.js
 # OR
 npm run start
@@ -179,7 +179,7 @@ npm run start
 
 ```bash
 # Ensure environment variables are set
-cd ~/pawtropolis-tech
+cd ~/pawtech-v2
 grep -E "TRUST_PROXY|NODE_ENV|CORS_ORIGIN" .env
 
 # Should show:
@@ -188,7 +188,7 @@ grep -E "TRUST_PROXY|NODE_ENV|CORS_ORIGIN" .env
 # CORS_ORIGIN=https://pawtropolis.tech
 
 # Restart Node app
-pm2 restart pawtropolis-tech
+pm2 restart pawtech-v2
 ```
 
 ### CORS errors in browser console
@@ -204,7 +204,7 @@ pm2 restart pawtropolis-tech
 CORS_ORIGIN=https://pawtropolis.tech,https://www.pawtropolis.tech
 
 # Restart app
-pm2 restart pawtropolis-tech
+pm2 restart pawtech-v2
 ```
 
 ## Rollback
@@ -228,11 +228,11 @@ sudo systemctl reload apache2
 
 - **Apache vhost:** `/etc/apache2/sites-available/pawtropolis.tech.conf`
 - **Static files:** `/var/www/pawtropolis/website/`
-- **Node app:** `/home/ubuntu/pawtropolis-tech/`
+- **Node app:** `/home/ubuntu/pawtech-v2/`
 - **Apache logs:**
   - Error: `/var/log/apache2/pawtropolis-error.log`
   - Access: `/var/log/apache2/pawtropolis-access.log`
-- **Node logs:** `pm2 logs pawtropolis-tech`
+- **Node logs:** `pm2 logs pawtech-v2`
 
 ## Security Notes
 
@@ -257,7 +257,7 @@ sudo systemctl reload apache2
 
 4. **Admin roles:** Verify `ADMIN_ROLE_ID` is set to correct Discord role IDs
    ```bash
-   grep ADMIN_ROLE_ID ~/pawtropolis-tech/.env
+   grep ADMIN_ROLE_ID ~/pawtech-v2/.env
    ```
 
 ## Performance Monitoring
@@ -283,6 +283,6 @@ sudo tail -f /var/log/apache2/pawtropolis-access.log | grep --line-buffered "/ap
 If issues persist:
 
 1. Check Apache error logs: `sudo tail -100 /var/log/apache2/pawtropolis-error.log`
-2. Check Node logs: `pm2 logs pawtropolis-tech --lines 100`
+2. Check Node logs: `pm2 logs pawtech-v2 --lines 100`
 3. Verify DNS: `dig pawtropolis.tech`
 4. Test local Node app: `curl http://127.0.0.1:3000/auth/login`

@@ -7,7 +7,7 @@ If you discover a security vulnerability in Pawtropolis Tech, please report it p
 ### Contact
 
 - **Email**: admin@watchthelight.org
-- **GitHub Issues**: For non-security bugs, use [GitHub Issues](https://github.com/watchthelight/pawtropolis-tech/issues)
+- **GitHub Issues**: For non-security bugs, use [GitHub Issues](https://github.com/watchthelight/pawtech-v2/issues)
 
 ### What to Include
 

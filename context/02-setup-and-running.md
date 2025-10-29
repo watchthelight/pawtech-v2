@@ -21,7 +21,7 @@ Quick start guide for local development and production deployment.
 ### 1. Clone and Install
 
 ```bash
-git clone https://github.com/watchthelight/pawtropolis-tech.git
+git clone https://github.com/watchthelight/pawtech-v2.git
 cd pawtropolis-tech
 npm install
 ```

@@ -42,7 +42,7 @@ For code updates after initial setup:
 
 ```bash
 # From your local machine
-ssh ubuntu@pawtropolis.tech "cd ~/pawtropolis-tech && bash deploy/remote-deploy.sh"
+ssh ubuntu@pawtropolis.tech "cd ~/pawtech-v2 && bash deploy/remote-deploy.sh"
 ```
 
 Or use the Windows scripts in project root:
@@ -106,7 +106,7 @@ All scripts assume:
 - **PM2:** Installed globally (`npm i -g pm2`)
 - **Apache:** Version 2.4+ (for proxy scripts)
 - **SSL:** Let's Encrypt certificate installed at `/etc/letsencrypt/live/pawtropolis.tech/`
-- **Git:** Repository cloned to `/home/ubuntu/pawtropolis-tech` or `/srv/pawtropolis`
+- **Git:** Repository cloned to `/home/ubuntu/pawtech-v2` or `/srv/pawtropolis`
 
 ## 🛡️ Security Notes
 
@@ -189,7 +189,7 @@ graph TD
 On the remote server:
 
 ```
-/home/ubuntu/pawtropolis-tech/          # Application code
+/home/ubuntu/pawtech-v2/          # Application code
 ├── .env                                # Environment variables (not in git)
 ├── dist/                               # Compiled JavaScript
 ├── data/                               # SQLite database files

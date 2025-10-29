@@ -16,7 +16,7 @@ $ErrorActionPreference = 'Stop'
 # Configuration
 # ============================================================================
 $REMOTE_HOST = if ($Env:REMOTE_HOST) { $Env:REMOTE_HOST } else { 'pawtech' }
-$REMOTE_PATH = if ($Env:REMOTE_PATH) { $Env:REMOTE_PATH } else { '~/pawtropolis-tech' }
+$REMOTE_PATH = if ($Env:REMOTE_PATH) { $Env:REMOTE_PATH } else { '~/pawtech-v2' }
 $REMOTE_DATA = "$REMOTE_PATH/data"
 
 $LOCAL_DB = 'data\data.db'
@@ -198,7 +198,7 @@ try {
 
     # Improved remote find: scan entire repo but prune unwanted directories
     $findCmd = @'
-sh -lc 'set -e; base=~/pawtropolis-tech; find "$base" \( -path "$base/node_modules" -o -path "$base/.pm2" -o -path "$base/website" \) -prune -o -type f \( -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" -o -name "*.db.backup-*" -o -name "*.remote.db" -o -name "*.local-before-restore.db" -o -name "*.bak" -o -name "*.bak.*" -o -name "*-wal" -o -name "*-shm" \) -print 2>/dev/null | sort'
+sh -lc 'set -e; base=~/pawtech-v2; find "$base" \( -path "$base/node_modules" -o -path "$base/.pm2" -o -path "$base/website" \) -prune -o -type f \( -name "*.db" -o -name "*.sqlite" -o -name "*.sqlite3" -o -name "*.db.backup-*" -o -name "*.remote.db" -o -name "*.local-before-restore.db" -o -name "*.bak" -o -name "*.bak.*" -o -name "*-wal" -o -name "*-shm" \) -print 2>/dev/null | sort'
 '@
 
     $remoteFiles = & ssh $REMOTE_HOST $findCmd 2>$null

@@ -37,8 +37,8 @@ This will find and kill any local Node.js processes running Pawtropolis.
 ### Prerequisites
 
 - **SSH alias configured:** `pawtech` should resolve to your server
-- **SSH key:** `D:\pawtropolis-tech\authentication\pawtropolis-tech.pem` must exist
-- **SSH key auth working:** Test with `ssh -i D:\pawtropolis-tech\authentication\pawtropolis-tech.pem pawtech "echo connected"`
+- **SSH key:** `D:\pawtech-v2\authentication\pawtech-v2.pem` must exist
+- **SSH key auth working:** Test with `ssh -i D:\pawtech-v2\authentication\pawtech-v2.pem pawtech "echo connected"`
 
 ### Start remote service
 
@@ -51,7 +51,7 @@ This will find and kill any local Node.js processes running Pawtropolis.
 **What it does:**
 
 1. SSHs to remote server using the PEM key
-2. Finds the repo directory (`/srv/pawtropolis` or `~/pawtropolis-tech`)
+2. Finds the repo directory (`/srv/pawtropolis` or `~/pawtech-v2`)
 3. Pulls latest code (`git pull --ff-only`)
 4. Installs dependencies (`npm ci --omit=dev`)
 5. Builds the project (`npm run build`)
@@ -62,7 +62,7 @@ This will find and kill any local Node.js processes running Pawtropolis.
 **Expected output:**
 
 ```
-[remote] cwd: /home/ubuntu/pawtropolis-tech
+[remote] cwd: /home/ubuntu/pawtech-v2
 [remote] pulling latest...
 [remote] installing deps...
 [remote] building...
@@ -103,16 +103,16 @@ Location: https://discord.com/api/oauth2/authorize?client_id=...
 
 **Fix:**
 
-1. Check SSH key exists: `Test-Path D:\pawtropolis-tech\authentication\pawtropolis-tech.pem`
+1. Check SSH key exists: `Test-Path D:\pawtech-v2\authentication\pawtech-v2.pem`
 2. Verify SSH config has pawtech alias:
    ```bash
    # Check ~/.ssh/config
    Host pawtech
      HostName pawtropolis.tech
      User ubuntu
-     IdentityFile D:\pawtropolis-tech\authentication\pawtropolis-tech.pem
+     IdentityFile D:\pawtech-v2\authentication\pawtech-v2.pem
    ```
-3. Test direct connection: `ssh -i D:\pawtropolis-tech\authentication\pawtropolis-tech.pem ubuntu@pawtropolis.tech`
+3. Test direct connection: `ssh -i D:\pawtech-v2\authentication\pawtech-v2.pem ubuntu@pawtropolis.tech`
 
 ### Repo Not Found
 
@@ -124,8 +124,8 @@ Location: https://discord.com/api/oauth2/authorize?client_id=...
 # Change these lines if your repo is elsewhere:
 if [ -d "/srv/pawtropolis" ]; then
   cd /srv/pawtropolis
-elif [ -d "$HOME/pawtropolis-tech" ]; then
-  cd "$HOME/pawtropolis-tech"
+elif [ -d "$HOME/pawtech-v2" ]; then
+  cd "$HOME/pawtech-v2"
 ```
 
 ### Port 3000 Already in Use
@@ -145,7 +145,7 @@ elif [ -d "$HOME/pawtropolis-tech" ]; then
 **Fix:**
 
 1. SSH into server: `ssh pawtech`
-2. Check logs: `cd ~/pawtropolis-tech && cat logs/err.log`
+2. Check logs: `cd ~/pawtech-v2 && cat logs/err.log`
 3. Verify dependencies: `npm ci`
 4. Build manually: `npm run build`
 5. Check for missing env vars: `cat .env`
@@ -177,7 +177,7 @@ pm2 save
 1. **Apache not configured:** See [APACHE-PROXY-SETUP.md](APACHE-PROXY-SETUP.md)
 2. **Node app crashed:** Check logs: `ssh pawtech "pm2 logs pawtropolis"`
 3. **Wrong port:** Check if app is on different port: `ssh pawtech "ss -tlnp | grep node"`
-4. **Environment vars missing:** `ssh pawtech "cd ~/pawtropolis-tech && grep DISCORD_TOKEN .env"`
+4. **Environment vars missing:** `ssh pawtech "cd ~/pawtech-v2 && grep DISCORD_TOKEN .env"`
 
 ## Manual Control (SSH)
 
@@ -187,7 +187,7 @@ If you prefer manual control:
 
 ```bash
 ssh pawtech
-cd ~/pawtropolis-tech
+cd ~/pawtech-v2
 pm2 start dist/index.js --name pawtropolis --update-env
 pm2 save
 ```
@@ -264,7 +264,7 @@ FASTIFY_SESSION_SECRET=your-session-secret
 
 ```bash
 ssh pawtech
-cd ~/pawtropolis-tech
+cd ~/pawtech-v2
 nano .env
 # Make changes
 # Save and exit
@@ -308,12 +308,12 @@ Or update your SSH config (`~/.ssh/config`):
 Host pawtech
   HostName different-server.com
   User ubuntu
-  IdentityFile D:\pawtropolis-tech\authentication\pawtropolis-tech.pem
+  IdentityFile D:\pawtech-v2\authentication\pawtech-v2.pem
 ```
 
 ## Security Notes
 
-1. **PEM key protection:** Ensure `pawtropolis-tech.pem` has restricted permissions
+1. **PEM key protection:** Ensure `pawtech-v2.pem` has restricted permissions
 
    ```powershell
    # Windows: Right-click → Properties → Security → Advanced
@@ -335,6 +335,6 @@ Host pawtech
 | View logs     | `ssh pawtech "pm2 logs pawtropolis"`                                                                    |
 | Check status  | `ssh pawtech "pm2 status"`                                                                              |
 | Restart       | `.\start.ps1` (smart restart)                                                                           |
-| Update .env   | `ssh pawtech "nano ~/pawtropolis-tech/.env"`                                                            |
-| Manual deploy | `ssh pawtech "cd ~/pawtropolis-tech && git pull && npm ci && npm run build && pm2 restart pawtropolis"` |
+| Update .env   | `ssh pawtech "nano ~/pawtech-v2/.env"`                                                            |
+| Manual deploy | `ssh pawtech "cd ~/pawtech-v2 && git pull && npm ci && npm run build && pm2 restart pawtropolis"` |
 | Check health  | `curl -I https://pawtropolis.tech/auth/login`                                                           |

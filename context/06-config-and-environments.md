@@ -330,7 +330,7 @@ openssl rand -base64 32
 1. Go to [Discord Developer Portal](https://discord.com/developers/applications)
 2. Bot tab → Reset Token
 3. Update `.env` on server
-4. Restart bot: `pm2 restart pawtropolis-tech`
+4. Restart bot: `pm2 restart pawtech-v2`
 
 **Session Secret:**
 1. Generate new 32-char string
@@ -466,7 +466,7 @@ DB_PATH=./data/staging.db
 # On production server
 cp .env.production .env
 npm run build
-pm2 start dist/index.js --name pawtropolis-tech
+pm2 start dist/index.js --name pawtech-v2
 pm2 save
 ```
 
@@ -531,7 +531,7 @@ sqlite3 data/data.db
 SELECT * FROM guild_config WHERE guild_id = 'YOUR_GUILD_ID';
 
 -- Check cache invalidation (restart bot)
-pm2 restart pawtropolis-tech
+pm2 restart pawtech-v2
 ```
 
 ---

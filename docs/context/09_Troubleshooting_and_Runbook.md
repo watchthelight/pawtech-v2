@@ -63,11 +63,11 @@ curl -I https://pawtropolis.tech/auth/login
 
 ```bash
 # SQLite database file exists and readable
-ls -lh /home/ubuntu/pawtropolis-tech/data/data.db
+ls -lh /home/ubuntu/pawtech-v2/data/data.db
 # Should show file size > 0
 
 # Query table counts
-sqlite3 /home/ubuntu/pawtropolis-tech/data/data.db \
+sqlite3 /home/ubuntu/pawtech-v2/data/data.db \
   "SELECT 'applications', COUNT(*) FROM applications
    UNION ALL
    SELECT 'action_log', COUNT(*) FROM action_log
@@ -217,7 +217,7 @@ sudo tail -f /var/log/apache2/pawtropolis-error.log
 1. **Verify Token in `.env`**
 
    ```bash
-   cd /home/ubuntu/pawtropolis-tech
+   cd /home/ubuntu/pawtech-v2
    grep DISCORD_TOKEN .env
    # Should show: DISCORD_TOKEN=MTQyNzQzNjYxNTAyMTYyOTU5MA...
    ```
@@ -380,7 +380,7 @@ sudo tail -f /var/log/apache2/pawtropolis-error.log
    tar -czf dist.tar.gz dist/ node_modules/
 
    # Transfer to production:
-   scp dist.tar.gz user@server:/home/ubuntu/pawtropolis-tech/
+   scp dist.tar.gz user@server:/home/ubuntu/pawtech-v2/
 
    # On production:
    tar -xzf dist.tar.gz
@@ -411,7 +411,7 @@ sudo tail -f /var/log/apache2/pawtropolis-error.log
 1. **Verify ADMIN_ROLE_ID in .env**
 
    ```bash
-   cd /home/ubuntu/pawtropolis-tech
+   cd /home/ubuntu/pawtech-v2
    grep ADMIN_ROLE_ID .env
    # Should show: ADMIN_ROLE_ID=987662057069482024
    ```
@@ -548,7 +548,7 @@ sudo tail -f /var/log/apache2/pawtropolis-error.log
 
    ```bash
    # Query database for configured channel
-   sqlite3 /home/ubuntu/pawtropolis-tech/data/data.db \
+   sqlite3 /home/ubuntu/pawtech-v2/data/data.db \
      "SELECT logging_channel_id FROM guild_config WHERE guild_id = 'YOUR_GUILD_ID';"
 
    # Or use /config get logging command in Discord
@@ -586,7 +586,7 @@ sudo tail -f /var/log/apache2/pawtropolis-error.log
 
    ```bash
    # Script to import fallback logs into database
-   cd /home/ubuntu/pawtropolis-tech
+   cd /home/ubuntu/pawtech-v2
    npm run import:fallback-logs
 
    # Manually post embeds for imported actions

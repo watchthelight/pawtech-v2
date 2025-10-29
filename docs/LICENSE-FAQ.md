@@ -23,7 +23,7 @@ Include a NOTICE like:
 ```
 Pawtropolis Tech Gatekeeper
 Copyright (c) 2025 watchthelight (Bash)
-https://github.com/watchthelight/pawtropolis-tech
+https://github.com/watchthelight/pawtech-v2
 
 Portions of this work may be used under Excerpt limits with attribution.
 See LICENSE (Attribution-No Wholesale Copying License, ANW-1.0).

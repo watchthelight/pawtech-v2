@@ -151,4 +151,4 @@ Documentation licensed under [ANW-1.0](LICENSE). See [LICENSE-FAQ.md](LICENSE-FA
 
 ---
 
-**Questions?** Open an issue at [github.com/watchthelight/pawtropolis-tech/issues](https://github.com/watchthelight/pawtropolis-tech/issues)
+**Questions?** Open an issue at [github.com/watchthelight/pawtech-v2/issues](https://github.com/watchthelight/pawtech-v2/issues)

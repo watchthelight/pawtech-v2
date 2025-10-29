@@ -446,7 +446,7 @@ npm run migrate
 ## Getting Help
 
 - **Documentation:** Check `context/` directory for architecture docs
-- **Issues:** Browse [existing issues](https://github.com/watchthelight/pawtropolis-tech/issues)
+- **Issues:** Browse [existing issues](https://github.com/watchthelight/pawtech-v2/issues)
 - **Questions:** Open a GitHub Discussion or issue
 
 ---

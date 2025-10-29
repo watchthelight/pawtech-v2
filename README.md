@@ -14,8 +14,8 @@ A production-ready Discord moderation bot designed for transparent, auditable co
 
 ```bash
 # 1. Clone and install
-git clone https://github.com/watchthelight/pawtropolis-tech.git
-cd pawtropolis-tech
+git clone https://github.com/watchthelight/pawtech-v2.git
+cd pawtech-v2
 npm install
 
 # 2. Configure environment

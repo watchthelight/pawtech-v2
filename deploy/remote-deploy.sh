@@ -9,7 +9,7 @@ set -Eeuo pipefail
 VERSION="1.1.0"
 
 # Configuration
-readonly DEFAULT_REPO_DIR="/home/ubuntu/pawtropolis-tech"
+readonly DEFAULT_REPO_DIR="/home/ubuntu/pawtech-v2"
 readonly DEFAULT_PM2_APP="pawtropolis"
 readonly NODE_PORT="3000"
 readonly PUBLIC_URL="https://pawtropolis.tech"

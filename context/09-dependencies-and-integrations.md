@@ -394,7 +394,7 @@ client.once(Events.ClientReady, async () => {
 
 **Monitor:**
 ```bash
-pm2 logs pawtropolis-tech | grep "Bot ready"
+pm2 logs pawtech-v2 | grep "Bot ready"
 ```
 
 ---

@@ -267,7 +267,7 @@ scp deploy.tar.gz user@server:/path/to/bot/
 ssh user@server "cd /path/to/bot && tar -xzf deploy.tar.gz"
 
 # Restart PM2
-ssh user@server "pm2 restart pawtropolis-tech"
+ssh user@server "pm2 restart pawtech-v2"
 ```
 
 **Includes:**
@@ -286,7 +286,7 @@ ssh user@server "pm2 restart pawtropolis-tech"
 
 ```bash
 # On remote server
-cd /path/to/pawtropolis-tech
+cd /path/to/pawtech-v2
 
 # Extract deployment
 tar -xzf deploy.tar.gz
@@ -295,10 +295,10 @@ tar -xzf deploy.tar.gz
 npm ci --omit=dev
 
 # Restart bot
-pm2 restart pawtropolis-tech
+pm2 restart pawtech-v2
 
 # Verify startup
-pm2 logs pawtropolis-tech --lines 50
+pm2 logs pawtech-v2 --lines 50
 ```
 
 ---
@@ -346,7 +346,7 @@ npm start
 .\start.ps1
 
 # Manual PM2
-pm2 start dist/index.js --name pawtropolis-tech
+pm2 start dist/index.js --name pawtech-v2
 pm2 save
 ```
 
@@ -426,7 +426,7 @@ npx tsup
 
 ### PM2 Process Not Restarting
 
-**Problem:** `pm2 restart pawtropolis-tech` fails
+**Problem:** `pm2 restart pawtech-v2` fails
 
 **Solution:**
 ```bash
@@ -434,8 +434,8 @@ npx tsup
 pm2 status
 
 # Delete and recreate process
-pm2 delete pawtropolis-tech
-pm2 start dist/index.js --name pawtropolis-tech
+pm2 delete pawtech-v2
+pm2 start dist/index.js --name pawtech-v2
 pm2 save
 ```
 

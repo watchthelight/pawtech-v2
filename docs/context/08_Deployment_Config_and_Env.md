@@ -301,7 +301,7 @@ sudo systemctl status certbot.timer
 npm install -g pm2
 
 # Install dependencies
-cd /home/ubuntu/pawtropolis-tech
+cd /home/ubuntu/pawtech-v2
 npm ci --production=false
 
 # Build TypeScript
@@ -383,10 +383,10 @@ After=network.target
 [Service]
 Type=simple
 User=ubuntu
-WorkingDirectory=/home/ubuntu/pawtropolis-tech
+WorkingDirectory=/home/ubuntu/pawtech-v2
 Environment="NODE_ENV=production"
-EnvironmentFile=/home/ubuntu/pawtropolis-tech/.env
-ExecStart=/usr/bin/node /home/ubuntu/pawtropolis-tech/dist/index.js
+EnvironmentFile=/home/ubuntu/pawtech-v2/.env
+ExecStart=/usr/bin/node /home/ubuntu/pawtech-v2/dist/index.js
 Restart=on-failure
 RestartSec=10s
 StandardOutput=journal
@@ -398,7 +398,7 @@ NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/home/ubuntu/pawtropolis-tech/data
+ReadWritePaths=/home/ubuntu/pawtech-v2/data
 
 [Install]
 WantedBy=multi-user.target
