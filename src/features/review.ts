@@ -48,11 +48,7 @@ import { getScan, googleReverseImageUrl } from "./avatarScan.js";
 import { GATE_SHOW_AVATAR_RISK } from "../lib/env.js";
 import type { GuildConfig } from "../lib/config.js";
 import { replyOrEdit, ensureDeferred } from "../lib/cmdWrap.js";
-import {
-  buildReviewEmbed,
-  buildActionRows,
-  type BuildEmbedOptions,
-} from "../ui/reviewCard.js";
+import { buildReviewEmbed, buildActionRows, type BuildEmbedOptions } from "../ui/reviewCard.js";
 import { shortCode } from "../lib/ids.js";
 import { logActionPretty } from "../logging/pretty.js";
 import {
@@ -1436,6 +1432,65 @@ export async function handleRejectModal(interaction: ModalSubmitInteraction) {
     captureException(err, { area: "handleRejectModal", code, traceId });
     await replyOrEdit(interaction, {
       content: `Failed to process rejection (trace: ${traceId}).`,
+    }).catch(() => undefined);
+  }
+}
+
+export async function handleModmailButton(interaction: ButtonInteraction) {
+  const match = /^v1:decide:modmail:code([0-9A-F]{6})$/.exec(interaction.customId);
+  if (!match) return;
+  if (!requireInteractionStaff(interaction)) return;
+
+  const code = match[1];
+
+  // Defer update to acknowledge button
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferUpdate().catch(() => undefined);
+  }
+
+  try {
+    const app = await resolveApplication(interaction, code);
+    if (!app) return;
+
+    // Import and call modmail function
+    const { openPublicModmailThreadFor } = await import("./modmail.js");
+    const result = await openPublicModmailThreadFor({
+      interaction,
+      userId: app.user_id,
+      appCode: code,
+      appId: app.id,
+    });
+
+    // Provide feedback
+    if (result.success) {
+      // Public confirmation in the review channel if available
+      if (interaction.channel && "send" in interaction.channel) {
+        try {
+          await interaction.channel.send({
+            content: result.message ?? "Modmail thread created.",
+            allowedMentions: { parse: [] },
+          });
+        } catch (err) {
+          logger.warn({ err, code }, "[modmail] failed to post public thread creation message");
+        }
+      }
+    } else {
+      // Ephemeral explanation to the clicking moderator
+      const msg = result.message || "Failed to create modmail thread. Check bot permissions.";
+      await interaction
+        .followUp({
+          flags: MessageFlags.Ephemeral,
+          content: `⚠️ ${msg}`,
+          allowedMentions: { parse: [] },
+        })
+        .catch(() => undefined);
+    }
+  } catch (err) {
+    const traceId = interaction.id.slice(-8).toUpperCase();
+    logger.error({ err, code, traceId }, "Modmail button handling failed");
+    captureException(err, { area: "handleModmailButton", code, traceId });
+    await replyOrEdit(interaction, {
+      content: `Failed to open modmail (trace: ${traceId}).`,
     }).catch(() => undefined);
   }
 }
@@ -2943,35 +2998,23 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
       }
     }
 
-    // Post the ping message with delete button
-    // WHY: Persistent ping allows staff to see notification; button provides manual cleanup
+    // Post the ping message
+    // WHY: Notifies user in unverified channel; auto-deletes to keep channel clean
     // SAFETY: allowedMentions restricted to only the target user (no @everyone/@here risk)
-    const { ButtonBuilder, ButtonStyle, ActionRowBuilder } = await import("discord.js");
-
-    // Send initial ping message (we'll add the delete button after getting the message ID)
     const pingMessage = await channel.send({
       content: `<@${userId}>`,
       allowedMentions: { users: [userId], parse: [] }, // ONLY mention the specific user, no mass pings
     });
 
-    // Add delete button with the actual message ID
-    const deleteButton = new ButtonBuilder()
-      .setCustomId(`v1:ping:delete:${pingMessage.id}`)
-      .setLabel("Delete ping")
-      .setStyle(ButtonStyle.Secondary);
-
-    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(deleteButton);
-    await pingMessage.edit({ components: [row] }).catch(() => undefined);
-
     // Schedule auto-deletion after 30 seconds
     // WHY: Keeps channel clean while giving user time to see notification
-    // SAFETY: Gracefully handles races (manual deletion) and permission errors
+    // SAFETY: Gracefully handles races and permission errors
     autoDelete(pingMessage, 30_000);
 
-    // Reply ephemerally with link
+    // Reply with link
     const messageUrl = `https://discord.com/channels/${interaction.guildId}/${channel.id}/${pingMessage.id}`;
     await replyOrEdit(interaction, {
-      content: `Ping posted: ${messageUrl}\n\nThe ping will auto-delete after 30 seconds, or you can delete it immediately using the button.`,
+      content: `Ping posted: ${messageUrl}\n\nThe ping will auto-delete after 30 seconds.`,
     }).catch(() => undefined);
 
     logger.info(
@@ -2981,7 +3024,7 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
         messageId: pingMessage.id,
         moderatorId: interaction.user.id,
       },
-      "[review] ping posted in unverified (auto-deletes after 30s, staff can delete via button)"
+      "[review] ping posted in unverified (auto-deletes after 30s)"
     );
   } catch (err) {
     logger.error(

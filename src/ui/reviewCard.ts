@@ -510,11 +510,11 @@ export function buildActionRows(
         .setLabel("Modmail")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(`v1:decide:copyuid:${idSuffix}`)
+        .setCustomId(`v1:decide:copyuid:${idSuffix}:user${app.user_id}`)
         .setLabel("Copy UID")
         .setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
-        .setCustomId(`v1:decide:ping:${idSuffix}`)
+        .setCustomId(`v1:ping:${idSuffix}:user${app.user_id}`)
         .setLabel("Ping in Unverified")
         .setStyle(ButtonStyle.Secondary)
     );

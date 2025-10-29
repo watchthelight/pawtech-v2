@@ -9,9 +9,21 @@ import { detectNsfwVision, calculateVisionScore } from "../src/features/googleVi
 // Test URLs - using Discord CDN and other public sources
 const testImages = [
   // Safe Discord default avatars
-  { url: "https://cdn.discordapp.com/embed/avatars/0.png", expected: "safe", label: "Discord Default Avatar 0" },
-  { url: "https://cdn.discordapp.com/embed/avatars/1.png", expected: "safe", label: "Discord Default Avatar 1" },
-  { url: "https://cdn.discordapp.com/embed/avatars/2.png", expected: "safe", label: "Discord Default Avatar 2" },
+  {
+    url: "https://cdn.discordapp.com/embed/avatars/0.png",
+    expected: "safe",
+    label: "Discord Default Avatar 0",
+  },
+  {
+    url: "https://cdn.discordapp.com/embed/avatars/1.png",
+    expected: "safe",
+    label: "Discord Default Avatar 1",
+  },
+  {
+    url: "https://cdn.discordapp.com/embed/avatars/2.png",
+    expected: "safe",
+    label: "Discord Default Avatar 2",
+  },
 ];
 
 console.log("\n=== Google Cloud Vision SafeSearch Testing ===\n");
@@ -45,12 +57,13 @@ for (const test of testImages) {
     console.log(`  ${icon} Score: ${pct}%`);
     console.log(`     Adult: ${result.raw.adult} (${Math.round(result.adultScore * 100)}%)`);
     console.log(`     Racy: ${result.raw.racy} (${Math.round(result.racyScore * 100)}%)`);
-    console.log(`     Violence: ${result.raw.violence} (${Math.round(result.violenceScore * 100)}%)`);
+    console.log(
+      `     Violence: ${result.raw.violence} (${Math.round(result.violenceScore * 100)}%)`
+    );
 
-    const passed = (test.expected === "safe" && pct < 40) ||
-                   (test.expected === "nsfw" && pct >= 40);
+    const passed =
+      (test.expected === "safe" && pct < 40) || (test.expected === "nsfw" && pct >= 40);
     console.log(`  ${passed ? "✓ PASS" : "✗ FAIL"} (expected ${test.expected})\n`);
-
   } catch (err) {
     console.log(`  ❌ Error: ${(err as Error).message}\n`);
   }

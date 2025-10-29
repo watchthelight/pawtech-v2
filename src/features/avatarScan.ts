@@ -114,7 +114,10 @@ export async function scanAvatar(
     const visionResult = await detectNsfwVision(highResUrl);
 
     if (!visionResult) {
-      logger.warn({ traceId, avatarUrl: highResUrl }, "[avatarScan] Google Vision detection failed");
+      logger.warn(
+        { traceId, avatarUrl: highResUrl },
+        "[avatarScan] Google Vision detection failed"
+      );
       return baseResult;
     }
 
@@ -141,9 +144,15 @@ export async function scanAvatar(
       furryScore: 0,
       scalieScore: 0,
       evidence: {
-        hard: visionResult.adultScore >= 0.5 ? [{ tag: `adult:${visionResult.raw.adult}`, p: visionResult.adultScore }] : [],
-        soft: visionResult.racyScore >= 0.5 ? [{ tag: `racy:${visionResult.raw.racy}`, p: visionResult.racyScore }] : [],
-        safe: []
+        hard:
+          visionResult.adultScore >= 0.5
+            ? [{ tag: `adult:${visionResult.raw.adult}`, p: visionResult.adultScore }]
+            : [],
+        soft:
+          visionResult.racyScore >= 0.5
+            ? [{ tag: `racy:${visionResult.raw.racy}`, p: visionResult.racyScore }]
+            : [],
+        safe: [],
       },
     };
 
@@ -181,7 +190,11 @@ function serializeEvidence(evidence: StoredEvidence): {
   };
 }
 
-function deserializeEvidence(hard: string | null, soft: string | null, safe: string | null): StoredEvidence {
+function deserializeEvidence(
+  hard: string | null,
+  soft: string | null,
+  safe: string | null
+): StoredEvidence {
   return {
     hard: hard ? JSON.parse(hard) : [],
     soft: soft ? JSON.parse(soft) : [],
@@ -210,11 +223,12 @@ export async function storeScan(
   }
 
   try {
-    const { avatarUrl, nsfwScore, edgeScore, finalPct, furryScore, scalieScore, reason, evidence } = scanResult;
+    const { avatarUrl, nsfwScore, edgeScore, finalPct, furryScore, scalieScore, reason, evidence } =
+      scanResult;
     const evidenceSerialized = serializeEvidence(evidence);
 
     db.prepare(
-      `INSERT INTO avatar_scans (
+      `INSERT INTO avatar_scan (
         application_id, avatar_url, nsfw_score, edge_score, final_pct,
         furry_score, scalie_score, reason,
         evidence_hard, evidence_soft, evidence_safe, scanned_at
@@ -281,7 +295,7 @@ export function getScan(applicationId: string): ScanResult {
       .prepare(
         `SELECT avatar_url, nsfw_score, edge_score, final_pct, furry_score, scalie_score, reason,
                 evidence_hard, evidence_soft, evidence_safe
-         FROM avatar_scans
+         FROM avatar_scan
          WHERE application_id = ?`
       )
       .get(applicationId) as Partial<AvatarScanRow> | undefined;

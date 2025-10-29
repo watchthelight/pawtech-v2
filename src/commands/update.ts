@@ -20,10 +20,14 @@ import {
 import { requireStaff } from "../lib/config.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { upsertStatus, getStatus } from "../features/statusStore.js";
+import { writeFileSync } from "node:fs";
+import { join } from "node:path";
+import { logger } from "../lib/logger.js";
+import sharp from "sharp";
 
 export const data = new SlashCommandBuilder()
   .setName("update")
-  .setDescription("Update bot activity or status")
+  .setDescription("Update bot activity, status, or banner")
   .addSubcommand((sub) =>
     sub
       .setName("activity")
@@ -61,6 +65,17 @@ export const data = new SlashCommandBuilder()
           .setMinLength(1)
           .setMaxLength(128)
       )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("banner")
+      .setDescription("Update bot profile, gate, welcome, and website banners")
+      .addAttachmentOption((option) =>
+        option
+          .setName("image")
+          .setDescription("Banner image (PNG/JPG/WebP, max 10MB, 16:9 recommended)")
+          .setRequired(true)
+      )
   );
 
 const ACTIVITY_TYPE_MAP: Record<string, ActivityType> = {
@@ -93,6 +108,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     await handleActivityUpdate(ctx, user);
   } else if (subcommand === "status") {
     await handleStatusUpdate(ctx, user);
+  } else if (subcommand === "banner") {
+    await handleBannerUpdate(ctx);
   }
 }
 
@@ -119,9 +136,9 @@ async function handleActivityUpdate(
     // Add the regular activity
     activities.push({ name: text, type: activityType });
 
-    // Preserve custom status if it exists
+    // Preserve custom status if it exists (Custom type uses 'name' field)
     if (saved?.customStatus) {
-      activities.push({ type: ActivityType.Custom, state: saved.customStatus });
+      activities.push({ type: ActivityType.Custom, name: saved.customStatus });
     }
 
     await user.setPresence({
@@ -145,9 +162,11 @@ async function handleActivityUpdate(
   });
 
   await withStep(ctx, "final_reply", async () => {
+    // Capitalize the activity type for display
+    const displayType = activityTypeStr.charAt(0).toUpperCase() + activityTypeStr.slice(1);
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: `Activity updated to: **${activityTypeStr}** "${text}" (saved for restarts).`,
+      content: `Activity updated to: **${displayType}** "${text}" (saved for restarts).`,
     });
   });
 }
@@ -172,8 +191,8 @@ async function handleStatusUpdate(
       activities.push({ type: saved.activityType, name: saved.activityText });
     }
 
-    // Add custom status
-    activities.push({ type: ActivityType.Custom, state: text });
+    // Add custom status (Custom type uses 'name' field for the status text)
+    activities.push({ type: ActivityType.Custom, name: text });
 
     await user.setPresence({
       activities,
@@ -199,6 +218,113 @@ async function handleStatusUpdate(
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
       content: `Custom status updated to: "${text}" (saved for restarts).`,
+    });
+  });
+}
+
+async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteraction>) {
+  const { interaction } = ctx;
+
+  // Defer reply since image processing takes time
+  await withStep(ctx, "defer_reply", async () => {
+    await interaction.deferReply();
+  });
+
+  // Get attachment
+  const attachment = await withStep(ctx, "validate_attachment", async () => {
+    const att = interaction.options.getAttachment("image", true);
+
+    // Validate file type
+    if (!att.contentType?.startsWith("image/")) {
+      throw new Error("Attachment must be an image");
+    }
+
+    // Validate file size (10MB limit)
+    if (att.size > 10 * 1024 * 1024) {
+      throw new Error("Image must be less than 10MB");
+    }
+
+    return att;
+  });
+
+  // Download image
+  const imageBuffer = await withStep(ctx, "download_image", async () => {
+    const response = await fetch(attachment.url);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.statusText}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  });
+
+  // Process images (PNG and WebP)
+  const [pngBuffer, webpBuffer] = await withStep(ctx, "process_images", async () => {
+    // Convert to PNG (high quality for guild banner)
+    const png = await sharp(imageBuffer).png({ quality: 100, compressionLevel: 6 }).toBuffer();
+
+    // Convert to WebP (optimized for embeds)
+    const webp = await sharp(imageBuffer)
+      .resize({ width: 1280, height: 720, fit: "inside", withoutEnlargement: true })
+      .webp({ quality: 85 })
+      .toBuffer();
+
+    return [png, webp];
+  });
+
+  // Save files to assets folder
+  await withStep(ctx, "save_files", async () => {
+    const assetsPath = join(process.cwd(), "assets");
+    writeFileSync(join(assetsPath, "banner.png"), pngBuffer);
+    writeFileSync(join(assetsPath, "banner.webp"), webpBuffer);
+    logger.info({ pngSize: pngBuffer.length, webpSize: webpBuffer.length }, "Banner files saved");
+  });
+
+  // Update bot profile banner directly
+  await withStep(ctx, "update_bot_banner", async () => {
+    if (!interaction.client.user) {
+      throw new Error("Bot user not available");
+    }
+
+    await interaction.client.user.setBanner(pngBuffer);
+    logger.info("Bot profile banner updated");
+  });
+
+  // Refresh gate entry message with new banner
+  await withStep(ctx, "refresh_gate_message", async () => {
+    if (!interaction.guildId) return;
+
+    try {
+      const { ensureGateEntry } = await import("../features/gate.js");
+      const result = await ensureGateEntry(ctx, interaction.guildId);
+
+      if (result.messageId) {
+        logger.info(
+          { guildId: interaction.guildId, messageId: result.messageId, action: result.action },
+          "Gate entry message refreshed with new banner"
+        );
+      }
+    } catch (err) {
+      logger.warn(
+        { err, guildId: interaction.guildId },
+        "Failed to refresh gate message (non-fatal)"
+      );
+    }
+  });
+
+  await withStep(ctx, "final_reply", async () => {
+    await interaction.editReply({
+      content: [
+        "✅ Banner updated successfully!",
+        "",
+        "**Updated:**",
+        "• Bot profile banner (visible immediately)",
+        "• Gate verification message (refreshed)",
+        "• Welcome message banner (next member join)",
+        "• Website background (via API)",
+        "• `assets/banner.png` (saved)",
+        "• `assets/banner.webp` (saved)",
+        "",
+        "**Note:** Discord server banner is managed separately via Server Settings.",
+      ].join("\n"),
     });
   });
 }

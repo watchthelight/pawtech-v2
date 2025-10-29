@@ -50,7 +50,6 @@ import { env } from "./lib/env.js";
 import { requireEnv } from "./util/ensureEnv.js";
 import * as health from "./commands/health.js";
 import * as gate from "./commands/gate.js";
-import * as statusupdate from "./commands/statusupdate.js";
 import * as update from "./commands/update.js";
 import * as config from "./commands/config.js";
 import * as database from "./commands/database.js";
@@ -58,6 +57,7 @@ import { handleStartButton, handleGateModalSubmit, handleDoneButton } from "./fe
 import {
   handleReviewButton,
   handleRejectModal,
+  handleModmailButton,
   handlePermRejectButton,
   handlePermRejectModal,
   handleCopyUidButton,
@@ -85,6 +85,7 @@ import { ctx as reqCtx, newTraceId, runWithCtx } from "./lib/reqctx.js";
 import { postErrorCard } from "./lib/errorCard.js";
 import {
   BTN_DECIDE_RE,
+  BTN_MODMAIL_RE,
   BTN_PERM_REJECT_RE,
   BTN_COPY_UID_RE,
   BTN_VIEW_SRC_RE,
@@ -115,7 +116,6 @@ commands.set(gate.acceptData.name, wrapCommand("accept", gate.executeAccept));
 commands.set(gate.rejectData.name, wrapCommand("reject", gate.executeReject));
 commands.set(gate.kickData.name, wrapCommand("kick", gate.executeKick));
 commands.set(gate.unclaimData.name, wrapCommand("unclaim", gate.executeUnclaim));
-commands.set(statusupdate.data.name, wrapCommand("statusupdate", statusupdate.execute));
 commands.set(update.data.name, wrapCommand("update", update.execute));
 commands.set(config.data.name, wrapCommand("config", config.execute));
 commands.set(database.data.name, wrapCommand("database", database.execute));
@@ -159,6 +159,7 @@ client.once(Events.ClientReady, async () => {
       ensureReviewActionFreeText,
       ensureApplicationStatusIndex,
       ensureActionLogSchema,
+      ensureActionLogFreeText,
       ensureManualFlagColumns,
     } = await import("./db/ensure.js");
     const { ensureBotStatusSchema } = await import("./features/statusStore.js");
@@ -168,6 +169,7 @@ client.once(Events.ClientReady, async () => {
     ensureReviewActionFreeText();
     ensureApplicationStatusIndex();
     ensureActionLogSchema();
+    ensureActionLogFreeText();
     ensureManualFlagColumns();
     ensureBotStatusSchema();
   } catch (err) {
@@ -290,9 +292,9 @@ client.once(Events.ClientReady, async () => {
         activities.push({ type: saved.activityType, name: saved.activityText });
       }
 
-      // Add custom status if present
+      // Add custom status if present (Custom type uses 'name' field)
       if (saved.customStatus) {
-        activities.push({ type: 4, state: saved.customStatus }); // ActivityType.Custom = 4
+        activities.push({ type: 4, name: saved.customStatus }); // ActivityType.Custom = 4
       }
 
       if (activities.length > 0) {
@@ -346,7 +348,10 @@ client.once(Events.ClientReady, async () => {
       if (existsSync(distRoot)) {
         walk(distRoot);
         if (bad.length) {
-          logger.warn({ evt: "dist_scan_legacy_sql", files: bad }, "dist contains __old references");
+          logger.warn(
+            { evt: "dist_scan_legacy_sql", files: bad },
+            "dist contains __old references"
+          );
         }
       }
     } catch {
@@ -714,6 +719,23 @@ client.on("interactionCreate", async (interaction) => {
               "route: review decide"
             );
             await handleReviewButton(interaction);
+            succeeded = true;
+            return;
+          }
+
+          const modmailMatch = customId.match(BTN_MODMAIL_RE);
+          if (modmailMatch) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "review_modmail",
+                code: modmailMatch[1],
+                traceId,
+              },
+              "route: review modmail"
+            );
+            await handleModmailButton(interaction);
             succeeded = true;
             return;
           }

@@ -205,7 +205,7 @@ const addColumnIfMissing = (table: string, column: string, definition: string) =
       db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
       logger.info({ table, column }, "Added missing column");
     }
-  } catch (err) {
+  } catch {
     // Table doesn't exist yet, that's ok
   }
 };

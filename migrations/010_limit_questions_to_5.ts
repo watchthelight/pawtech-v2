@@ -73,9 +73,9 @@ export function migrate010LimitQuestionsTo5(db: Database): void {
   logger.info("[migration 010] Applying q_index 0..4 constraint to guild_question");
 
   // Count rows before migration
-  const countBefore = db
-    .prepare(`SELECT COUNT(*) as count FROM guild_question`)
-    .get() as { count: number };
+  const countBefore = db.prepare(`SELECT COUNT(*) as count FROM guild_question`).get() as {
+    count: number;
+  };
   logger.info({ count: countBefore.count }, "[migration 010] Row count before migration");
 
   // Count rows that will be deleted (q_index >= 5)
@@ -119,9 +119,9 @@ export function migrate010LimitQuestionsTo5(db: Database): void {
   db.pragma("foreign_keys = ON");
 
   // Count rows after migration
-  const countAfter = db
-    .prepare(`SELECT COUNT(*) as count FROM guild_question`)
-    .get() as { count: number };
+  const countAfter = db.prepare(`SELECT COUNT(*) as count FROM guild_question`).get() as {
+    count: number;
+  };
   logger.info(
     { count: countAfter.count, deleted: countBefore.count - countAfter.count },
     "[migration 010] Row count after migration"

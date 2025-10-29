@@ -1,12 +1,20 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import "dotenv/config";
-import { REST, Routes, Client, GatewayIntentBits, ApplicationCommandOptionType } from "discord.js";
+import {
+  REST,
+  Routes,
+  Client,
+  GatewayIntentBits,
+  ApplicationCommandOptionType,
+  type APIApplicationCommandOption,
+} from "discord.js";
 import { buildCommands } from "../src/commands/buildCommands.js";
 import { requireEnv } from "../src/util/ensureEnv.js";
 
 const OPTION = ApplicationCommandOptionType;
 
 type CommandSpec = ReturnType<typeof buildCommands>;
+type CommandOption = APIApplicationCommandOption;
 
 function ensureWelcomeGroup(spec: CommandSpec) {
   const gate = spec.find((cmd) => cmd.name === "gate");
@@ -14,25 +22,25 @@ function ensureWelcomeGroup(spec: CommandSpec) {
     throw new Error("[sync] outgoing spec missing /gate command");
   }
   const welcomeGroup = (gate.options ?? []).find(
-    (opt) => opt.type === OPTION.SubcommandGroup && opt.name === "welcome"
+    (opt: CommandOption) => opt.type === OPTION.SubcommandGroup && opt.name === "welcome"
   );
   if (!welcomeGroup) {
     throw new Error("[sync] outgoing spec missing /gate welcome group");
   }
-  const setSub = (welcomeGroup.options ?? []).find(
-    (opt) => opt.type === OPTION.Subcommand && opt.name === "set"
+  const setSub = ((welcomeGroup as any).options ?? []).find(
+    (opt: CommandOption) => opt.type === OPTION.Subcommand && opt.name === "set"
   );
   if (!setSub) {
     throw new Error("[sync] outgoing spec missing /gate welcome set subcommand");
   }
-  const contentOpt = (setSub.options ?? []).find(
-    (opt) => opt.type === OPTION.String && opt.name === "content"
+  const contentOpt = ((setSub as any).options ?? []).find(
+    (opt: CommandOption) => opt.type === OPTION.String && opt.name === "content"
   );
   if (!contentOpt) {
     throw new Error("[sync] /gate welcome set missing content option");
   }
-  const previewSub = (welcomeGroup.options ?? []).find(
-    (opt) => opt.type === OPTION.Subcommand && opt.name === "preview"
+  const previewSub = ((welcomeGroup as any).options ?? []).find(
+    (opt: CommandOption) => opt.type === OPTION.Subcommand && opt.name === "preview"
   );
   if (!previewSub) {
     throw new Error("[sync] /gate welcome group missing preview subcommand");

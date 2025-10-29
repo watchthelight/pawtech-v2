@@ -149,6 +149,7 @@ Questions can be customized per guild using the `/gate set-questions` command:
 ```
 
 **Features:**
+
 - Supports up to 5 questions (q1 through q5)
 - Only provided questions are updated (omitted ones remain unchanged)
 - Questions are required by default

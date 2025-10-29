@@ -16,16 +16,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
-
-/**
- * Check if table exists
- */
-function tableExists(db: Database, table: string): boolean {
-  const result = db
-    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name=?`)
-    .get(table);
-  return !!result;
-}
+import { tableExists, recordMigration, enableForeignKeys, getRowCount } from "./lib/helpers.js";
 
 /**
  * Migration: Create mod_metrics table
@@ -37,7 +28,7 @@ export function migrate002CreateModMetrics(db: Database): void {
   logger.info("[migration 002] Starting: create mod_metrics table");
 
   // Ensure foreign keys are enabled
-  db.pragma("foreign_keys = ON");
+  enableForeignKeys(db);
 
   // Check if table already exists
   if (tableExists(db, "mod_metrics")) {
@@ -79,36 +70,11 @@ export function migrate002CreateModMetrics(db: Database): void {
   logger.info("[migration 002] Index created");
 
   // Verification query - count rows (should be 0 initially)
-  const count = db.prepare(`SELECT COUNT(*) as count FROM mod_metrics`).get() as { count: number };
-  logger.info({ count: count.count }, "[migration 002] Verification: mod_metrics row count");
+  const count = getRowCount(db, "mod_metrics");
+  logger.info({ count }, "[migration 002] Verification: mod_metrics row count");
 
   // Record migration
   recordMigration(db, "002", "create_mod_metrics");
 
-  logger.info("[migration 002] Migration completed successfully");
-}
-
-/**
- * Records migration in schema_migrations table
- */
-function recordMigration(db: Database, version: string, name: string): void {
-  // Ensure schema_migrations table exists (should exist from migration 001)
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version     TEXT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      applied_at  INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-    )
-  `);
-
-  // Record migration (idempotent - ON CONFLICT DO NOTHING)
-  db.prepare(
-    `
-    INSERT INTO schema_migrations (version, name, applied_at)
-    VALUES (?, ?, strftime('%s', 'now'))
-    ON CONFLICT(version) DO NOTHING
-  `
-  ).run(version, name);
-
-  logger.info({ version, name }, "[migration] Recorded in schema_migrations");
+  logger.info("[migration 002] ✅ Complete");
 }

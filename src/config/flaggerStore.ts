@@ -121,10 +121,11 @@ export function setFlagsChannelId(guildId: string, channelId: string): void {
     ).run(guildId, channelId, now);
 
     logger.info({ guildId, channelId }, "[flagger] flags_channel_id updated");
-  } catch (err: any) {
+  } catch (err: unknown) {
     // If the column doesn't exist, this means the migration hasn't run yet
     // Provide a helpful error message
-    if (err?.message?.includes("has no column named flags_channel_id")) {
+    const error = err as Error;
+    if (error?.message?.includes("has no column named flags_channel_id")) {
       logger.error(
         { err, guildId, channelId },
         "[flagger] guild_config table missing flags_channel_id column - database migration may not have run. Run: tsx scripts/migrate.ts"
@@ -168,9 +169,10 @@ export function setSilentFirstMsgDays(guildId: string, days: number): void {
     ).run(guildId, days, now);
 
     logger.info({ guildId, days }, "[flagger] silent_first_msg_days updated");
-  } catch (err: any) {
+  } catch (err: unknown) {
     // If the column doesn't exist, this means the migration hasn't run yet
-    if (err?.message?.includes("has no column named silent_first_msg_days")) {
+    const error = err as Error;
+    if (error?.message?.includes("has no column named silent_first_msg_days")) {
       logger.error(
         { err, guildId, days },
         "[flagger] guild_config table missing silent_first_msg_days column - database migration may not have run. Run: tsx scripts/migrate.ts"

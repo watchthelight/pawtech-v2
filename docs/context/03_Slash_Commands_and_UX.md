@@ -100,12 +100,14 @@ Node: v20.11.0
 **Parameters:** `q1` through `q5` (all optional, 500 char max per question)
 
 **Permissions:** Enhanced permission model allowing any of:
+
 - Guild owner
 - Bot owners (configured in `OWNER_IDS` env)
 - Configured admin roles (`GATE_ADMIN_ROLE_IDS` env)
 - Members with Manage Server permission (fallback)
 
 **Behavior:**
+
 - Only provided questions are updated (omitted parameters leave questions unchanged)
 - Questions are required by default
 - Running without parameters shows current questions
@@ -124,6 +126,7 @@ Node: v20.11.0
 ```
 
 **Success Reply:**
+
 ```
 ✅ Updated: q1, q3
 

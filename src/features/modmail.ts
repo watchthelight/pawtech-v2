@@ -1123,8 +1123,9 @@ export async function openPublicModmailThreadFor(params: {
       }
 
       // Create ticket in DB first
+      // At this point, interaction.guildId is guaranteed non-null (checked at line 1025)
       ticketId = createTicket({
-        guildId: interaction.guildId,
+        guildId: interaction.guildId!,
         userId,
         appCode: code,
         reviewMessageId,
@@ -1140,13 +1141,17 @@ export async function openPublicModmailThreadFor(params: {
       };
     }
 
-    ticketId = openResult.ticketId;
+    // openResult.ticketId is guaranteed to exist when alreadyExists is false
+    ticketId = openResult.ticketId!;
 
     // Create Discord thread (outside transaction - cannot await inside)
     // Different creation paths for Forum vs Text/News channels
-    if (channel.type === ChannelType.GuildForum) {
+    // Type assertion needed because channel was already narrowed at runtime (lines 1072-1076)
+    const narrowedChannel = channel as TextChannel | NewsChannel | ForumChannel;
+
+    if (narrowedChannel.type === ChannelType.GuildForum) {
       // Forum channels: create a new post (thread) under the forum
-      const forum = channel as ForumChannel;
+      const forum = narrowedChannel as ForumChannel;
       thread = await forum.threads.create({
         name: `Modmail • ${code} • ${user.username}`,
         message: { content: `Opening modmail for <@${userId}> (App #${code}).` },
@@ -1155,10 +1160,9 @@ export async function openPublicModmailThreadFor(params: {
       });
     } else {
       // Text/News: create a public thread (not attached to a specific message)
-      const textChannel = channel as TextChannel | NewsChannel;
+      const textChannel = narrowedChannel as TextChannel | NewsChannel;
       thread = await textChannel.threads.create({
         name: `Modmail • ${code} • ${user.username}`,
-        type: ChannelType.PublicThread,
         autoArchiveDuration: ThreadAutoArchiveDuration.ThreeDays,
         reason: `Modmail for ${user.tag} (${user.id})`,
       });

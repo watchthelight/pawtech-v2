@@ -12,16 +12,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
-
-/**
- * Check if column exists in table
- */
-function columnExists(db: Database, table: string, column: string): boolean {
-  const result = db
-    .prepare(`SELECT COUNT(*) as count FROM pragma_table_info(?) WHERE name=?`)
-    .get(table, column) as { count: number };
-  return result.count > 0;
-}
+import { columnExists, enableForeignKeys } from "./lib/helpers.js";
 
 /**
  * Migration: Add custom_status column to bot_status
@@ -33,7 +24,7 @@ export function migrate011AddCustomStatusColumn(db: Database): void {
   logger.info("[migration 011] Starting: add custom_status column");
 
   // Enable foreign keys
-  db.pragma("foreign_keys = ON");
+  enableForeignKeys(db);
 
   // Check if custom_status column exists
   if (!columnExists(db, "bot_status", "custom_status")) {

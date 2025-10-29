@@ -266,9 +266,11 @@ function runReviewActionMigration(db: any) {
     let countBefore = 0;
 
     if (tableExists) {
-      countBefore = (db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
-        count: number;
-      }).count;
+      countBefore = (
+        db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
+          count: number;
+        }
+      ).count;
       logger.info(`[migrate] review_action row count before: ${countBefore}`);
 
       // 1) Create backup snapshot
@@ -330,15 +332,15 @@ function runReviewActionMigration(db: any) {
       `
       ).run();
 
-      const countAfter = (db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
-        count: number;
-      }).count;
+      const countAfter = (
+        db.prepare(`SELECT COUNT(*) as count FROM review_action`).get() as {
+          count: number;
+        }
+      ).count;
       logger.info(`[migrate] restored ${countAfter} rows to review_action`);
 
       if (countBefore !== countAfter) {
-        throw new Error(
-          `[migrate] row count mismatch: before=${countBefore}, after=${countAfter}`
-        );
+        throw new Error(`[migrate] row count mismatch: before=${countBefore}, after=${countAfter}`);
       }
 
       // 5) Drop backup
@@ -587,6 +589,117 @@ export function ensureActionLogSchema() {
     }
   } catch (err) {
     logger.error({ err }, "[ensure] failed to create action_log schema");
+    throw err;
+  }
+}
+
+/**
+ * ensureActionLogFreeText
+ * WHAT: Removes CHECK constraint on action_log.action to allow new actions without schema edits.
+ * WHY: member_join and future actions were blocked by the CHECK constraint.
+ * HOW: Recreates table without CHECK constraint if it exists.
+ */
+export function ensureActionLogFreeText() {
+  try {
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='action_log'`)
+      .get();
+
+    if (!tableExists) {
+      logger.warn("[ensure] action_log table does not exist, skipping free-text migration");
+      return;
+    }
+
+    // Check if table has CHECK constraint
+    const ddlRow = db
+      .prepare(`SELECT sql FROM sqlite_schema WHERE type='table' AND name='action_log'`)
+      .get() as { sql: string } | undefined;
+
+    const hasCheck = ddlRow?.sql && /CHECK\s*\(/i.test(ddlRow.sql);
+
+    if (!hasCheck) {
+      logger.info("[ensure] action_log OK (no CHECK constraint)");
+      return;
+    }
+
+    logger.info("[ensure] running action_log free-text migration");
+
+    // Run migration in transaction
+    const migrate = db.transaction(() => {
+      const countBefore = (
+        db.prepare(`SELECT COUNT(*) as count FROM action_log`).get() as {
+          count: number;
+        }
+      ).count;
+      logger.info(`[migrate] action_log row count before: ${countBefore}`);
+
+      // 1) Create backup
+      db.exec(`CREATE TABLE IF NOT EXISTS action_log_bak AS SELECT * FROM action_log`);
+      logger.info(`[migrate] created action_log_bak with ${countBefore} rows`);
+
+      // 2) Drop existing indexes and table
+      db.exec(`DROP INDEX IF EXISTS idx_action_log_guild_time`);
+      db.exec(`DROP INDEX IF EXISTS idx_action_log_actor_time`);
+      db.exec(`DROP INDEX IF EXISTS idx_action_log_app`);
+      db.exec(`DROP TABLE action_log`);
+
+      // 3) Create FINAL schema without CHECK constraint
+      db.exec(`
+        CREATE TABLE action_log (
+          id            INTEGER PRIMARY KEY AUTOINCREMENT,
+          guild_id      TEXT NOT NULL,
+          app_id        TEXT,
+          app_code      TEXT,
+          actor_id      TEXT NOT NULL,
+          subject_id    TEXT,
+          action        TEXT NOT NULL,
+          reason        TEXT,
+          meta_json     TEXT,
+          created_at_s  INTEGER NOT NULL
+        )
+      `);
+      logger.info(`[migrate] created final action_log table (no CHECK constraint)`);
+
+      // 4) Restore data from backup
+      db.prepare(
+        `INSERT INTO action_log (id, guild_id, app_id, app_code, actor_id, subject_id, action, reason, meta_json, created_at_s)
+         SELECT id, guild_id, app_id, app_code, actor_id, subject_id, action, reason, meta_json, created_at_s
+         FROM action_log_bak`
+      ).run();
+
+      const countAfter = (
+        db.prepare(`SELECT COUNT(*) as count FROM action_log`).get() as {
+          count: number;
+        }
+      ).count;
+      logger.info(`[migrate] restored ${countAfter} rows to action_log`);
+
+      if (countBefore !== countAfter) {
+        throw new Error(`[migrate] row count mismatch: before=${countBefore}, after=${countAfter}`);
+      }
+
+      // 5) Drop backup
+      db.exec(`DROP TABLE action_log_bak`);
+
+      // 6) Recreate indexes
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_action_log_guild_time ON action_log(guild_id, created_at_s DESC)`
+      );
+      db.exec(
+        `CREATE INDEX IF NOT EXISTS idx_action_log_actor_time ON action_log(actor_id, created_at_s DESC)`
+      );
+      db.exec(`CREATE INDEX IF NOT EXISTS idx_action_log_app ON action_log(app_id)`);
+
+      logger.info(
+        `[migrate] action_log migration completed successfully (${countBefore} rows preserved)`
+      );
+    });
+
+    migrate(); // Execute transaction
+
+    logger.info("[ensure] action_log upgraded (free-text actions)");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to upgrade action_log table");
     throw err;
   }
 }

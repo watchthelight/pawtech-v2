@@ -78,10 +78,11 @@ export function setLoggingChannelId(guildId: string, channelId: string): void {
     ).run(guildId, channelId, now);
 
     logger.info({ guildId, channelId }, "[config] logging_channel_id updated");
-  } catch (err: any) {
+  } catch (err: unknown) {
     // If the column doesn't exist, this means the migration hasn't run yet
     // Provide a helpful error message
-    if (err?.message?.includes("has no column named logging_channel_id")) {
+    const error = err as Error;
+    if (error?.message?.includes("has no column named logging_channel_id")) {
       logger.error(
         { err, guildId, channelId },
         "[config] guild_config table missing logging_channel_id column - database migration may not have run. Restart the bot to apply migrations."

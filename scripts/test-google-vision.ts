@@ -29,8 +29,9 @@ console.log(`\n=== Google Cloud Vision SafeSearch Testing ===`);
 console.log(`Directory: ${testDir}\n`);
 
 // Get all image files
-const files = fs.readdirSync(testDir)
-  .filter(f => /\.(jpg|jpeg|png|gif)$/i.test(f))
+const files = fs
+  .readdirSync(testDir)
+  .filter((f) => /\.(jpg|jpeg|png|gif)$/i.test(f))
   .sort();
 
 console.log(`Found ${files.length} images to test\n`);

@@ -15,6 +15,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 export const MODAL_PAGE_RE = /^v1:modal:([^:]+):p(\d+)$/;
 export const BTN_DECIDE_RE = /^v1:decide:(approve|reject|kick|claim):code([0-9A-F]{6})$/;
+export const BTN_MODMAIL_RE = /^v1:decide:modmail:code([0-9A-F]{6})$/;
 export const BTN_PERM_REJECT_RE = /^v1:decide:permreject:code([0-9A-F]{6})$/;
 export const BTN_COPY_UID_RE = /^v1:decide:copyuid:code([0-9A-F]{6}):user(\d+)$/;
 export const BTN_VIEW_SRC_RE = /^v1:avatar:viewsrc:code([0-9A-F]{6})$/;

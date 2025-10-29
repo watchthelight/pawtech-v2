@@ -12,16 +12,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
-
-/**
- * Check if column exists in table
- */
-function columnExists(db: Database, table: string, column: string): boolean {
-  const result = db
-    .prepare(`SELECT COUNT(*) as count FROM pragma_table_info(?) WHERE name=?`)
-    .get(table, column) as { count: number };
-  return result.count > 0;
-}
+import { columnExists, recordMigration, enableForeignKeys, getRowCount } from "./lib/helpers.js";
 
 /**
  * Migration: Add manual flag support to user_activity
@@ -33,7 +24,7 @@ export function migrate008ManualFlags(db: Database): void {
   logger.info("[migration 008] Starting: add manual flag support");
 
   // Ensure foreign keys are enabled
-  db.pragma("foreign_keys = ON");
+  enableForeignKeys(db);
 
   // ==============================================================
   // Step 1: Add flagged_reason column
@@ -90,42 +81,12 @@ export function migrate008ManualFlags(db: Database): void {
   // Verification
   // ==============================================================
 
-  const activityCount = db.prepare(`SELECT COUNT(*) as count FROM user_activity`).get() as {
-    count: number;
-  };
+  const activityCount = getRowCount(db, "user_activity");
 
-  logger.info(
-    { count: activityCount.count },
-    "[migration 008] Verification: user_activity row count"
-  );
+  logger.info({ count: activityCount }, "[migration 008] Verification: user_activity row count");
 
   // Record migration
   recordMigration(db, "008", "manual_flags");
 
-  logger.info("[migration 008] Migration completed successfully");
-}
-
-/**
- * Records migration in schema_migrations table
- */
-function recordMigration(db: Database, version: string, name: string): void {
-  // Ensure schema_migrations table exists
-  db.exec(`
-    CREATE TABLE IF NOT EXISTS schema_migrations (
-      version     TEXT PRIMARY KEY,
-      name        TEXT NOT NULL,
-      applied_at  INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
-    )
-  `);
-
-  // Record migration (idempotent - ON CONFLICT DO NOTHING)
-  db.prepare(
-    `
-    INSERT INTO schema_migrations (version, name, applied_at)
-    VALUES (?, ?, strftime('%s', 'now'))
-    ON CONFLICT(version) DO NOTHING
-  `
-  ).run(version, name);
-
-  logger.info({ version, name }, "[migration] Recorded in schema_migrations");
+  logger.info("[migration 008] ✅ Complete");
 }
