@@ -1,13 +1,16 @@
 /**
  * Pawtropolis Tech — src/commands/update.ts
- * WHAT: /update command with activity and status subcommands
- * WHY: Separate control over bot activity (Playing/Watching) vs custom status (green text)
+ * WHAT: /update command with activity, status, banner, and avatar subcommands
+ * WHY: Centralized control over bot appearance and presence
  * FLOWS:
  *  - /update activity: Sets activity with type (Playing/Watching/Listening/Competing)
  *  - /update status: Sets custom status (the green text below username)
+ *  - /update banner: Updates bot profile banner, gate message, welcome message, and website
+ *  - /update avatar: Updates bot profile picture (supports static images and animated GIFs)
  * DOCS:
  *  - Activities: https://discord.js.org/#/docs/discord.js/main/typedef/ActivitiesOptions
  *  - Custom Status: Use ActivityType.Custom with state field
+ *  - User.setAvatar: https://discord.js.org/#/docs/discord.js/main/class/ClientUser?scrollTo=setAvatar
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -27,7 +30,7 @@ import sharp from "sharp";
 
 export const data = new SlashCommandBuilder()
   .setName("update")
-  .setDescription("Update bot activity, status, or banner")
+  .setDescription("Update bot activity, status, banner, or avatar")
   .addSubcommand((sub) =>
     sub
       .setName("activity")
@@ -76,6 +79,17 @@ export const data = new SlashCommandBuilder()
           .setDescription("Banner image (PNG/JPG/WebP, max 10MB, 16:9 recommended)")
           .setRequired(true)
       )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("avatar")
+      .setDescription("Update bot profile picture")
+      .addAttachmentOption((option) =>
+        option
+          .setName("image")
+          .setDescription("Avatar image (PNG/JPG/WebP/GIF, max 10MB, square recommended)")
+          .setRequired(true)
+      )
   );
 
 const ACTIVITY_TYPE_MAP: Record<string, ActivityType> = {
@@ -110,6 +124,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     await handleStatusUpdate(ctx, user);
   } else if (subcommand === "banner") {
     await handleBannerUpdate(ctx);
+  } else if (subcommand === "avatar") {
+    await handleAvatarUpdate(ctx);
   }
 }
 
@@ -324,6 +340,84 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
         "• `assets/banner.webp` (saved)",
         "",
         "**Note:** Discord server banner is managed separately via Server Settings.",
+      ].join("\n"),
+    });
+  });
+}
+
+async function handleAvatarUpdate(ctx: CommandContext<ChatInputCommandInteraction>) {
+  const { interaction } = ctx;
+
+  // Defer reply since image processing takes time
+  await withStep(ctx, "defer_reply", async () => {
+    await interaction.deferReply();
+  });
+
+  // Get attachment
+  const attachment = await withStep(ctx, "validate_attachment", async () => {
+    const att = interaction.options.getAttachment("image", true);
+
+    // Validate file type (allow GIF for animated avatars)
+    if (!att.contentType?.startsWith("image/")) {
+      throw new Error("Attachment must be an image");
+    }
+
+    // Validate file size (10MB limit)
+    if (att.size > 10 * 1024 * 1024) {
+      throw new Error("Image must be less than 10MB");
+    }
+
+    return att;
+  });
+
+  // Download image
+  const imageBuffer = await withStep(ctx, "download_image", async () => {
+    const response = await fetch(attachment.url);
+    if (!response.ok) {
+      throw new Error(`Failed to download image: ${response.statusText}`);
+    }
+    return Buffer.from(await response.arrayBuffer());
+  });
+
+  // Process image - keep GIFs as-is, convert others to PNG
+  const avatarBuffer = await withStep(ctx, "process_image", async () => {
+    // If it's a GIF, keep it as-is for animation
+    if (attachment.contentType === "image/gif") {
+      logger.info("Keeping GIF format for animated avatar");
+      return imageBuffer;
+    }
+
+    // Convert to PNG for static images
+    const png = await sharp(imageBuffer)
+      .resize({ width: 1024, height: 1024, fit: "cover", position: "center" })
+      .png({ quality: 100, compressionLevel: 6 })
+      .toBuffer();
+
+    logger.info({ originalSize: imageBuffer.length, pngSize: png.length }, "Avatar processed to PNG");
+    return png;
+  });
+
+  // Update bot avatar
+  await withStep(ctx, "update_bot_avatar", async () => {
+    if (!interaction.client.user) {
+      throw new Error("Bot user not available");
+    }
+
+    await interaction.client.user.setAvatar(avatarBuffer);
+    logger.info({ size: avatarBuffer.length, isGif: attachment.contentType === "image/gif" }, "Bot avatar updated");
+  });
+
+  await withStep(ctx, "final_reply", async () => {
+    const isAnimated = attachment.contentType === "image/gif";
+    await interaction.editReply({
+      content: [
+        "✅ Avatar updated successfully!",
+        "",
+        "**Updated:**",
+        `• Bot profile picture (${isAnimated ? "animated GIF" : "static image"})`,
+        "• Visible immediately across all servers",
+        "",
+        "**Note:** Avatar changes may take a few minutes to propagate across Discord.",
       ].join("\n"),
     });
   });

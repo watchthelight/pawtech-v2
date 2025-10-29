@@ -85,15 +85,25 @@ export async function execute(message: Message) {
   // Extract captured text
   const raw = match[1] ?? "";
 
-  // Normalize: collapse multiple spaces, trim, limit to 80 chars, escape mentions
-  const name = raw
+  // Normalize: collapse multiple spaces, trim, escape mentions
+  let name = raw
     .replace(/\s+/g, " ")
     .trim()
-    .slice(0, 80)
     .replace(/[@#]/g, "");
 
   // Skip if name is empty after normalization
   if (!name) return;
+
+  // Discord message limit is 2000 characters
+  // Our response format is "Hi {name}, I'm dad." which adds 14 characters
+  const DISCORD_LIMIT = 2000;
+  const RESPONSE_OVERHEAD = 14; // "Hi " (3) + ", I'm dad." (11) = 14
+  const maxNameLength = DISCORD_LIMIT - RESPONSE_OVERHEAD;
+
+  // Truncate name if needed to fit within Discord's limit
+  if (name.length > maxNameLength) {
+    name = name.slice(0, maxNameLength);
+  }
 
   // Send dad joke reply
   try {
