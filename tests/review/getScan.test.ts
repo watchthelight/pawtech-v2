@@ -19,12 +19,13 @@ describe("getScan()", () => {
 
     const result = getScan("missing-app");
     expect(result).toEqual({
+      avatarUrl: null,
       finalPct: 0,
+      reason: "none",
       nsfwScore: null,
       edgeScore: 0,
-      furry_score: 0,
-      scalie_score: 0,
-      reason: "none",
+      furryScore: 0,
+      scalieScore: 0,
       evidence: {
         hard: [],
         soft: [],
@@ -40,12 +41,13 @@ describe("getScan()", () => {
 
     const result = getScan("no-row");
     expect(result).toEqual({
+      avatarUrl: null,
       finalPct: 0,
+      reason: "none",
       nsfwScore: null,
       edgeScore: 0,
-      furry_score: 0,
-      scalie_score: 0,
-      reason: "none",
+      furryScore: 0,
+      scalieScore: 0,
       evidence: {
         hard: [],
         soft: [],
@@ -57,22 +59,27 @@ describe("getScan()", () => {
   it("maps database row fields to camelCase with defaults", () => {
     vi.spyOn(db, "prepare").mockReturnValue({
       get: () => ({
+        avatar_url: "https://example.com/avatar.png",
         nsfw_score: 0.42,
         edge_score: null,
         final_pct: 37,
         furry_score: null,
         scalie_score: null,
         reason: null,
+        evidence_hard: null,
+        evidence_soft: null,
+        evidence_safe: null,
       }),
     } as any);
 
     const result = getScan("app-123");
     expect(result).toEqual({
+      avatarUrl: "https://example.com/avatar.png",
       finalPct: 37,
       nsfwScore: 0.42,
       edgeScore: 0,
-      furry_score: 0,
-      scalie_score: 0,
+      furryScore: 0,
+      scalieScore: 0,
       reason: "none",
       evidence: {
         hard: [],

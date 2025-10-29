@@ -10,6 +10,7 @@ import { data as modstatsData } from "./modstats.js";
 import { data as sendData } from "./send.js";
 import { data as resetdataData } from "./resetdata.js";
 import { data as flagData } from "./flag.js";
+import { data as sampleData } from "./sample.js";
 
 export function buildCommands() {
   return [
@@ -29,6 +30,7 @@ export function buildCommands() {
     sendData.toJSON(),
     resetdataData.toJSON(),
     flagData.toJSON(),
+    sampleData.toJSON(),
     // Note: Context menu commands would be registered separately via a different API endpoint
     // modmailContextMenu.toJSON(),
   ];

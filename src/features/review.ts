@@ -48,6 +48,11 @@ import { getScan, googleReverseImageUrl } from "./avatarScan.js";
 import { GATE_SHOW_AVATAR_RISK } from "../lib/env.js";
 import type { GuildConfig } from "../lib/config.js";
 import { replyOrEdit, ensureDeferred } from "../lib/cmdWrap.js";
+import {
+  buildReviewEmbed,
+  buildActionRows,
+  type BuildEmbedOptions,
+} from "../ui/reviewCard.js";
 import { shortCode } from "../lib/ids.js";
 import { logActionPretty } from "../logging/pretty.js";
 import {
@@ -2400,7 +2405,7 @@ export function renderReviewEmbed(
       }
 
       // Add API disclaimer
-      lines.push("\\n*Google Vision API - ~75% accuracy on NSFW content*");
+      lines.push("*Google Vision API - 75% accuracy on NSFW content*");
 
       embed.addFields({
         name: "Avatar Risk",
@@ -2755,17 +2760,16 @@ export async function ensureReviewMessage(
     const { inSpan } = await import("../lib/sentry.js");
 
     const embed = await inSpan("review.card.render", () => {
-      return renderReviewEmbed(
-        app,
+      return buildReviewEmbed(app, {
         answers,
         flags,
         avatarScan,
         claim,
-        accountCreatedAt ?? undefined,
+        accountCreatedAt: accountCreatedAt ?? undefined,
         modmailTicket,
         member,
-        recentActions
-      );
+        recentActions,
+      });
     });
 
     const renderMs = Date.now() - renderStart;
@@ -2779,13 +2783,7 @@ export async function ensureReviewMessage(
       "[review] card_render"
     );
 
-    const components = buildDecisionComponents(
-      app.status,
-      app.id,
-      app.user_id,
-      claim,
-      mapping?.message_id
-    );
+    const components = buildActionRows(app, claim);
 
     const isRisky = avatarScan ? avatarScan.reason !== "none" && avatarScan.finalPct > 0 : false;
     if (isRisky) {

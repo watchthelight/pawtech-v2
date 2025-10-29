@@ -143,6 +143,9 @@ commands.set(resetdata.data.name, wrapCommand("resetdata", resetdata.execute));
 import * as flag from "./commands/flag.js";
 commands.set(flag.data.name, wrapCommand("flag", flag.execute));
 
+import * as sample from "./commands/sample.js";
+commands.set(sample.data.name, wrapCommand("sample", sample.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work
@@ -666,6 +669,16 @@ client.on("interactionCreate", async (interaction) => {
 
         if (interaction.isButton()) {
           const { customId } = interaction;
+
+          // Check if this is a sample card button (non-functional preview)
+          if (customId.includes("SAMPLE")) {
+            await interaction.reply({
+              content: "⚠️ This is a sample preview card. Buttons are non-functional.",
+              ephemeral: true,
+            });
+            succeeded = true;
+            return;
+          }
 
           // if this regex breaks, I cry
           const decideMatch = customId.match(BTN_DECIDE_RE);

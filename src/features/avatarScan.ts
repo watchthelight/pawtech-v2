@@ -12,7 +12,17 @@ import type { User } from "discord.js";
 import { logger } from "../lib/logger.js";
 import { db } from "../db/db.js";
 import type { GuildConfig } from "../lib/config.js";
-import type { RiskReason, RiskSummary } from "./avatarRisk.js";
+
+// Types for NSFW risk assessment
+export type RiskReason = "hard_evidence" | "soft_evidence" | "suggestive" | "none";
+type EvidenceEntry = { tag: string; p: number };
+type RiskSummary = {
+  evidence: {
+    hard: EvidenceEntry[];
+    soft: EvidenceEntry[];
+    safe: EvidenceEntry[];
+  };
+};
 
 export type ScanOptions = {
   traceId?: string | null;
@@ -240,19 +250,30 @@ export async function storeScan(
   }
 }
 
-export function getScan(applicationId: string): ScanResult | null {
+export function getScan(applicationId: string): ScanResult {
   /**
    * getScan
    * WHAT: Retrieves a previously stored avatar scan from SQLite
    * WHY: Review cards show the scan results without re‑running
    * PARAMS:
    *  - applicationId: The application.id
-   * RETURNS: ScanResult or null if not found
-   * THROWS: Never throws; logs errors and returns null
+   * RETURNS: ScanResult with safe defaults if not found or error occurs
+   * THROWS: Never throws; logs errors and returns safe defaults
    */
+  const safeDefault: ScanResult = {
+    avatarUrl: null,
+    finalPct: 0,
+    reason: "none",
+    nsfwScore: null,
+    edgeScore: 0,
+    furryScore: 0,
+    scalieScore: 0,
+    evidence: { hard: [], soft: [], safe: [] },
+  };
+
   if (!db) {
     logger.warn({ applicationId }, "[avatarScan] db not available, cannot get scan");
-    return null;
+    return safeDefault;
   }
 
   try {
@@ -266,7 +287,7 @@ export function getScan(applicationId: string): ScanResult | null {
       .get(applicationId) as Partial<AvatarScanRow> | undefined;
 
     if (!row) {
-      return null;
+      return safeDefault;
     }
 
     const evidence = deserializeEvidence(
@@ -287,7 +308,7 @@ export function getScan(applicationId: string): ScanResult | null {
     };
   } catch (err) {
     logger.warn({ err, applicationId }, "[avatarScan] failed to get scan");
-    return null;
+    return safeDefault;
   }
 }
 
@@ -303,4 +324,31 @@ export function googleReverseImageUrl(imageUrl: string): string {
    */
   const encoded = encodeURIComponent(imageUrl);
   return `https://lens.google.com/uploadbyurl?url=${encoded}`;
+}
+
+export function buildReverseImageUrl(
+  config: Pick<GuildConfig, "image_search_url_template">,
+  avatarUrl: string
+): string {
+  /**
+   * buildReverseImageUrl
+   * WHAT: Builds a reverse image search URL using the guild's configured template
+   * WHY: Allows guilds to customize their preferred image search service
+   * PARAMS:
+   *  - config: Guild config with image_search_url_template
+   *  - avatarUrl: The avatar URL to search for
+   * RETURNS: A formatted URL for reverse image search
+   * THROWS: Never throws
+   */
+  const template = config.image_search_url_template;
+  const encoded = encodeURIComponent(avatarUrl);
+
+  // If template contains {avatarUrl} placeholder, replace it
+  if (template.includes("{avatarUrl}")) {
+    return template.replace("{avatarUrl}", encoded);
+  }
+
+  // Otherwise append as query parameter
+  const separator = template.includes("?") ? "&" : "?";
+  return `${template}${separator}avatar=${encoded}`;
 }
