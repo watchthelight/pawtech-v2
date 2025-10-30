@@ -218,8 +218,9 @@ export function getStatusColor(status: ApplicationStatus): number {
 
 /**
  * Format Discord timestamp tag
+ * Formats: F = Full date/time, R = Relative, f = Short date/time
  */
-export function discordTimestamp(epochSec: number, format: "f" | "R" = "R"): string {
+export function discordTimestamp(epochSec: number, format: "F" | "f" | "R" = "R"): string {
   return `<t:${epochSec}:${format}>`;
 }
 
@@ -269,45 +270,43 @@ export function buildReviewEmbed(
     embed.setThumbnail(app.avatarUrl);
   }
 
-  // Description: Only show if rejected
+  // Description: Show rejection reason in full
   if (app.status === "rejected" && app.resolution_reason) {
     const reason = app.resolution_reason;
 
     if (reason.length > 3800) {
       // Reason attached as file
-      embed.setDescription(`**Decision:** Rejected\n**Reason:** Attached as rejection-reason.txt`);
+      embed.setDescription(`**Decision:** Rejected\n\n**Reason:**\nAttached as rejection-reason.txt (too long to display)`);
     } else {
-      // Show full reason in description
-      embed.setDescription(`**Decision:** Rejected\n**Reason:**\n${reason}`);
+      // Show full reason in code block for better formatting
+      embed.setDescription(`**Decision:** Rejected\n\n**Reason:**\n\`\`\`text\n${reason}\n\`\`\``);
     }
+  } else if (app.status === "approved") {
+    embed.setDescription(`**Decision:** Approved`);
   }
 
-  // Field: Meta
+  // Field: Application Info
   const metaLines: string[] = [];
 
-  // Add line break after field name
-  metaLines.push("");
-
-  // Submitted time
-  metaLines.push(`**Submitted:** ${discordTimestamp(submittedEpoch, "R")}`);
+  // Submitted time with full date
+  metaLines.push(`**Submitted:** ${discordTimestamp(submittedEpoch, "F")} (${discordTimestamp(submittedEpoch, "R")})`);
 
   // Claim status
   if (claim) {
-    metaLines.push(`**Claimed by:** <@${claim.reviewer_id}>`);
+    const claimEpoch = claim.claimed_at;
+    metaLines.push(`**Claimed by:** <@${claim.reviewer_id}> • ${discordTimestamp(claimEpoch, "R")}`);
   } else {
     metaLines.push(`**Claimed by:** Unclaimed`);
   }
 
-  // Account age
+  // Account age with full date
   if (accountCreatedAt && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
     const accountSec = Math.floor(accountCreatedAt / 1000);
-    const accountAge = fmtRel(accountSec);
-    metaLines.push(`**Account created:** ${accountAge}`);
-    metaLines.push(""); // Line break after Account age
+    metaLines.push(`**Account created:** ${discordTimestamp(accountSec, "F")} (${discordTimestamp(accountSec, "R")})`);
   }
 
   embed.addFields({
-    name: "Application:",
+    name: "──────────── Application ────────────",
     value: metaLines.join("\n"),
     inline: false,
   });
@@ -315,16 +314,18 @@ export function buildReviewEmbed(
   // Fields: Questions + Answers (each in code block)
   const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
 
-  if (orderedAnswers.length === 0) {
-    embed.addFields({
-      name: "Questions",
-      value: "No answers submitted yet",
-      inline: false,
-    });
-  } else {
+  // Add Q&A section header
+  embed.addFields({
+    name: "────────────── Q&A ──────────────",
+    value: orderedAnswers.length === 0 ? "No answers submitted yet" : "\u200b", // Zero-width space for separator
+    inline: false,
+  });
+
+  if (orderedAnswers.length > 0) {
     for (const qa of orderedAnswers) {
       const question = qa.question || `Question ${qa.q_index + 1}`;
-      const answer = truncateAnswer(qa.answer, 200);
+      // Don't truncate answers - show full text
+      const answer = qa.answer || "(no response)";
       const wrappedAnswer = wrapCode(answer, 72);
 
       embed.addFields({
@@ -338,14 +339,11 @@ export function buildReviewEmbed(
   // Field: Status
   const statusLines: string[] = [];
 
-  // Add line break after field name
-  statusLines.push("");
-
   // Modmail status
   if (modmailTicket) {
     if (modmailTicket.status === "open" && modmailTicket.thread_id) {
       statusLines.push(
-        `**Modmail:** [Open](https://discord.com/channels/${app.guild_id}/${modmailTicket.thread_id})`
+        `**Modmail:** [Open Thread](https://discord.com/channels/${app.guild_id}/${modmailTicket.thread_id})`
       );
     } else if (
       modmailTicket.status === "closed" &&
@@ -362,48 +360,44 @@ export function buildReviewEmbed(
     statusLines.push(`**Modmail:** None`);
   }
 
-  // Account created
-  if (accountCreatedAt && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
-    const accountSec = Math.floor(accountCreatedAt / 1000);
-    statusLines.push(
-      `**Account created:** ${discordTimestamp(accountSec, "f")} • ${discordTimestamp(accountSec, "R")}`
-    );
-
-    if (member === null) {
-      statusLines.push("*(Left server)*");
-    }
+  // Member status
+  if (member === null) {
+    statusLines.push(`**Member status:** Left server`);
+  } else {
+    statusLines.push(`**Member status:** In server`);
   }
 
   // Avatar risk
   if (avatarScan) {
     const pct = avatarScan.finalPct ?? 0;
     const reverseLink = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
-    statusLines.push(`**Avatar risk:** ${pct}% ([Reverse Search](${reverseLink}))`);
-    statusLines.push(`*Google Vision API - 75% accuracy on NSFW content*`);
+    statusLines.push(`**Avatar risk:** ${pct}% • [Reverse Search](${reverseLink})`);
+    statusLines.push(`*Google Vision API - 75% accuracy estimate*`);
   }
 
   embed.addFields({
-    name: "Status",
+    name: "─────────────── Status ───────────────",
     value: statusLines.join("\n"),
     inline: false,
   });
 
-  // Field: History (last 3)
+  // Field: History (last 3 actions with full timestamps)
   if (recentActions && recentActions.length > 0) {
     const historyLines = recentActions.slice(0, 3).map((action) => {
-      const actionTime = fmtRel(action.created_at);
-      let line = `• ${action.action} by <@${action.moderator_id}> — ${actionTime}`;
+      // Use Discord timestamp formatting for consistency
+      const timestamp = `${discordTimestamp(action.created_at, "F")}`;
+      let line = `• **${action.action}** by <@${action.moderator_id}>\n  ${timestamp}`;
       return line;
     });
 
     embed.addFields({
-      name: "History (last 3)",
-      value: historyLines.join("\n"),
+      name: "───────────── History (Last 3) ─────────────",
+      value: historyLines.join("\n\n"), // Double newline for spacing
       inline: false,
     });
   } else if (recentActions) {
     embed.addFields({
-      name: "History (last 3)",
+      name: "───────────── History (Last 3) ─────────────",
       value: "No recent history",
       inline: false,
     });
@@ -412,7 +406,7 @@ export function buildReviewEmbed(
   // Flags (if any)
   if (flags.length > 0) {
     embed.addFields({
-      name: "Flags",
+      name: "──────────────── Flags ────────────────",
       value: flags.join("\n"),
       inline: false,
     });

@@ -31,13 +31,18 @@ export const data = new SlashCommandBuilder()
   .setDMPermission(false)
   .addSubcommand((sub) =>
     sub
-      .setName("review")
+      .setName("reviewcard")
       .setDescription("Preview a sample review card")
-      .addBooleanOption((opt) =>
+      .addStringOption((opt) =>
         opt
-          .setName("rejected")
-          .setDescription("Generate a rejected application sample")
+          .setName("status")
+          .setDescription("Application status")
           .setRequired(false)
+          .addChoices(
+            { name: "Pending", value: "pending" },
+            { name: "Accepted", value: "approved" },
+            { name: "Rejected", value: "rejected" }
+          )
       )
       .addUserOption((opt) =>
         opt
@@ -60,7 +65,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   const { interaction } = ctx;
   const subcommand = interaction.options.getSubcommand();
 
-  if (subcommand === "review") {
+  if (subcommand === "reviewcard") {
     await handleReviewPreview(interaction);
   }
 }
@@ -82,14 +87,14 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
     return;
   }
 
-  const rejected = interaction.options.getBoolean("rejected") ?? false;
+  const status = (interaction.options.getString("status") as "pending" | "approved" | "rejected") ?? "pending";
   const applicantOverride = interaction.options.getUser("applicant");
   const claimedByOverride = interaction.options.getUser("claimed_by");
   const long = interaction.options.getBoolean("long") ?? false;
 
   // Determine which answers to use
   let answers = SAMPLE_ANSWERS_STANDARD;
-  if (rejected) {
+  if (status === "rejected") {
     answers = SAMPLE_ANSWERS_REJECTED;
   } else if (long) {
     answers = SAMPLE_ANSWERS_LONG;
@@ -100,14 +105,14 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
     id: "SAMPLE01" + ulid().slice(-6), // SAMPLE01 + random suffix
     guild_id: interaction.guildId!,
     user_id: applicantOverride?.id ?? "123456789012345678",
-    status: rejected ? "rejected" : "submitted",
+    status: status === "pending" ? "submitted" : status,
     created_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(), // 3m ago
     submitted_at: new Date(Date.now() - 3 * 60 * 1000).toISOString(),
     updated_at: new Date().toISOString(),
-    resolved_at: rejected ? new Date().toISOString() : null,
-    resolver_id: rejected ? (claimedByOverride?.id ?? interaction.user.id) : null,
-    resolution_reason: rejected ? SAMPLE_REJECTION_REASON : null,
-    userTag: applicantOverride?.tag ?? "watchthelight#0001",
+    resolved_at: status !== "pending" ? new Date().toISOString() : null,
+    resolver_id: status !== "pending" ? (claimedByOverride?.id ?? interaction.user.id) : null,
+    resolution_reason: status === "rejected" ? SAMPLE_REJECTION_REASON : null,
+    userTag: applicantOverride?.tag ?? "SampleUser#0001",
     avatarUrl: applicantOverride?.displayAvatarURL() ?? "https://cdn.discordapp.com/embed/avatars/0.png",
   };
 

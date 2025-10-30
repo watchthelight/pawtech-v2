@@ -77,7 +77,23 @@ export async function createWebServer() {
     timeWindow: "1 minute",
   });
 
-  // 5. Static file serving for website
+  // 5. Static file serving for assets (banner, etc.)
+  const assetsPath = join(process.cwd(), "assets");
+  await fastify.register(fastifyStatic, {
+    root: assetsPath,
+    prefix: "/assets/",
+    decorateReply: false, // Don't override sendFile method
+    setHeaders: (res, path) => {
+      // No cache for banner files - always fetch latest
+      if (path.includes("banner")) {
+        res.setHeader("Cache-Control", "no-cache, no-store, must-revalidate, max-age=0");
+        res.setHeader("Pragma", "no-cache");
+        res.setHeader("Expires", "0");
+      }
+    },
+  });
+
+  // 6. Static file serving for website
   const websitePath = join(process.cwd(), "website");
   await fastify.register(fastifyStatic, {
     root: websitePath,
