@@ -48,13 +48,18 @@ import { getScan, googleReverseImageUrl } from "./avatarScan.js";
 import { GATE_SHOW_AVATAR_RISK } from "../lib/env.js";
 import type { GuildConfig } from "../lib/config.js";
 import { replyOrEdit, ensureDeferred } from "../lib/cmdWrap.js";
-import { buildReviewEmbed, buildActionRows, type BuildEmbedOptions } from "../ui/reviewCard.js";
+import {
+  buildReviewEmbedV3 as buildReviewEmbed,
+  buildActionRowsV2 as buildActionRows,
+  type BuildEmbedOptions,
+} from "../ui/reviewCard.js";
 import { shortCode } from "../lib/ids.js";
 import { logActionPretty } from "../logging/pretty.js";
 import {
   BTN_DECIDE_RE,
   BTN_PERM_REJECT_RE,
   BTN_COPY_UID_RE,
+  BTN_MODMAIL_RE,
   BTN_VIEW_SRC_RE,
   MODAL_18_RE,
   MODAL_REJECT_RE,
@@ -1437,7 +1442,7 @@ export async function handleRejectModal(interaction: ModalSubmitInteraction) {
 }
 
 export async function handleModmailButton(interaction: ButtonInteraction) {
-  const match = /^v1:decide:modmail:code([0-9A-F]{6})$/.exec(interaction.customId);
+  const match = BTN_MODMAIL_RE.exec(interaction.customId);
   if (!match) return;
   if (!requireInteractionStaff(interaction)) return;
 
@@ -2838,19 +2843,13 @@ export async function ensureReviewMessage(
       "[review] card_render"
     );
 
-    const components = buildActionRows(app, claim);
+    // Components built after message/channel resolution to include stable link
+    let components: ActionRowBuilder<ButtonBuilder>[] = [];
 
-    const isRisky = avatarScan ? avatarScan.reason !== "none" && avatarScan.finalPct > 0 : false;
-    if (isRisky) {
-      components.push(
-        new ActionRowBuilder<ButtonBuilder>().addComponents(
-          new ButtonBuilder()
-            .setCustomId(`v1:avatar:viewsrc:code${shortCode(app.id)}`)
-            .setLabel("View Source")
-            .setStyle(ButtonStyle.Secondary)
-        )
-      );
-    }
+    // Build components with a safe Link button target (channel link) for View Source
+    components = buildActionRows(app, claim, {
+      viewSourceUrl: `https://discord.com/channels/${app.guild_id}/${appRow.review_channel_id}`,
+    });
 
     const nowIso = new Date().toISOString();
     let message: Message | null = null;
@@ -2928,8 +2927,9 @@ export async function ensureReviewMessage(
  * Auto-deletes after 30s (staff can also delete manually via button)
  */
 export async function handlePingInUnverified(interaction: ButtonInteraction) {
-  const match = /^v1:ping:(.+)$/.exec(interaction.customId);
-  if (!match) return;
+  const legacy = /^v1:ping:(.+)$/.exec(interaction.customId);
+  const modern = /^review:ping_unverified:code([0-9A-F]{6})(?::user(\d+))?$/.exec(interaction.customId);
+  if (!legacy && !modern) return;
 
   if (!interaction.guildId || !interaction.guild) {
     await replyOrEdit(interaction, { content: "Guild only." }).catch(() => undefined);
@@ -2947,17 +2947,19 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
 
   await ensureDeferred(interaction);
 
-  const [, payload] = match;
-  // Payload format: "code{HEX6}:user{userId}"
-  const codeMatch = /code([A-F0-9]{6})/.exec(payload);
-  const userMatch = /user([0-9]+)/.exec(payload);
+  let userId: string | null = null;
+  if (modern) {
+    userId = modern[2] ?? null;
+  } else {
+    const [, payload] = legacy!;
+    const userMatch = /user([0-9]+)/.exec(payload);
+    userId = userMatch ? userMatch[1] : null;
+  }
 
-  if (!userMatch) {
+  if (!userId) {
     await replyOrEdit(interaction, { content: "Invalid ping button data." }).catch(() => undefined);
     return;
   }
-
-  const userId = userMatch[1];
   const cfg = getConfig(interaction.guildId);
 
   if (!cfg?.unverified_channel_id) {

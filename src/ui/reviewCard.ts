@@ -13,6 +13,8 @@ import {
   type AttachmentBuilder,
 } from "discord.js";
 import { shortCode } from "../lib/ids.js";
+import { formatAbsolute, formatAbsoluteUtc, fmtAgeShort, toDiscordAbs, toDiscordRel } from "../lib/timefmt.js";
+import { ts } from "../utils/dt.js";
 
 // ============================================================================
 // Types
@@ -173,20 +175,14 @@ export function truncateAnswer(text: string, maxLen: number = 200): string {
  */
 export function fmtRel(epochSec: number): string {
   const now = Math.floor(Date.now() / 1000);
-  const diff = now - epochSec;
-
-  if (diff < 60) return `${diff}s ago`;
-  if (diff < 3600) return `${Math.floor(diff / 60)}m ago`;
-  if (diff < 86400) return `${Math.floor(diff / 3600)}h ago`;
-  if (diff < 2592000) return `${Math.floor(diff / 86400)}d ago`;
-  return `${Math.floor(diff / 2592000)}mo ago`;
+  return fmtAgeShort(epochSec, now);
 }
 
 /**
  * Format timestamp as UTC string
  */
 export function fmtUtc(epochSec: number): string {
-  return new Date(epochSec * 1000).toISOString().replace("T", " ").slice(0, 19) + " UTC";
+  return formatAbsoluteUtc(epochSec);
 }
 
 /**
@@ -194,11 +190,14 @@ export function fmtUtc(epochSec: number): string {
  */
 export function fmtLocal(epochSec: number): string {
   const date = new Date(epochSec * 1000);
-  return date.toLocaleString("en-US", {
-    timeZone: "America/New_York",
-    dateStyle: "short",
-    timeStyle: "short",
-  });
+  return new Intl.DateTimeFormat("en-US", {
+    month: "2-digit",
+    day: "2-digit",
+    year: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).format(date);
 }
 
 /**
@@ -270,33 +269,35 @@ export function buildReviewEmbed(
     embed.setThumbnail(app.avatarUrl);
   }
 
-  // Description: Show rejection reason in full
+  // Description: Decision + Reason (mobile-first, single block)
+  const topSections: string[] = [];
   if (app.status === "rejected" && app.resolution_reason) {
     const reason = app.resolution_reason;
-
+    topSections.push(`**Decision**\nRejected`);
     if (reason.length > 3800) {
-      // Reason attached as file
-      embed.setDescription(`**Decision:** Rejected\n\n**Reason:**\nAttached as rejection-reason.txt (too long to display)`);
+      topSections.push(`**Reason**\nAttached as rejection-reason.txt (too long to display)`);
     } else {
-      // Show full reason in code block for better formatting
-      embed.setDescription(`**Decision:** Rejected\n\n**Reason:**\n\`\`\`text\n${reason}\n\`\`\``);
+      topSections.push(`**Reason**\n\`\`\`text\n${reason}\n\`\`\``);
     }
   } else if (app.status === "approved") {
-    embed.setDescription(`**Decision:** Approved`);
+    topSections.push(`**Decision**\nApproved`);
+  }
+  if (topSections.length > 0) {
+    embed.setDescription(topSections.join(hr));
   }
 
   // Field: Application Info
   const metaLines: string[] = [];
 
-  // Submitted time with full date
-  metaLines.push(`**Submitted:** ${discordTimestamp(submittedEpoch, "F")} (${discordTimestamp(submittedEpoch, "R")})`);
+  // Submitted time with full date (absolute, copy-pasteable)
+  metaLines.push(`Submitted: ${formatAbsolute(submittedEpoch, { hour12: false })}`);
 
   // Claim status
   if (claim) {
     const claimEpoch = claim.claimed_at;
     metaLines.push(`**Claimed by:** <@${claim.reviewer_id}> • ${discordTimestamp(claimEpoch, "R")}`);
   } else {
-    metaLines.push(`**Claimed by:** Unclaimed`);
+    metaLines.push(`Claimed by: Unclaimed`);
   }
 
   // Account age with full date
@@ -442,6 +443,161 @@ export function buildReviewEmbed(
   return embed;
 }
 
+// ============================================================================
+// Mobile-first builder (V2)
+// ============================================================================
+
+export function buildReviewEmbedV2(
+  app: ReviewCardApplication,
+  opts: BuildEmbedOptions = {}
+): EmbedBuilder {
+  const {
+    answers = [],
+    flags = [],
+    avatarScan = null,
+    claim = null,
+    accountCreatedAt = null,
+    modmailTicket = null,
+    member = null,
+    recentActions = null,
+    isSample = false,
+  } = opts;
+
+  const code = shortCode(app.id);
+  const username = app.userTag.replace(/@/g, "@\u200b");
+  const submittedEpoch = app.submitted_at
+    ? Math.floor(new Date(app.submitted_at).getTime() / 1000)
+    : Math.floor(new Date(app.created_at).getTime() / 1000);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`New Application • ${username} • App #${code}`)
+    .setColor(getStatusColor(app.status));
+  if (app.avatarUrl) embed.setThumbnail(app.avatarUrl);
+
+  const hr = "\n────────────────\n";
+  const sections: string[] = [];
+
+  if (app.status === "rejected" && app.resolution_reason) {
+    sections.push(`**Decision**\nRejected`);
+    const reason = app.resolution_reason;
+    if (reason.length > 3800) {
+      sections.push(`**Reason**\nAttached as rejection-reason.txt (too long to display)`);
+    } else {
+      sections.push(`**Reason**\n\`\`\`text\n${reason}\n\`\`\``);
+    }
+  } else if (app.status === "approved") {
+    sections.push(`**Decision**\nApproved`);
+  }
+
+  // Application meta
+  const claimed = claim ? `<@${claim.reviewer_id}>` : "Unclaimed";
+  const metaLines: string[] = [`Submitted: ${toDiscordAbs(submittedEpoch)}; Claimed by: ${claimed}`];
+  if (claim) {
+    metaLines[0] = `Submitted: ${toDiscordAbs(submittedEpoch)}`; // keep Submitted first line
+    metaLines.push(`Claimed by: ${claimed} • ${toDiscordRel(claim.claimed_at)}`);
+  }
+  if (accountCreatedAt && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
+    const accountSec = Math.floor(accountCreatedAt / 1000);
+    metaLines.push(`Account created: ${toDiscordAbs(accountSec)} (${toDiscordRel(accountSec)})`);
+  }
+  sections.push(`**Application**\n${metaLines.join("\n")}`);
+
+  // Q&A header as a field adjacent to answers
+  const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
+  if (orderedAnswers.length > 0) {
+    embed.addFields({ name: "Q&A", value: "\u200b", inline: false });
+  }
+  for (const qa of orderedAnswers) {
+    const question = qa.question || `Question ${qa.q_index + 1}`;
+    const wrapped = wrapCode(qa.answer || "(no response)", 72);
+    embed.addFields({ name: `Q${qa.q_index + 1}: ${question}`, value: wrapped, inline: false });
+  }
+
+  // Status
+  const statusLines: string[] = [];
+  if (modmailTicket) {
+    if (modmailTicket.status === "open") statusLines.push("Modmail: Open");
+    else if (modmailTicket.status === "closed") statusLines.push("Modmail: Closed");
+  } else {
+    statusLines.push("Modmail: None");
+  }
+  statusLines.push(member === null ? "Member status: Left server" : "Member status: In server");
+  if (avatarScan) {
+    const pct = avatarScan.finalPct ?? 0;
+    const reverse = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
+    statusLines.push(`Avatar risk: ${pct}% • [Reverse Search](${reverse})`);
+    statusLines.push(`*Model estimates — verify manually.*`);
+  }
+  sections.push(`**Status**\n${statusLines.join("\n")}`);
+
+  if (recentActions && recentActions.length > 0) {
+    const lines = recentActions.slice(0, 3).map((a) => {
+      const when = formatAbsolute(a.created_at, { hour12: false });
+      const verb = a.action.replace(/_/g, " ");
+      return `• ${verb} by <@${a.moderator_id}> — ${when}`;
+    });
+    sections.push(`**History (Last 3)**\n${lines.join("\n")}`);
+  }
+
+  if (flags && flags.length > 0) {
+    sections.push(`**Flags**\n${flags.join("\n")}`);
+  }
+
+  const footerText = isSample
+    ? `Sample Preview • Submitted: ${formatAbsoluteUtc(submittedEpoch)} • App ID: ${app.id.slice(0, 8)}`
+    : `Submitted: ${formatAbsoluteUtc(submittedEpoch)} • App ID: ${app.id.slice(0, 8)}`;
+  embed.setFooter({ text: footerText });
+  embed.setTimestamp(submittedEpoch * 1000);
+
+  if (sections.length > 0) embed.setDescription(sections.join("\n\n"));
+  return embed;
+}
+
+export function buildActionRowsV2(
+  app: ReviewCardApplication,
+  claim: ReviewClaimRow | null,
+  options?: { viewSourceUrl?: string }
+): ActionRowBuilder<ButtonBuilder>[] {
+  const terminal = app.status === "approved" || app.status === "rejected" || app.status === "kicked";
+  const idSuffix = `code${shortCode(app.id)}`;
+  const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  if (claim && !terminal) {
+    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`review:accept:${idSuffix}`).setLabel("Accept").setStyle(ButtonStyle.Primary),
+      new ButtonBuilder().setCustomId(`review:reject:${idSuffix}`).setLabel("Reject").setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`review:perm_reject:${idSuffix}`)
+        .setLabel("Perm Reject")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder().setCustomId(`review:kick:${idSuffix}`).setLabel("Kick").setStyle(ButtonStyle.Secondary)
+    );
+
+    const viewSourceUrl = options?.viewSourceUrl || `https://discord.com/channels/${app.guild_id}`;
+    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder().setCustomId(`review:modmail:${idSuffix}`).setLabel("Modmail").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`review:copy_uid:${idSuffix}:user${app.user_id}`)
+        .setLabel("Copy UID")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder()
+        .setCustomId(`review:ping_unverified:${idSuffix}:user${app.user_id}`)
+        .setLabel("Ping in Unverified")
+        .setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setLabel("View Source").setStyle(ButtonStyle.Link).setURL(viewSourceUrl)
+    );
+    rows.push(row1, row2);
+  } else if (!terminal) {
+    rows.push(
+      new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder().setCustomId(`review:claim:${idSuffix}`).setLabel("Claim Application").setStyle(ButtonStyle.Primary)
+      )
+    );
+  }
+
+  return rows;
+}
+
 /**
  * Estimate embed size for Discord limits
  */
@@ -459,6 +615,120 @@ function estimateEmbedSize(embed: EmbedBuilder): number {
   }
 
   return size;
+}
+
+// ============================================================================
+// Mobile-first builder (V3) — consolidates all content into description
+// ============================================================================
+
+export function buildReviewEmbedV3(
+  app: ReviewCardApplication,
+  opts: BuildEmbedOptions = {}
+): EmbedBuilder {
+  const {
+    answers = [],
+    avatarScan = null,
+    claim = null,
+    accountCreatedAt = null,
+    modmailTicket = null,
+    member = null,
+    recentActions = null,
+    isSample = false,
+  } = opts;
+
+  const code = shortCode(app.id);
+  const username = app.userTag.replace(/@/g, "@\u200b");
+  const submittedDate = app.submitted_at ? new Date(app.submitted_at) : new Date(app.created_at);
+
+  const embed = new EmbedBuilder()
+    .setTitle(`New Application • ${username} • App #${code}`)
+    .setColor(getStatusColor(app.status));
+  if (app.avatarUrl) embed.setThumbnail(app.avatarUrl);
+
+  const lines: string[] = [];
+
+  // Decision + Reason
+  if (app.status === "rejected" && app.resolution_reason) {
+    lines.push("**Decision**");
+    lines.push("Rejected");
+    lines.push("");
+    lines.push("**Reason**");
+    lines.push("```");
+    lines.push(app.resolution_reason);
+    lines.push("```");
+    lines.push("");
+  } else if (app.status === "approved") {
+    lines.push("**Decision**");
+    lines.push("Approved");
+    lines.push("");
+  }
+
+  // Application
+  lines.push("**Application**");
+  lines.push(`Submitted: ${ts(submittedDate, 'f')} • ${ts(submittedDate, 'R')}`);
+  const claimedText = claim ? `<@${claim.reviewer_id}>` : "Unclaimed";
+  lines.push(
+    claim
+      ? `Claimed by: ${claimedText} • ${ts(claim.claimed_at * 1000, 'f')}`
+      : `Claimed by: ${claimedText}`
+  );
+  if (accountCreatedAt && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
+    lines.push(`Account created: ${ts(accountCreatedAt, 'f')} • ${ts(accountCreatedAt, 'R')}`);
+  }
+  lines.push("");
+
+  // Status
+  lines.push("**Status**");
+  if (modmailTicket) {
+    lines.push(modmailTicket.status === "open" ? "Modmail: Open" : "Modmail: Closed");
+  } else {
+    lines.push("Modmail: None");
+  }
+  lines.push(member === null ? "Member status: Left server" : "Member status: In server");
+  if (avatarScan) {
+    const pct = avatarScan.finalPct ?? 0;
+    const reverse = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
+    lines.push(`Avatar risk: ${pct}% • [Reverse Search](${reverse})`);
+    lines.push("*Model estimates — verify manually.*");
+  }
+  lines.push("");
+
+  // History
+  if (recentActions && recentActions.length > 0) {
+    lines.push("**History (Last 3)**");
+    for (const a of recentActions.slice(0, 3)) {
+      const verb = a.action.replace(/_/g, " ");
+      lines.push(`• ${verb} by <@${a.moderator_id}> — ${ts(a.created_at * 1000, 'f')}`);
+    }
+    lines.push("");
+  }
+
+  // Answers at bottom
+  const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
+  lines.push("**Answers:**");
+  if (orderedAnswers.length > 0) {
+    for (let i = 0; i < orderedAnswers.length; i++) {
+      const qa = orderedAnswers[i];
+      const qNum = i + 1;
+      const question = qa.question || `Question ${qNum}`;
+      lines.push(`Q${qNum}: ${question}`);
+      lines.push("```");
+      lines.push(qa.answer || "");
+      lines.push("```");
+      lines.push("");
+    }
+  } else {
+    lines.push("(no answers)");
+    lines.push("");
+  }
+
+  // Footer: no submitted in footer
+  const footerText = isSample ? `Sample Preview • App ID: ${app.id.slice(0, 8)}` : `App ID: ${app.id.slice(0, 8)}`;
+  embed.setFooter({ text: footerText });
+  embed.setTimestamp(submittedDate.getTime());
+  embed.setDescription(lines.join("\n"));
+
+  return embed;
 }
 
 // ============================================================================

@@ -12,6 +12,46 @@
 import { nowUtc } from "./time.js";
 
 /**
+ * WHAT: Format an absolute timestamp as a copy-pasteable string.
+ * WHY: Embeds on mobile should show stable, readable times without <t:...>.
+ * FORMAT: "Thursday, October 30, 2025 at 06:41"
+ * NOTE: Uses en-US locale by default with 24-hour clock for predictability.
+ */
+export function formatAbsolute(
+  epochSec: number,
+  options?: { locale?: string; timeZone?: string; hour12?: boolean }
+): string {
+  const { locale = "en-US", timeZone, hour12 = false } = options || {};
+  const d = new Date(epochSec * 1000);
+  const date = new Intl.DateTimeFormat(locale, {
+    weekday: "long",
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+    timeZone,
+  }).format(d);
+  const time = new Intl.DateTimeFormat(locale, {
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12,
+    timeZone,
+  }).format(d);
+  return `${date} at ${time}`;
+}
+
+/**
+ * WHAT: Format an absolute UTC timestamp for concise footer use.
+ * FORMAT: "2025-10-30 06:41 UTC"
+ */
+export function formatAbsoluteUtc(epochSec: number): string {
+  const d = new Date(epochSec * 1000);
+  return d
+    .toISOString()
+    .replace("T", " ")
+    .replace(/:\d{2}\.\d{3}Z$/, " UTC");
+}
+
+/**
  * WHAT: Format epoch seconds as Discord absolute timestamp.
  * WHY: Shows full date and time in user's local timezone.
  * FORMAT: <t:epochSec:F> → "Monday, October 20, 2025 5:04 PM"

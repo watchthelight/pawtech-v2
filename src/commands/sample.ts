@@ -10,8 +10,8 @@ import {
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { ulid } from "ulid";
 import {
-  buildReviewEmbed,
-  buildActionRows,
+  buildReviewEmbedV3 as buildReviewEmbed,
+  buildActionRowsV2 as buildActionRows,
   type ReviewCardApplication,
   type ReviewClaimRow,
   type AvatarScanRow,

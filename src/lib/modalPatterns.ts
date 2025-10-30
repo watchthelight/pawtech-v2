@@ -14,10 +14,11 @@
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 export const MODAL_PAGE_RE = /^v1:modal:([^:]+):p(\d+)$/;
-export const BTN_DECIDE_RE = /^v1:decide:(approve|reject|kick|claim):code([0-9A-F]{6})$/;
-export const BTN_MODMAIL_RE = /^v1:decide:modmail:code([0-9A-F]{6})$/;
-export const BTN_PERM_REJECT_RE = /^v1:decide:permreject:code([0-9A-F]{6})$/;
-export const BTN_COPY_UID_RE = /^v1:decide:copyuid:code([0-9A-F]{6}):user(\d+)$/;
+// Support both legacy and new review:* IDs
+export const BTN_DECIDE_RE = /^(?:v1:decide|review):(approve|reject|kick|claim):code([0-9A-F]{6})$/;
+export const BTN_MODMAIL_RE = /^(?:v1:decide|review):modmail:code([0-9A-F]{6})$/;
+export const BTN_PERM_REJECT_RE = /^(?:v1:decide|review):(permreject|perm_reject):code([0-9A-F]{6})$/;
+export const BTN_COPY_UID_RE = /^(?:v1:decide|review):(?:copyuid|copy_uid):code([0-9A-F]{6}):user(\d+)$/;
 export const BTN_VIEW_SRC_RE = /^v1:avatar:viewsrc:code([0-9A-F]{6})$/;
 export const MODAL_REJECT_RE = /^v1:modal:reject:code([0-9A-F]{6})$/;
 export const MODAL_PERM_REJECT_RE = /^v1:modal:permreject:code([0-9A-F]{6})$/;
