@@ -1,0 +1,79 @@
+{
+  "name": "pawtropolis-tech",
+  "version": "1.1.0",
+  "description": "Server-owned Discord gatekeeping bot. Transparent, auditable, and minimal. Built by watchthelight (Bash).",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": ">=20.0.0"
+  },
+  "author": {
+    "name": "watchthelight (Bash)",
+    "email": "admin@watchthelight.org",
+    "url": "https://watchthelight.org"
+  },
+  "license": "LicenseRef-ANW-1.0",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/watchthelight/pawtech-v2.git"
+  },
+  "bugs": {
+    "url": "https://github.com/watchthelight/pawtech-v2/issues",
+    "email": "admin@watchthelight.org"
+  },
+  "homepage": "https://github.com/watchthelight/pawtech-v2#readme",
+  "scripts": {
+    "dev": "npx @dotenvx/dotenvx run -- tsx watch src/index.ts",
+    "build": "tsup && npm run scan:legacy",
+    "start": "npx @dotenvx/dotenvx run -- node dist/index.js",
+    "test": "vitest run",
+    "deploy:cmds": "npx dotenvx run -- tsx scripts/deploy-commands.ts --all",
+    "sync:cmds": "dotenvx run -- tsx scripts/commands.ts --all",
+    "print:cmds": "dotenvx run -- tsx scripts/print-commands.ts",
+    "auth:whoami": "dotenvx run -- tsx scripts/auth-check.ts",
+    "scan:legacy": "tsx scripts/scan-legacy.ts",
+    "migrate": "dotenvx run -- tsx scripts/migrate.ts",
+    "migrate:dry": "dotenvx run -- tsx scripts/migrate.ts --dry-run",
+    "migrate:logging": "dotenvx run -- tsx scripts/migrate-logging-channel.ts",
+    "backfill:app-mappings": "dotenvx run -- tsx scripts/backfill-app-mappings.ts",
+    "db:recover": "dotenvx run -- tsx src/ops/dbRecoverCli.ts",
+    "db:scan-backups": "dotenvx run -- tsx scripts/scan-db-backups.ts",
+    "env:check": "dotenvx run -- node -e \"console.log('DISCORD_TOKEN?', (process.env.DISCORD_TOKEN||'').slice(0,10)+'...')\"",
+    "lint": "eslint .",
+    "format": "prettier --write .",
+    "format:check": "prettier --check .",
+    "typecheck": "tsc --noEmit",
+    "check": "npm run typecheck && npm run lint && npm run format:check && npm run test"
+  },
+  "dependencies": {
+    "@google-cloud/vision": "^5.3.4",
+    "@sentry/node": "^10.20.0",
+    "@sentry/profiling-node": "^10.20.0",
+    "@types/node": "^24.10.1",
+    "axios": "^1.12.2",
+    "better-sqlite3": "^12.4.1",
+    "canvas": "^3.2.0",
+    "discord.js": "^14.16.3",
+    "dotenv": "^17.2.3",
+    "pino": "^10.0.0",
+    "sharp": "^0.34.4",
+    "ulid": "^3.0.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@dotenvx/dotenvx": "^1.51.0",
+    "@eslint/js": "^9.38.0",
+    "@types/better-sqlite3": "^7.6.13",
+    "@typescript-eslint/eslint-plugin": "^8.46.1",
+    "@typescript-eslint/parser": "^8.46.1",
+    "@vitest/ui": "^3.2.4",
+    "eslint": "^9.37.0",
+    "eslint-config-prettier": "^10.1.8",
+    "pino-pretty": "^13.1.2",
+    "prettier": "^3.6.2",
+    "tsup": "^8.1.0",
+    "tsx": "^4.19.2",
+    "typescript": "^5.5.4",
+    "vitest": "^3.2.4"
+  }
+}

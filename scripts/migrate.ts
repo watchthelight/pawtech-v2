@@ -1,0 +1,257 @@
+/**
+ * Pawtropolis Tech — scripts/migrate.ts
+ * WHAT: Migration runner that applies versioned schema migrations in order.
+ * WHY: Provides formal migration tracking with schema_migrations table.
+ * HOW: Scans migrations/ directory, checks applied versions, runs pending migrations.
+ * DOCS:
+ *  - better-sqlite3 transactions: https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md#transaction
+ *  - SQLite PRAGMA: https://sqlite.org/pragma.html
+ *
+ * USAGE:
+ *   tsx scripts/migrate.ts           # Run all pending migrations
+ *   tsx scripts/migrate.ts --dry-run # Show pending migrations without applying
+ *
+ * SAFETY:
+ *  - Each migration runs in a transaction (atomicity)
+ *  - Foreign keys are enabled (PRAGMA foreign_keys=ON)
+ *  - Creates database backup before first migration
+ *  - Logs detailed summary of applied migrations
+ */
+// SPDX-License-Identifier: LicenseRef-ANW-1.0
+
+import Database from "better-sqlite3";
+import { readdirSync, copyFileSync, existsSync } from "node:fs";
+import { join, dirname } from "node:path";
+import { fileURLToPath, pathToFileURL } from "url";
+import dotenv from "dotenv";
+
+// Load .env for DB_PATH and LOGGING_CHANNEL
+dotenv.config();
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+// Parse CLI args
+const args = process.argv.slice(2);
+const dryRun = args.includes("--dry-run");
+
+// Database path
+const dbPath = process.env.DB_PATH || "./data/data.db";
+const migrationsDir = join(__dirname, "../migrations");
+
+console.log("\n=== Pawtropolis Migration Runner ===\n");
+console.log(`Database: ${dbPath}`);
+console.log(`Migrations directory: ${migrationsDir}`);
+console.log(`Mode: ${dryRun ? "DRY RUN (no changes)" : "APPLY"}\n`);
+
+// Open database with same settings as production
+const db = new Database(dbPath, { fileMustExist: false });
+db.pragma("journal_mode = WAL");
+db.pragma("synchronous = NORMAL");
+db.pragma("foreign_keys = ON"); // Critical for referential integrity
+db.pragma("busy_timeout = 5000");
+
+/**
+ * Ensure schema_migrations table exists
+ */
+function ensureSchemaMigrationsTable(): void {
+  // Check if table exists first
+  const tableExists = db
+    .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='schema_migrations'`)
+    .get();
+
+  if (!tableExists) {
+    console.log("📋 Creating schema_migrations tracking table");
+  }
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS schema_migrations (
+      version     TEXT PRIMARY KEY,
+      name        TEXT NOT NULL,
+      applied_at  INTEGER NOT NULL DEFAULT (strftime('%s', 'now'))
+    )
+  `);
+}
+
+/**
+ * Get list of applied migration versions
+ */
+function getAppliedVersions(): Set<string> {
+  try {
+    const rows = db
+      .prepare(`SELECT version FROM schema_migrations ORDER BY version`)
+      .all() as Array<{ version: string }>;
+
+    return new Set(rows.map((r) => r.version));
+  } catch (err: any) {
+    // Table doesn't exist yet (pre-migration state)
+    if (err?.code === "SQLITE_ERROR" && err?.message?.includes("no such")) {
+      return new Set();
+    }
+    throw err;
+  }
+}
+
+/**
+ * Scan migrations directory for migration files
+ * Returns sorted list of { version, name, path }
+ */
+function scanMigrations(): Array<{ version: string; name: string; path: string }> {
+  if (!existsSync(migrationsDir)) {
+    console.log(`⚠️  Migrations directory not found: ${migrationsDir}`);
+    return [];
+  }
+
+  const files = readdirSync(migrationsDir)
+    .filter((f) => f.endsWith(".ts") && /^\d{3}_/.test(f))
+    .sort();
+
+  return files.map((file) => {
+    const match = file.match(/^(\d{3})_(.+)\.ts$/);
+    if (!match) throw new Error(`Invalid migration filename: ${file}`);
+
+    const [, version, name] = match;
+    return {
+      version,
+      name,
+      path: join(migrationsDir, file),
+    };
+  });
+}
+
+/**
+ * Create database backup before applying migrations
+ */
+function createBackup(): void {
+  if (dryRun) return;
+
+  const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
+  const backupPath = `${dbPath}.backup-${timestamp}`;
+
+  console.log(`📦 Creating backup: ${backupPath}`);
+  copyFileSync(dbPath, backupPath);
+  console.log(`✅ Backup created successfully\n`);
+}
+
+/**
+ * Apply a single migration in a transaction
+ */
+async function applyMigration(migration: {
+  version: string;
+  name: string;
+  path: string;
+}): Promise<void> {
+  console.log(`\n🔄 Applying migration ${migration.version}: ${migration.name}`);
+
+  try {
+    // Dynamic import of migration module
+    // Convert Windows path to file:// URL for ESM compatibility
+    const migrationUrl = pathToFileURL(migration.path).href;
+    const migrationModule = await import(migrationUrl);
+    const migrateFn = migrationModule[`migrate${migration.version}${toPascalCase(migration.name)}`];
+
+    if (typeof migrateFn !== "function") {
+      throw new Error(
+        `Migration ${migration.version} does not export a migrate function. Expected: migrate${migration.version}${toPascalCase(migration.name)}`
+      );
+    }
+
+    // Run migration in transaction
+    const runMigration = db.transaction(() => {
+      migrateFn(db);
+    });
+
+    runMigration();
+
+    console.log(`✅ Migration ${migration.version} applied successfully`);
+  } catch (err) {
+    console.error(`\n❌ Migration ${migration.version} FAILED:`);
+    console.error(err);
+    throw err;
+  }
+}
+
+/**
+ * Convert snake_case to PascalCase for function name lookup
+ */
+function toPascalCase(str: string): string {
+  return str
+    .split("_")
+    .map((word) => word.charAt(0).toUpperCase() + word.slice(1))
+    .join("");
+}
+
+/**
+ * Main migration runner
+ */
+async function runMigrations(): Promise<void> {
+  try {
+    // Ensure schema_migrations table exists
+    ensureSchemaMigrationsTable();
+
+    // Get applied versions
+    const appliedVersions = getAppliedVersions();
+    console.log(
+      `Applied migrations: ${appliedVersions.size > 0 ? Array.from(appliedVersions).join(", ") : "none"}`
+    );
+
+    // Scan for available migrations
+    const allMigrations = scanMigrations();
+    console.log(`Available migrations: ${allMigrations.length}`);
+
+    // Find pending migrations
+    const pendingMigrations = allMigrations.filter((m) => !appliedVersions.has(m.version));
+
+    if (pendingMigrations.length === 0) {
+      console.log("\n✅ Database is up to date - no pending migrations\n");
+      return;
+    }
+
+    console.log(`\nPending migrations: ${pendingMigrations.length}`);
+    pendingMigrations.forEach((m) => {
+      console.log(`  - ${m.version}: ${m.name}`);
+    });
+
+    if (dryRun) {
+      console.log("\n🔍 DRY RUN - no changes applied\n");
+      return;
+    }
+
+    // Create backup before applying migrations
+    if (pendingMigrations.length > 0) {
+      createBackup();
+    }
+
+    // Apply each pending migration
+    for (const migration of pendingMigrations) {
+      await applyMigration(migration);
+    }
+
+    console.log(`\n✅ Successfully applied ${pendingMigrations.length} migration(s)\n`);
+
+    // Show final applied versions
+    const finalApplied = getAppliedVersions();
+    console.log("All applied migrations:");
+    const rows = db
+      .prepare(`SELECT version, name, applied_at FROM schema_migrations ORDER BY version`)
+      .all() as Array<{ version: string; name: string; applied_at: number }>;
+
+    console.table(
+      rows.map((r) => ({
+        version: r.version,
+        name: r.name,
+        applied_at: new Date(r.applied_at * 1000).toISOString(),
+      }))
+    );
+  } catch (err) {
+    console.error("\n❌ Migration failed:");
+    console.error(err);
+    process.exit(1);
+  } finally {
+    db.close();
+    console.log("\nDatabase closed.");
+  }
+}
+
+// Run migrations
+runMigrations();

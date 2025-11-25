@@ -1,0 +1,60 @@
+# Attribution–No Wholesale Copying License (ANW-1.0)
+
+**Copyright © 2025 watchthelight / Bash**
+**Pawtropolis Tech Gatekeeper**
+<https://github.com/watchthelight/pawtech-v2>
+
+---
+
+## Terms and Conditions
+
+### Permissions
+
+You are granted the following rights:
+
+1. **Use**: You may use this software for personal, commercial, or non-commercial purposes.
+
+2. **Modification**: You may modify the source code to suit your needs.
+
+3. **Distribution**: You may distribute modified versions of this software, provided that:
+   - You include proper attribution to the original author (watchthelight / Bash)
+   - You include a link to the original repository: <https://github.com/watchthelight/pawtech-v2>
+   - You clearly indicate which portions of the code have been modified
+   - You include a copy of this license or a link to it
+
+### Restrictions
+
+You may **not**:
+
+1. **Wholesale Redistribution**: Redistribute the entire, unmodified project as-is. If you wish to share this project, link to the original repository instead.
+
+2. **Rebranding**: Remove or obscure the original author's attribution, or present this work as your own original creation.
+
+3. **Resale**: Sell or sublicense the unmodified software without adding substantial value or modifications.
+
+### Attribution Requirements
+
+When redistributing modified versions, you must include the following attribution in a prominent location (such as a README, credits file, or startup message):
+
+```
+© 2025 watchthelight / Bash
+https://github.com/watchthelight/pawtech-v2
+```
+
+### Disclaimer of Warranty
+
+THIS SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY, FITNESS FOR A PARTICULAR PURPOSE, AND NONINFRINGEMENT. IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES, OR OTHER LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT, OR OTHERWISE, ARISING FROM, OUT OF, OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE SOFTWARE.
+
+### Limitation of Liability
+
+IN NO EVENT SHALL THE AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY DIRECT, INDIRECT, INCIDENTAL, SPECIAL, EXEMPLARY, OR CONSEQUENTIAL DAMAGES (INCLUDING, BUT NOT LIMITED TO, PROCUREMENT OF SUBSTITUTE GOODS OR SERVICES; LOSS OF USE, DATA, OR PROFITS; OR BUSINESS INTERRUPTION) HOWEVER CAUSED AND ON ANY THEORY OF LIABILITY, WHETHER IN CONTRACT, STRICT LIABILITY, OR TORT (INCLUDING NEGLIGENCE OR OTHERWISE) ARISING IN ANY WAY OUT OF THE USE OF THIS SOFTWARE, EVEN IF ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
+
+---
+
+## License Interpretation
+
+This license is designed to encourage learning, modification, and derivative works while preventing wholesale cloning or rebranding of the project. If you have questions about what constitutes "substantial modification" or appropriate attribution, please contact the author at <admin@watchthelight.org>.
+
+---
+
+**SPDX-License-Identifier: LicenseRef-ANW-1.0**
