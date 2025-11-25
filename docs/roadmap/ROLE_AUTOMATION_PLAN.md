@@ -23,7 +23,7 @@ This document outlines the implementation plan for automating role management in
 ### System Architecture
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'14px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'14px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 graph TB
     subgraph EXT["External Systems"]
         MIMU["<b>Mimu Leveling Bot</b><br/>Assigns level roles"]
@@ -131,7 +131,7 @@ graph TB
 ### Architecture Overview
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 erDiagram
     ROLE_TIERS ||--o{ LEVEL_REWARDS : "maps to"
     ROLE_TIERS {
@@ -315,7 +315,7 @@ async function getAssignmentHistory(
 #### Role Assignment State Machine
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 stateDiagram-v2
     [*] --> Triggered: <b>Event or Command</b>
 
@@ -410,7 +410,7 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 **Flow diagram:**
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 flowchart TD
     A["<b>User posts messages</b>"] --> B["<b>Mimu awards XP</b>"]
     B --> C{"<b>Level up?</b>"}
@@ -524,7 +524,7 @@ Users can only hold ONE of each token type at a time (per server rules). The bot
 This matches the existing rule: "You can earn one @Byte Token [Rare] but can't get another until that previous token is redeemed."
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 flowchart LR
     A["<b>User reaches level<br/>with token reward</b>"] --> B{"<b>Check:<br/>Has token role?</b>"}
     B -->|"<b>No</b>"| C["<b>Grant token role</b>"]
@@ -648,7 +648,7 @@ async function finalizeMovieAttendance(guildId: string, eventDate: string) {
 | 4 | Cinematic Royalty | 20+ | 5x Chat XP, Art Piece |
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'15px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'15px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 flowchart TD
     A["<b>Movie night event starts</b>"] --> B["<b>Staff uses /movie start</b>"]
     B --> C["<b>Bot tracks VC join/leave events</b>"]
@@ -744,7 +744,7 @@ Monthly voice activity winners will remain a manual staff process. The existing 
 ### Phase Timeline Overview
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 flowchart LR
     P1["<b>Phase 1</b><br/>Foundation<br/>~11 days"]
     P2["<b>Phase 2</b><br/>Level Rewards<br/>~9 days"]
@@ -812,7 +812,7 @@ async function canManageRole(guild: Guild, roleId: string): Promise<boolean> {
 **Important**: The bot can only manage roles BELOW the Senior Moderator role (position 200) in the hierarchy. Ensure all automated roles are positioned below this.
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px', 'darkMode':'true', 'background':'#0d1116'}}}%%
 flowchart TD
     A["<b>Attempt to assign role</b>"] --> B{"<b>Bot has<br/>MANAGE_ROLES?</b>"}
     B -->|"<b>No</b>"| C["<b>Error: Missing permission</b>"]
