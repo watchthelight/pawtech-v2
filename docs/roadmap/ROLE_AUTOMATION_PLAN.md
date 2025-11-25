@@ -23,46 +23,91 @@ This document outlines the implementation plan for automating role management in
 ### System Architecture
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'18px'}}}%%
-flowchart LR
-    MIMU["<b>🤖 Mimu Bot</b>"]
-    DISCORD["<b>📡 Discord API</b>"]
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'14px'}}}%%
+graph TB
+    subgraph EXT["External Systems"]
+        MIMU["<b>Mimu Leveling Bot</b><br/>Assigns level roles"]
+    end
 
-    EVENTS["<b>👂 Event<br/>Listeners</b>"]
-    ROLE["<b>⚙️ Role<br/>Automation</b>"]
-    DB[("<b>💾 Database</b>")]
-    SCHED["<b>⏰ Schedulers</b>"]
+    subgraph DISCORD_LAYER["Discord Layer"]
+        API["<b>Discord API</b>"]
+        GMU["guildMemberUpdate<br/>event"]
+        VSU["voiceStateUpdate<br/>event"]
+    end
 
-    STAFF["<b>👥 Staff</b>"]
+    subgraph BOT["Pawtropolis Tech Bot"]
+        subgraph LISTENERS["Event Processing"]
+            EVT_HANDLER["<b>Event Listeners</b><br/>src/index.ts"]
+            LEVEL_EVT["Level Role<br/>Detection"]
+            VOICE_EVT["Voice Activity<br/>Tracking"]
+        end
 
-    MIMU --> DISCORD
-    DISCORD --> EVENTS
-    EVENTS --> ROLE
-    SCHED --> ROLE
-    STAFF --> ROLE
-    ROLE --> DISCORD
-    ROLE --> DB
-    SCHED --> DB
+        subgraph CORE["Core Services"]
+            ROLE_SVC["<b>Role Automation</b><br/>Service<br/>src/features/roleAutomation.ts"]
+            LEVEL_SVC["Level Rewards<br/>Handler"]
+            MOVIE_SVC["Movie Night<br/>Tracker"]
+        end
 
-    style MIMU fill:#FFD700,stroke:#000,stroke-width:4px,color:#000
-    style DISCORD fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
-    style EVENTS fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
-    style ROLE fill:#00D9FF,stroke:#000,stroke-width:4px,color:#000
-    style DB fill:#57F287,stroke:#000,stroke-width:4px,color:#000
-    style SCHED fill:#9B59B6,stroke:#000,stroke-width:4px,color:#fff
-    style STAFF fill:#FF6B6B,stroke:#000,stroke-width:4px,color:#fff
+        subgraph SCHEDULED["Scheduled Tasks"]
+            SCHED["<b>Weekly/Monthly<br/>Schedulers</b><br/>src/scheduler/"]
+            ACTIVITY["Activity Winner<br/>Calculator"]
+        end
 
-    linkStyle default stroke:#fff,stroke-width:4px
+        subgraph DATA["Data Layer"]
+            DB[("<b>SQLite Database</b><br/>role_tiers<br/>level_rewards<br/>role_assignments<br/>movie_attendance")]
+        end
+    end
+
+    subgraph STAFF_LAYER["Staff Interface"]
+        STAFF["<b>Moderators</b>"]
+        COMMANDS["Manual Commands<br/>/sync-level<br/>/movie start"]
+    end
+
+    MIMU -->|"Assigns level roles"| API
+    API --> GMU
+    API --> VSU
+    GMU --> EVT_HANDLER
+    VSU --> EVT_HANDLER
+
+    EVT_HANDLER --> LEVEL_EVT
+    EVT_HANDLER --> VOICE_EVT
+
+    LEVEL_EVT --> LEVEL_SVC
+    VOICE_EVT --> MOVIE_SVC
+
+    LEVEL_SVC --> ROLE_SVC
+    MOVIE_SVC --> ROLE_SVC
+
+    SCHED --> ACTIVITY
+    ACTIVITY --> ROLE_SVC
+
+    ROLE_SVC -->|"Grant roles"| API
+    ROLE_SVC -->|"Audit log"| DB
+
+    STAFF --> COMMANDS
+    COMMANDS --> ROLE_SVC
+    STAFF -->|"Activate boosts"| API
+
+    SCHED -->|"Query data"| DB
+
+    style MIMU fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
+    style API fill:#5865F2,stroke:#000,stroke-width:3px,color:#fff
+    style GMU fill:#7289DA,stroke:#000,stroke-width:2px,color:#fff
+    style VSU fill:#7289DA,stroke:#000,stroke-width:2px,color:#fff
+    style EVT_HANDLER fill:#7289DA,stroke:#000,stroke-width:3px,color:#fff
+    style LEVEL_EVT fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
+    style VOICE_EVT fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
+    style ROLE_SVC fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
+    style LEVEL_SVC fill:#1ABC9C,stroke:#000,stroke-width:2px,color:#fff
+    style MOVIE_SVC fill:#1ABC9C,stroke:#000,stroke-width:2px,color:#fff
+    style DB fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+    style SCHED fill:#E67E22,stroke:#000,stroke-width:3px,color:#fff
+    style ACTIVITY fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
+    style STAFF fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
+    style COMMANDS fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff
+
+    linkStyle default stroke:#fff,stroke-width:2px
 ```
-
-**Data Flow:**
-1. **Mimu Bot** assigns level roles via Discord API
-2. **Discord API** fires events (guildMemberUpdate, voiceStateUpdate)
-3. **Event Listeners** detect role changes and VC activity
-4. **Role Automation** processes events and grants rewards
-5. **Schedulers** check weekly winners and trigger role updates
-6. **Staff** can manually trigger commands and activate boosts
-7. **Database** stores all role assignments and audit logs
 
 ---
 
