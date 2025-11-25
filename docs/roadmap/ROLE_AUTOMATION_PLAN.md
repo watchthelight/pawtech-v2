@@ -10,11 +10,57 @@
 
 This document outlines the implementation plan for automating role management in Pawtropolis. Currently, staff manually assigns reward roles and tier roles. With the `MANAGE_ROLES` permission, the bot can automate:
 
-1. **Level Rewards** - Grant level roles + token/ticket roles when users reach milestones
+1. **Level Rewards** - Detect when Mimu assigns level roles, grant corresponding token/ticket rewards
 2. **Movie Night Attendance** - Track VC participation and assign tier roles
 3. **Activity Rewards** - Weekly winner roles and streak tracking
 
-**Note**: Token redemption (activating boosts) remains manual via staff tickets, since users often want to save tokens for later use.
+**Key Notes:**
+- Mimu handles level role assignment (Newcomer Fur, Beginner Fur, etc.)
+- Our bot reacts to role changes and grants reward tokens/tickets
+- Token redemption (activating boosts) remains manual via staff tickets
+- This keeps users in control of when they activate their rewards
+
+### System Architecture
+
+```mermaid
+graph TB
+    subgraph "External Systems"
+        MIMU[Mimu Leveling Bot]
+        DISCORD[Discord API]
+    end
+
+    subgraph "Our Bot"
+        EVENTS[Event Listeners]
+        ROLE_AUTO[Role Automation Service]
+        DB[(SQLite Database)]
+        SCHED[Schedulers]
+    end
+
+    subgraph "Staff"
+        STAFF[Moderators]
+    end
+
+    MIMU -->|Assigns level roles| DISCORD
+    DISCORD -->|guildMemberUpdate| EVENTS
+    DISCORD -->|voiceStateUpdate| EVENTS
+
+    EVENTS -->|Level role detected| ROLE_AUTO
+    EVENTS -->|VC join/leave| ROLE_AUTO
+
+    ROLE_AUTO -->|Grant rewards| DISCORD
+    ROLE_AUTO -->|Log assignments| DB
+
+    SCHED -->|Check weekly winners| DB
+    SCHED -->|Assign winner roles| ROLE_AUTO
+
+    STAFF -->|Activates boosts| DISCORD
+    STAFF -->|Manual commands| ROLE_AUTO
+
+    style MIMU fill:#FFE4B5
+    style ROLE_AUTO fill:#87CEEB
+    style DB fill:#98FB98
+    style STAFF fill:#FFA07A
+```
 
 ---
 
@@ -29,14 +75,57 @@ This document outlines the implementation plan for automating role management in
 | Action audit logging | Full | `action_log` tracks all mod actions |
 
 **Missing Components:**
-- Role tier configuration (level → role mappings)
+- Role tier configuration (level role ID → reward mappings)
 - Role assignment history (audit trail)
 - VC presence tracking (for movie nights)
-- Level-up event detection (integration with external leveling bot)
+- `guildMemberUpdate` event handler (detect when Mimu assigns level roles)
 
 ---
 
 ## Phase 1: Foundation
+
+### Architecture Overview
+
+```mermaid
+erDiagram
+    ROLE_TIERS ||--o{ LEVEL_REWARDS : "maps to"
+    ROLE_TIERS {
+        int id PK
+        string guild_id
+        string tier_type
+        string tier_name
+        string role_id
+        int threshold
+    }
+    LEVEL_REWARDS {
+        int id PK
+        string guild_id
+        int level
+        string role_id
+        string role_name
+    }
+    ROLE_ASSIGNMENTS {
+        int id PK
+        string guild_id
+        string user_id
+        string role_id
+        string action
+        string reason
+        int created_at
+    }
+    MOVIE_ATTENDANCE {
+        int id PK
+        string guild_id
+        string user_id
+        string event_date
+        int duration_minutes
+        int qualified
+    }
+
+    ROLE_TIERS ||--o{ ROLE_ASSIGNMENTS : "referenced by"
+    LEVEL_REWARDS ||--o{ ROLE_ASSIGNMENTS : "referenced by"
+    MOVIE_ATTENDANCE }o--|| ROLE_ASSIGNMENTS : "triggers"
+```
 
 ### 1.1 Database Schema
 
@@ -75,8 +164,9 @@ CREATE TABLE IF NOT EXISTS movie_attendance (
     user_id TEXT NOT NULL,
     event_date TEXT NOT NULL,          -- YYYY-MM-DD format
     voice_channel_id TEXT NOT NULL,
-    duration_minutes INTEGER NOT NULL,
-    qualified INTEGER DEFAULT 0,       -- 1 if >= 30 min
+    duration_minutes INTEGER NOT NULL,        -- Total cumulative time
+    longest_session_minutes INTEGER NOT NULL, -- Longest continuous session
+    qualified INTEGER DEFAULT 0,              -- 1 if >= 30 min (based on guild mode)
     created_at INTEGER DEFAULT (strftime('%s', 'now')),
     UNIQUE(guild_id, user_id, event_date)
 );
@@ -104,19 +194,29 @@ CREATE INDEX idx_role_assignments_time ON role_assignments(created_at);
 
 ### 1.2 Configuration Commands
 
-Extend `/config` to manage role tiers:
+Extend `/config` to manage role tier and reward mappings:
 
 ```
-/config roles add-tier <type> <name> <role> <threshold> [xp_multiplier] [duration_hours]
-/config roles remove-tier <type> <name>
-/config roles list [type]
-/config roles set-level-channel <channel>  -- For level-up announcements
+/config roles add-level-tier <level> <role>         -- Map level number to level role
+/config roles add-level-reward <level> <role>       -- Map level to reward token/ticket
+/config roles add-movie-tier <tier> <role> <count>  -- Movie attendance tier role
+/config roles add-activity <type> <role>            -- Weekly winner roles
+/config roles list [type]                           -- View current mappings
+/config roles remove <type> <identifier>            -- Remove a mapping
+```
+
+**Example setup:**
+```
+/config roles add-level-tier 15 @Engaged Fur ‹‹ LVL 15 ››
+/config roles add-level-reward 15 @Byte Token [Common]
+/config roles add-movie-tier 1 @Red Carpet Guest 1
+/config roles add-activity weekly-1st @Fur of the Week
 ```
 
 **Tier Types:**
-- `level` - Level milestone roles (Newcomer, Beginner, Chatty, etc.)
-- `movie_night` - Movie attendance tiers (Red Carpet, Popcorn Club, etc.)
-- `byte_token` - XP boost roles from Byte tokens
+- `level` - Level milestone roles that Mimu assigns
+- `level_reward` - Token/ticket roles granted when user reaches a level
+- `movie_night` - Movie attendance tier roles
 - `activity_reward` - Weekly/monthly winner roles
 
 ### 1.3 Core Role Management Service
@@ -167,6 +267,47 @@ async function getAssignmentHistory(
 ): Promise<RoleAssignment[]>
 ```
 
+#### Role Assignment State Machine
+
+```mermaid
+stateDiagram-v2
+    [*] --> Triggered: Event or Command
+
+    Triggered --> CheckPermissions: Validate bot permissions
+
+    CheckPermissions --> CheckHierarchy: MANAGE_ROLES OK
+    CheckPermissions --> Error: Missing permission
+
+    CheckHierarchy --> CheckUserHas: Bot role > target role
+    CheckHierarchy --> Error: Hierarchy violation
+
+    CheckUserHas --> Skip: User already has role
+    CheckUserHas --> Assign: User doesn't have role
+
+    Assign --> LogAdd: Role added successfully
+    Skip --> LogSkip: Assignment skipped
+    Error --> LogError: Log error details
+
+    LogAdd --> [*]: Complete
+    LogSkip --> [*]: Complete
+    LogError --> [*]: Complete
+
+    note right of CheckPermissions
+        Verifies MANAGE_ROLES
+        permission exists
+    end note
+
+    note right of CheckHierarchy
+        Bot can only manage roles
+        below its highest role
+    end note
+
+    note right of Skip
+        Prevents duplicate
+        token assignments
+    end note
+```
+
 ---
 
 ## Phase 2: Level Rewards System
@@ -191,23 +332,63 @@ Based on the server's current structure:
 | 90 | Mythic Fur | - |
 | 100+ | Eternal Fur | AllByte [Mythic], Byte Token [Mythic], OC Headshot Ticket |
 
-### 2.2 Integration with Leveling Bot
+### 2.2 Integration with Mimu (Leveling Bot)
 
-The server uses an external leveling bot (likely Mimu or similar). Options:
+**How it works:**
+- Mimu automatically assigns level roles when users level up
+- Our bot listens for `guildMemberUpdate` events
+- When a level role is added, bot grants the corresponding reward tokens/tickets
 
-**Option A: Webhook/Event Listener**
-- Configure external bot to call webhook on level-up
-- Bot receives event and applies role + rewards
+**Implementation:**
+```typescript
+client.on('guildMemberUpdate', async (oldMember, newMember) => {
+  // Get newly added roles
+  const addedRoles = newMember.roles.cache.filter(
+    role => !oldMember.roles.cache.has(role.id)
+  );
 
-**Option B: Periodic Sync**
-- Query external bot's API (if available) for user levels
-- Scheduled job compares levels and applies missing roles
+  // Check if any of the new roles are level roles
+  for (const [roleId, role] of addedRoles) {
+    const levelTier = getLevelTierByRoleId(newMember.guild.id, roleId);
+    if (!levelTier) continue; // Not a level role
 
-**Option C: Manual Trigger**
-- `/sync-level @user <level>` command for staff
-- Bot applies all rewards up to that level
+    // Grant rewards for this level
+    await grantLevelRewards(newMember, levelTier.threshold);
+  }
+});
+```
 
-**Recommendation**: Start with Option C, expand to A/B when integration details known.
+**Backup option:**
+- `/sync-level @user <level>` - Manual command for staff to grant missing rewards
+
+**Flow diagram:**
+
+```mermaid
+flowchart TD
+    A[User posts messages] --> B[Mimu awards XP]
+    B --> C{Level up?}
+    C -->|Yes| D[Mimu assigns level role<br/>e.g., Engaged Fur LVL 15]
+    C -->|No| A
+    D --> E[Discord fires<br/>guildMemberUpdate event]
+    E --> F[Our bot receives event]
+    F --> G{Level role<br/>detected?}
+    G -->|No| Z[Ignore]
+    G -->|Yes| H[Look up rewards for level 15<br/>in database]
+    H --> I[Find: Byte Token Common]
+    I --> J{User already<br/>has token?}
+    J -->|No| K[Grant token role]
+    J -->|Yes| L[Skip assignment]
+    K --> M[Log to audit trail:<br/>action='add']
+    L --> N[Log to audit trail:<br/>action='skipped']
+    M --> O[User opens ticket<br/>when ready]
+    N --> O
+    O --> P[Staff manually<br/>activates boost]
+
+    style D fill:#90EE90
+    style K fill:#87CEEB
+    style L fill:#FFD700
+    style P fill:#FFA07A
+```
 
 ### 2.3 Level-Up Handler
 
@@ -292,6 +473,20 @@ Users can only hold ONE of each token type at a time (per server rules). The bot
 
 This matches the existing rule: "You can earn one @Byte Token [Rare] but can't get another until that previous token is redeemed."
 
+```mermaid
+flowchart LR
+    A[User reaches level<br/>with token reward] --> B{Check:<br/>Has token role?}
+    B -->|No| C[Grant token role]
+    B -->|Yes| D[Skip assignment]
+    C --> E[Log: action='add'<br/>reason='level_up']
+    D --> F[Log: action='skipped'<br/>details='already owned']
+    E --> G[User can redeem<br/>via ticket]
+    F --> H[User must redeem<br/>existing token first]
+
+    style C fill:#90EE90
+    style D fill:#FFD700
+```
+
 ---
 
 ## Phase 4: Movie Night Attendance
@@ -303,32 +498,90 @@ This matches the existing rule: "You can earn one @Byte Token [Rare] but can't g
 - Bot listens to `voiceStateUpdate` events
 - Track users in designated VC during event hours
 
+**30-Minute Qualification Rule:**
+
+The bot supports two tracking modes (configurable per guild):
+
+1. **Cumulative Mode** (Default): Total time across all sessions
+   - User joins for 15 min → leaves → joins for 15 min = 30 min total ✅ Qualified
+   - Easier for users who have connection issues or brief interruptions
+
+2. **Continuous Mode** (Stricter): Must have one uninterrupted session
+   - User joins for 15 min → leaves → joins for 20 min = ❌ Not qualified (longest session = 20 min)
+   - Prevents gaming by joining/leaving repeatedly
+
 **Tracking Logic:**
 ```typescript
 // Track voice channel presence during movie events
-const movieSessions = new Map<string, { joinedAt: number, totalMinutes: number }>();
+interface MovieSession {
+  currentSessionStart: number | null;  // Current session start time
+  longestSessionMinutes: number;       // Longest continuous session
+  totalMinutes: number;                // Cumulative total across all sessions
+}
+
+const movieSessions = new Map<string, MovieSession>();
 
 client.on('voiceStateUpdate', (oldState, newState) => {
-  // Check if this is the movie night VC
-  // Check if there's an active movie event
-  // Track join/leave times
-  // Update running total
+  const key = `${newState.guild.id}:${newState.member?.id}`;
+  const activeEvent = getActiveMovieEvent(newState.guild.id);
+  if (!activeEvent) return;
+
+  // User joined VC
+  if (!oldState.channelId && newState.channelId === activeEvent.channelId) {
+    const session = movieSessions.get(key) || {
+      currentSessionStart: null,
+      longestSessionMinutes: 0,
+      totalMinutes: 0
+    };
+    session.currentSessionStart = Date.now();
+    movieSessions.set(key, session);
+  }
+
+  // User left VC
+  if (oldState.channelId === activeEvent.channelId && !newState.channelId) {
+    const session = movieSessions.get(key);
+    if (session?.currentSessionStart) {
+      const sessionMinutes = Math.floor((Date.now() - session.currentSessionStart) / 60000);
+      session.totalMinutes += sessionMinutes;
+      session.longestSessionMinutes = Math.max(session.longestSessionMinutes, sessionMinutes);
+      session.currentSessionStart = null;
+      movieSessions.set(key, session);
+    }
+  }
 });
 
-// At event end (or periodically):
+// At event end:
 async function finalizeMovieAttendance(guildId: string, eventDate: string) {
+  const config = getGuildConfig(guildId);
+  const mode = config.movie_attendance_mode || 'cumulative'; // 'cumulative' or 'continuous'
+
   for (const [key, session] of movieSessions) {
-    const [guildId, oderId] = key.split(':');
-    const qualified = session.totalMinutes >= 30;
+    const [guildId, userId] = key.split(':');
+
+    // Close any open session
+    if (session.currentSessionStart) {
+      const sessionMinutes = Math.floor((Date.now() - session.currentSessionStart) / 60000);
+      session.totalMinutes += sessionMinutes;
+      session.longestSessionMinutes = Math.max(session.longestSessionMinutes, sessionMinutes);
+    }
+
+    // Determine if qualified based on mode
+    const qualified = mode === 'continuous'
+      ? session.longestSessionMinutes >= 30
+      : session.totalMinutes >= 30;
 
     await db.run(`
-      INSERT INTO movie_attendance (guild_id, user_id, event_date, voice_channel_id, duration_minutes, qualified)
-      VALUES (?, ?, ?, ?, ?, ?)
-      ON CONFLICT(guild_id, user_id, event_date) DO UPDATE SET
-        duration_minutes = duration_minutes + excluded.duration_minutes,
-        qualified = CASE WHEN duration_minutes + excluded.duration_minutes >= 30 THEN 1 ELSE 0 END
-    `, [guildId, userId, eventDate, channelId, session.totalMinutes, qualified ? 1 : 0]);
+      INSERT INTO movie_attendance (
+        guild_id, user_id, event_date, voice_channel_id,
+        duration_minutes, longest_session_minutes, qualified
+      ) VALUES (?, ?, ?, ?, ?, ?, ?)
+    `, [
+      guildId, userId, eventDate, activeEvent.channelId,
+      session.totalMinutes, session.longestSessionMinutes, qualified ? 1 : 0
+    ]);
   }
+
+  movieSessions.clear();
 }
 ```
 
@@ -341,13 +594,67 @@ async function finalizeMovieAttendance(guildId: string, eventDate: string) {
 | 3 | Director's Cut | 10 | 3x Chat XP |
 | 4 | Cinematic Royalty | 20+ | 5x Chat XP, Art Piece |
 
+```mermaid
+flowchart TD
+    A[Movie night event starts] --> B[Staff uses /movie start]
+    B --> C[Bot tracks VC join/leave events]
+    C --> D[User joins VC]
+    D --> E[Record session start time]
+    E --> F{User still<br/>in VC?}
+    F -->|Yes| F
+    F -->|No, left VC| G[Calculate session duration]
+    G --> H[Update cumulative total<br/>Update longest session]
+    H --> I{Event<br/>ended?}
+    I -->|No| C
+    I -->|Yes| J[Staff uses /movie end]
+    J --> K{Check guild<br/>mode}
+    K -->|Cumulative| L{Total time<br/>>= 30 min?}
+    K -->|Continuous| M{Longest session<br/>>= 30 min?}
+    L -->|Yes| N[Mark as qualified]
+    L -->|No| O[Mark as not qualified]
+    M -->|Yes| N
+    M -->|No| O
+    N --> P{Check total<br/>qualified movies}
+    P -->|1 movie| Q[Grant: Red Carpet Guest]
+    P -->|5 movies| R[Grant: Popcorn Club<br/>Remove: Red Carpet]
+    P -->|10 movies| S[Grant: Director's Cut<br/>Remove: Popcorn Club]
+    P -->|20+ movies| T[Grant: Cinematic Royalty<br/>Remove: Director's Cut]
+    Q --> U[Log to audit trail]
+    R --> U
+    S --> U
+    T --> U
+    O --> V[No role change]
+
+    style N fill:#90EE90
+    style O fill:#FF6B6B
+    style Q fill:#B22222
+    style R fill:#F4D35E
+    style S fill:#FF6347
+    style T fill:#6A0DAD
+```
+
 ### 4.3 Movie Night Commands
 
 ```
-/movie start <voice_channel>   -- Start tracking attendance (staff only)
-/movie end                     -- End tracking, finalize attendance
-/movie attendance [@user]      -- Check attendance count
-/movie leaderboard             -- Top movie night attendees
+/movie start <voice_channel>           -- Start tracking attendance (staff only)
+/movie end                             -- End tracking, finalize attendance
+/movie attendance [@user]              -- Check attendance count + session details
+/movie leaderboard                     -- Top movie night attendees
+/config movie-mode <cumulative|continuous>  -- Set 30-min qualification mode
+```
+
+**Attendance Display Example:**
+```
+User: @JohnDoe
+Total Qualified Movies: 8
+
+Last Event (2025-01-15):
+• Total Time: 45 minutes ✅ Qualified
+• Longest Session: 25 minutes
+• Sessions: 3 (20min, 25min, 5min)
+
+Current Tier: Popcorn Club (5 movies)
+Next Tier: Director's Cut (2 more movies needed)
 ```
 
 ---
@@ -425,6 +732,29 @@ async function resetMonthlyCredits() {
 }
 ```
 
+```mermaid
+flowchart TD
+    A[Weekly scheduler triggers<br/>Sunday night] --> B[Query message_activity table<br/>for past 7 days]
+    B --> C[Calculate top 3 users<br/>by message count]
+    C --> D[Check 1st place<br/>for streak]
+    D --> E{Had role<br/>last week?}
+    E -->|Yes| F[Mark as streak<br/>Double rewards]
+    E -->|No| G[New winner<br/>Standard rewards]
+    F --> H[Grant: Fur of the Week<br/>XP: 10000, Currency: 17000<br/>Credits: +1]
+    G --> I[Grant: Fur of the Week<br/>XP: 5000, Currency: 8500<br/>Credits: +1]
+    H --> J[Remove role from<br/>previous 1st place]
+    I --> J
+    J --> K[Grant 2nd place:<br/>Chatter Fox<br/>XP: 3500, Currency: 4600]
+    K --> L[Grant 3rd place:<br/>Chatter Fox<br/>XP: 1500, Currency: 2400]
+    L --> M[Post announcement<br/>in configured channel]
+    M --> N[Log all changes<br/>to audit trail]
+
+    style H fill:#FFD700
+    style I fill:#FFD700
+    style K fill:#C0C0C0
+    style L fill:#CD7F32
+```
+
 ---
 
 ## Phase 6: Voice Activity Tracking
@@ -483,12 +813,46 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 ## Implementation Priority
 
+```mermaid
+gantt
+    title Role Automation Implementation Timeline
+    dateFormat YYYY-MM-DD
+    section Phase 1: Foundation
+    Database schema migration           :p1a, 2025-01-01, 3d
+    Core role assignment service        :p1b, after p1a, 5d
+    Configuration commands              :p1c, after p1b, 3d
+
+    section Phase 2: Level Rewards
+    guildMemberUpdate listener          :p2a, after p1c, 3d
+    Level reward handler                :p2b, after p2a, 4d
+    Manual sync-level command           :p2c, after p2a, 2d
+
+    section Phase 3: Token Assignment
+    Duplicate prevention logic          :p3a, after p2b, 2d
+    Token role assignment               :p3b, after p3a, 3d
+    Audit trail improvements            :p3c, after p3b, 2d
+
+    section Phase 4: Movie Nights
+    Voice state tracking                :p4a, after p3c, 4d
+    Movie attendance calculator         :p4b, after p4a, 3d
+    Movie tier role assignment          :p4c, after p4b, 2d
+
+    section Phase 5: Activity Rewards
+    Weekly winner scheduler             :p5a, after p4c, 4d
+    Credit tracking system              :p5b, after p5a, 3d
+    Monthly pool winners                :p5c, after p5b, 3d
+
+    section Phase 6: Voice Activity
+    Voice activity tracking             :p6a, after p5c, 5d
+    Monthly winner calculation          :p6b, after p6a, 3d
+```
+
 ### High Priority (Phase 1-2)
 1. Database schema migration
 2. Core role assignment service with audit logging
-3. Configuration commands for role tiers
-4. Manual level sync command (`/sync-level @user <level>`)
-5. Level-up webhook/event listener (for external leveling bot integration)
+3. Configuration commands for role tiers and reward mappings
+4. `guildMemberUpdate` event listener (detect Mimu level role additions)
+5. Manual `/sync-level @user <level>` command (for backfills/fixes)
 
 ### Medium Priority (Phase 3-4)
 6. Token/ticket role assignment on level-up
@@ -524,6 +888,27 @@ async function canManageRole(guild: Guild, roleId: string): Promise<boolean> {
 ```
 
 **Important**: The bot can only manage roles BELOW the Senior Moderator role (position 200) in the hierarchy. Ensure all automated roles are positioned below this.
+
+```mermaid
+flowchart TD
+    A[Attempt to assign role] --> B{Bot has<br/>MANAGE_ROLES?}
+    B -->|No| C[Error: Missing permission]
+    B -->|Yes| D{Target role<br/>exists?}
+    D -->|No| E[Error: Unknown role]
+    D -->|Yes| F{Bot's highest role<br/>> target role<br/>position?}
+    F -->|No| G[Error: Role hierarchy<br/>Target above bot]
+    F -->|Yes| H[Assign role successfully]
+
+    C --> I[Log error to audit trail]
+    E --> I
+    G --> I
+    H --> J[Log success to audit trail]
+
+    style C fill:#FF6B6B
+    style E fill:#FF6B6B
+    style G fill:#FF6B6B
+    style H fill:#90EE90
+```
 
 ---
 
