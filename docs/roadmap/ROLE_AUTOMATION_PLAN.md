@@ -88,20 +88,20 @@ graph TB
 
     SCHED -->|"Query data"| DB
 
-    style MIMU fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
-    style API fill:#5865F2,stroke:#000,stroke-width:3px,color:#fff
-    style GMU fill:#7289DA,stroke:#000,stroke-width:2px,color:#fff
-    style VSU fill:#7289DA,stroke:#000,stroke-width:2px,color:#fff
-    style EVT_HANDLER fill:#7289DA,stroke:#000,stroke-width:3px,color:#fff
-    style LEVEL_EVT fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
-    style VOICE_EVT fill:#9B59B6,stroke:#000,stroke-width:2px,color:#fff
-    style ROLE_SVC fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
-    style LEVEL_SVC fill:#1ABC9C,stroke:#000,stroke-width:2px,color:#fff
-    style MOVIE_SVC fill:#1ABC9C,stroke:#000,stroke-width:2px,color:#fff
-    style DB fill:#57F287,stroke:#000,stroke-width:3px,color:#000
-    style SCHED fill:#747F8D,stroke:#000,stroke-width:3px,color:#fff
-    style STAFF fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
-    style COMMANDS fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff
+    style MIMU fill:#FFD700,stroke:#fff,stroke-width:3px,color:#000
+    style API fill:#5865F2,stroke:#fff,stroke-width:3px,color:#fff
+    style GMU fill:#7289DA,stroke:#fff,stroke-width:2px,color:#fff
+    style VSU fill:#7289DA,stroke:#fff,stroke-width:2px,color:#fff
+    style EVT_HANDLER fill:#7289DA,stroke:#fff,stroke-width:3px,color:#fff
+    style LEVEL_EVT fill:#9B59B6,stroke:#fff,stroke-width:2px,color:#fff
+    style VOICE_EVT fill:#9B59B6,stroke:#fff,stroke-width:2px,color:#fff
+    style ROLE_SVC fill:#00D9FF,stroke:#fff,stroke-width:3px,color:#000
+    style LEVEL_SVC fill:#1ABC9C,stroke:#fff,stroke-width:2px,color:#fff
+    style MOVIE_SVC fill:#1ABC9C,stroke:#fff,stroke-width:2px,color:#fff
+    style DB fill:#57F287,stroke:#fff,stroke-width:3px,color:#000
+    style SCHED fill:#747F8D,stroke:#fff,stroke-width:3px,color:#fff
+    style STAFF fill:#FF6B6B,stroke:#fff,stroke-width:3px,color:#fff
+    style COMMANDS fill:#FF6B6B,stroke:#fff,stroke-width:2px,color:#fff
 
     linkStyle default stroke:#fff,stroke-width:2px
 ```
@@ -431,11 +431,11 @@ flowchart TD
     N --> O
     O --> P["<b>Staff manually<br/>activates boost</b>"]
 
-    style D fill:#57F287,stroke:#000,stroke-width:3px,color:#000
-    style K fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
-    style L fill:#FEE75C,stroke:#000,stroke-width:3px,color:#000
-    style P fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
-    style Z fill:#747F8D,stroke:#000,stroke-width:3px,color:#fff
+    style D fill:#57F287,stroke:#fff,stroke-width:3px,color:#000
+    style K fill:#00D9FF,stroke:#fff,stroke-width:3px,color:#000
+    style L fill:#FEE75C,stroke:#fff,stroke-width:3px,color:#000
+    style P fill:#FF6B6B,stroke:#fff,stroke-width:3px,color:#fff
+    style Z fill:#747F8D,stroke:#fff,stroke-width:3px,color:#fff
 
     linkStyle default stroke:#fff,stroke-width:2px
 ```
@@ -534,8 +534,8 @@ flowchart LR
     E --> G["<b>User can redeem<br/>via ticket</b>"]
     F --> H["<b>User must redeem<br/>existing token first</b>"]
 
-    style C fill:#57F287,stroke:#000,stroke-width:3px,color:#000
-    style D fill:#FEE75C,stroke:#000,stroke-width:3px,color:#000
+    style C fill:#57F287,stroke:#fff,stroke-width:3px,color:#000
+    style D fill:#FEE75C,stroke:#fff,stroke-width:3px,color:#000
 
     linkStyle default stroke:#fff,stroke-width:2px
 ```
@@ -679,12 +679,12 @@ flowchart TD
     T --> U
     O --> V["<b>No role change</b>"]
 
-    style N fill:#57F287,stroke:#000,stroke-width:3px,color:#000
-    style O fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
-    style Q fill:#DC143C,stroke:#000,stroke-width:3px,color:#fff
-    style R fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
-    style S fill:#FF6347,stroke:#000,stroke-width:3px,color:#fff
-    style T fill:#9B59B6,stroke:#000,stroke-width:3px,color:#fff
+    style N fill:#57F287,stroke:#fff,stroke-width:3px,color:#000
+    style O fill:#ED4245,stroke:#fff,stroke-width:3px,color:#fff
+    style Q fill:#DC143C,stroke:#fff,stroke-width:3px,color:#fff
+    style R fill:#FFD700,stroke:#fff,stroke-width:3px,color:#000
+    style S fill:#FF6347,stroke:#fff,stroke-width:3px,color:#fff
+    style T fill:#9B59B6,stroke:#fff,stroke-width:3px,color:#fff
 
     linkStyle default stroke:#fff,stroke-width:2px
 ```
@@ -755,10 +755,10 @@ flowchart LR
     P2 -->|"Complete"| P3
     P3 -->|"Complete"| P4
 
-    style P1 fill:#57F287,stroke:#000,stroke-width:3px,color:#000
-    style P2 fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
-    style P3 fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
-    style P4 fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
+    style P1 fill:#57F287,stroke:#fff,stroke-width:3px,color:#000
+    style P2 fill:#00D9FF,stroke:#fff,stroke-width:3px,color:#000
+    style P3 fill:#FFD700,stroke:#fff,stroke-width:3px,color:#000
+    style P4 fill:#FF6B6B,stroke:#fff,stroke-width:3px,color:#fff
 
     linkStyle default stroke:#fff,stroke-width:3px
 ```
@@ -827,10 +827,10 @@ flowchart TD
     G --> I
     H --> J["<b>Log success to audit trail</b>"]
 
-    style C fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
-    style E fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
-    style G fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
-    style H fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+    style C fill:#ED4245,stroke:#fff,stroke-width:3px,color:#fff
+    style E fill:#ED4245,stroke:#fff,stroke-width:3px,color:#fff
+    style G fill:#ED4245,stroke:#fff,stroke-width:3px,color:#fff
+    style H fill:#57F287,stroke:#fff,stroke-width:3px,color:#000
 
     linkStyle default stroke:#fff,stroke-width:2px
 ```
