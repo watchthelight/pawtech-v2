@@ -23,47 +23,40 @@ This document outlines the implementation plan for automating role management in
 ### System Architecture
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'18px', 'fontFamily':'arial', 'primaryColor':'#333', 'primaryTextColor':'#fff', 'primaryBorderColor':'#000', 'lineColor':'#fff', 'secondaryColor':'#444', 'tertiaryColor':'#555'}}}%%
-graph TB
-    subgraph ES["<b>External Systems</b>"]
-        MIMU["<b>Mimu Leveling Bot</b>"]
-        DISCORD["<b>Discord API</b>"]
-    end
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+flowchart TB
+    MIMU["<b>Mimu Leveling Bot</b><br/>(External)"]
+    DISCORD["<b>Discord API</b>"]
+    STAFF["<b>Staff/Moderators</b>"]
 
-    subgraph OB["<b>Our Bot</b>"]
-        EVENTS["<b>Event Listeners</b>"]
-        ROLE_AUTO["<b>Role Automation Service</b>"]
-        DB[("<b>SQLite Database</b>")]
-        SCHED["<b>Schedulers</b>"]
-    end
+    EVENTS["<b>Event Listeners</b>"]
+    SCHED["<b>Schedulers</b>"]
+    ROLE["<b>Role Automation<br/>Service</b>"]
+    DB[("<b>SQLite<br/>Database</b>")]
 
-    subgraph ST["<b>Staff</b>"]
-        STAFF["<b>Moderators</b>"]
-    end
+    MIMU -->|"Assigns<br/>level roles"| DISCORD
+    STAFF -->|"Manual<br/>commands"| ROLE
+    STAFF -->|"Activates<br/>boosts"| DISCORD
 
-    MIMU -->|"<b>Assigns level roles</b>"| DISCORD
-    DISCORD -->|"<b>guildMemberUpdate</b>"| EVENTS
-    DISCORD -->|"<b>voiceStateUpdate</b>"| EVENTS
+    DISCORD -->|"guildMember<br/>Update"| EVENTS
+    DISCORD -->|"voiceState<br/>Update"| EVENTS
 
-    EVENTS -->|"<b>Level role detected</b>"| ROLE_AUTO
-    EVENTS -->|"<b>VC join/leave</b>"| ROLE_AUTO
+    EVENTS -->|"Level role<br/>detected"| ROLE
+    EVENTS -->|"VC join/<br/>leave"| ROLE
 
-    ROLE_AUTO -->|"<b>Grant rewards</b>"| DISCORD
-    ROLE_AUTO -->|"<b>Log assignments</b>"| DB
+    SCHED -->|"Check<br/>winners"| DB
+    SCHED -->|"Assign<br/>roles"| ROLE
 
-    SCHED -->|"<b>Check weekly winners</b>"| DB
-    SCHED -->|"<b>Assign winner roles</b>"| ROLE_AUTO
-
-    STAFF -->|"<b>Activates boosts</b>"| DISCORD
-    STAFF -->|"<b>Manual commands</b>"| ROLE_AUTO
+    ROLE -->|"Grant<br/>rewards"| DISCORD
+    ROLE -->|"Log"| DB
 
     style MIMU fill:#FFD700,stroke:#000,stroke-width:4px,color:#000
-    style DISCORD fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
-    style EVENTS fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
-    style ROLE_AUTO fill:#00D9FF,stroke:#000,stroke-width:4px,color:#000
-    style DB fill:#57F287,stroke:#000,stroke-width:4px,color:#000
-    style SCHED fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
+    style DISCORD fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
     style STAFF fill:#FF6B6B,stroke:#000,stroke-width:4px,color:#fff
+    style EVENTS fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
+    style SCHED fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
+    style ROLE fill:#00D9FF,stroke:#000,stroke-width:4px,color:#000
+    style DB fill:#57F287,stroke:#000,stroke-width:4px,color:#000
 
     linkStyle default stroke:#fff,stroke-width:3px
 ```
@@ -835,41 +828,46 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 
 ## Implementation Priority
 
+### Phase Timeline Overview
+
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'14px', 'gridColor':'#444', 'gridLineStartPadding':150}}}%%
-gantt
-    title <b>Role Automation Implementation Timeline</b>
-    dateFormat YYYY-MM-DD
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
+flowchart LR
+    P1["<b>Phase 1</b><br/>Foundation<br/>~11 days"]
+    P2["<b>Phase 2</b><br/>Level Rewards<br/>~9 days"]
+    P3["<b>Phase 3</b><br/>Token Assignment<br/>~7 days"]
+    P4["<b>Phase 4</b><br/>Movie Nights<br/>~9 days"]
+    P5["<b>Phase 5</b><br/>Activity Rewards<br/>~10 days"]
+    P6["<b>Phase 6</b><br/>Voice Activity<br/>~8 days"]
 
-    section <b>Phase 1: Foundation</b>
-    <b>Database schema migration</b>           :done, p1a, 2025-01-01, 3d
-    <b>Core role assignment service</b>        :active, p1b, after p1a, 5d
-    <b>Configuration commands</b>              :p1c, after p1b, 3d
+    P1 -->|"Complete"| P2
+    P2 -->|"Complete"| P3
+    P3 -->|"Complete"| P4
+    P4 -->|"Complete"| P5
+    P5 -->|"Complete"| P6
 
-    section <b>Phase 2: Level Rewards</b>
-    <b>guildMemberUpdate listener</b>          :p2a, after p1c, 3d
-    <b>Level reward handler</b>                :p2b, after p2a, 4d
-    <b>Manual sync-level command</b>           :p2c, after p2a, 2d
+    style P1 fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+    style P2 fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
+    style P3 fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
+    style P4 fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
+    style P5 fill:#9B59B6,stroke:#000,stroke-width:3px,color:#fff
+    style P6 fill:#7289DA,stroke:#000,stroke-width:3px,color:#fff
 
-    section <b>Phase 3: Token Assignment</b>
-    <b>Duplicate prevention logic</b>          :p3a, after p2b, 2d
-    <b>Token role assignment</b>               :p3b, after p3a, 3d
-    <b>Audit trail improvements</b>            :p3c, after p3b, 2d
-
-    section <b>Phase 4: Movie Nights</b>
-    <b>Voice state tracking</b>                :p4a, after p3c, 4d
-    <b>Movie attendance calculator</b>         :p4b, after p4a, 3d
-    <b>Movie tier role assignment</b>          :p4c, after p4b, 2d
-
-    section <b>Phase 5: Activity Rewards</b>
-    <b>Weekly winner scheduler</b>             :p5a, after p4c, 4d
-    <b>Credit tracking system</b>              :p5b, after p5a, 3d
-    <b>Monthly pool winners</b>                :p5c, after p5b, 3d
-
-    section <b>Phase 6: Voice Activity</b>
-    <b>Voice activity tracking</b>             :p6a, after p5c, 5d
-    <b>Monthly winner calculation</b>          :p6b, after p6a, 3d
+    linkStyle default stroke:#fff,stroke-width:3px
 ```
+
+### Detailed Breakdown by Phase
+
+| Phase | Tasks | Est. Days | Priority |
+|-------|-------|-----------|----------|
+| **Phase 1: Foundation** | Database schema migration<br/>Core role assignment service<br/>Configuration commands | 3d<br/>5d<br/>3d | 🔴 Critical |
+| **Phase 2: Level Rewards** | guildMemberUpdate listener<br/>Level reward handler<br/>Manual sync-level command | 3d<br/>4d<br/>2d | 🔴 Critical |
+| **Phase 3: Token Assignment** | Duplicate prevention logic<br/>Token role assignment<br/>Audit trail improvements | 2d<br/>3d<br/>2d | 🟡 High |
+| **Phase 4: Movie Nights** | Voice state tracking<br/>Movie attendance calculator<br/>Movie tier role assignment | 4d<br/>3d<br/>2d | 🟡 High |
+| **Phase 5: Activity Rewards** | Weekly winner scheduler<br/>Credit tracking system<br/>Monthly pool winners | 4d<br/>3d<br/>3d | 🟢 Medium |
+| **Phase 6: Voice Activity** | Voice activity tracking<br/>Monthly winner calculation | 5d<br/>3d | 🟢 Medium |
+
+**Total Estimated Time:** ~54 development days (~11 weeks)
 
 ### High Priority (Phase 1-2)
 1. Database schema migration
