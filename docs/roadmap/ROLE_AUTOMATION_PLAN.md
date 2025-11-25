@@ -23,43 +23,49 @@ This document outlines the implementation plan for automating role management in
 ### System Architecture
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'18px', 'fontFamily':'arial', 'primaryColor':'#333', 'primaryTextColor':'#fff', 'primaryBorderColor':'#000', 'lineColor':'#fff', 'secondaryColor':'#444', 'tertiaryColor':'#555'}}}%%
 graph TB
-    subgraph "External Systems"
-        MIMU[Mimu Leveling Bot]
-        DISCORD[Discord API]
+    subgraph ES["<b>External Systems</b>"]
+        MIMU["<b>Mimu Leveling Bot</b>"]
+        DISCORD["<b>Discord API</b>"]
     end
 
-    subgraph "Our Bot"
-        EVENTS[Event Listeners]
-        ROLE_AUTO[Role Automation Service]
-        DB[(SQLite Database)]
-        SCHED[Schedulers]
+    subgraph OB["<b>Our Bot</b>"]
+        EVENTS["<b>Event Listeners</b>"]
+        ROLE_AUTO["<b>Role Automation Service</b>"]
+        DB[("<b>SQLite Database</b>")]
+        SCHED["<b>Schedulers</b>"]
     end
 
-    subgraph "Staff"
-        STAFF[Moderators]
+    subgraph ST["<b>Staff</b>"]
+        STAFF["<b>Moderators</b>"]
     end
 
-    MIMU -->|Assigns level roles| DISCORD
-    DISCORD -->|guildMemberUpdate| EVENTS
-    DISCORD -->|voiceStateUpdate| EVENTS
+    MIMU -->|"<b>Assigns level roles</b>"| DISCORD
+    DISCORD -->|"<b>guildMemberUpdate</b>"| EVENTS
+    DISCORD -->|"<b>voiceStateUpdate</b>"| EVENTS
 
-    EVENTS -->|Level role detected| ROLE_AUTO
-    EVENTS -->|VC join/leave| ROLE_AUTO
+    EVENTS -->|"<b>Level role detected</b>"| ROLE_AUTO
+    EVENTS -->|"<b>VC join/leave</b>"| ROLE_AUTO
 
-    ROLE_AUTO -->|Grant rewards| DISCORD
-    ROLE_AUTO -->|Log assignments| DB
+    ROLE_AUTO -->|"<b>Grant rewards</b>"| DISCORD
+    ROLE_AUTO -->|"<b>Log assignments</b>"| DB
 
-    SCHED -->|Check weekly winners| DB
-    SCHED -->|Assign winner roles| ROLE_AUTO
+    SCHED -->|"<b>Check weekly winners</b>"| DB
+    SCHED -->|"<b>Assign winner roles</b>"| ROLE_AUTO
 
-    STAFF -->|Activates boosts| DISCORD
-    STAFF -->|Manual commands| ROLE_AUTO
+    STAFF -->|"<b>Activates boosts</b>"| DISCORD
+    STAFF -->|"<b>Manual commands</b>"| ROLE_AUTO
 
-    style MIMU fill:#FFE4B5
-    style ROLE_AUTO fill:#87CEEB
-    style DB fill:#98FB98
-    style STAFF fill:#FFA07A
+    style MIMU fill:#FFD700,stroke:#000,stroke-width:4px,color:#000
+    style DISCORD fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
+    style EVENTS fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
+    style ROLE_AUTO fill:#00D9FF,stroke:#000,stroke-width:4px,color:#000
+    style DB fill:#57F287,stroke:#000,stroke-width:4px,color:#000
+    style SCHED fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
+    style STAFF fill:#FF6B6B,stroke:#000,stroke-width:4px,color:#fff
+
+    linkStyle default stroke:#fff,stroke-width:3px
 ```
 
 ---
@@ -87,6 +93,7 @@ graph TB
 ### Architecture Overview
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
 erDiagram
     ROLE_TIERS ||--o{ LEVEL_REWARDS : "maps to"
     ROLE_TIERS {
@@ -119,6 +126,7 @@ erDiagram
         string user_id
         string event_date
         int duration_minutes
+        int longest_session_minutes
         int qualified
     }
 
@@ -270,27 +278,28 @@ async function getAssignmentHistory(
 #### Role Assignment State Machine
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
 stateDiagram-v2
-    [*] --> Triggered: Event or Command
+    [*] --> Triggered: <b>Event or Command</b>
 
-    Triggered --> CheckPermissions: Validate bot permissions
+    Triggered --> CheckPermissions: <b>Validate bot permissions</b>
 
-    CheckPermissions --> CheckHierarchy: MANAGE_ROLES OK
-    CheckPermissions --> Error: Missing permission
+    CheckPermissions --> CheckHierarchy: <b>MANAGE_ROLES OK</b>
+    CheckPermissions --> Error: <b>Missing permission</b>
 
-    CheckHierarchy --> CheckUserHas: Bot role > target role
-    CheckHierarchy --> Error: Hierarchy violation
+    CheckHierarchy --> CheckUserHas: <b>Bot role > target role</b>
+    CheckHierarchy --> Error: <b>Hierarchy violation</b>
 
-    CheckUserHas --> Skip: User already has role
-    CheckUserHas --> Assign: User doesn't have role
+    CheckUserHas --> Skip: <b>User already has role</b>
+    CheckUserHas --> Assign: <b>User doesn't have role</b>
 
-    Assign --> LogAdd: Role added successfully
-    Skip --> LogSkip: Assignment skipped
-    Error --> LogError: Log error details
+    Assign --> LogAdd: <b>Role added successfully</b>
+    Skip --> LogSkip: <b>Assignment skipped</b>
+    Error --> LogError: <b>Log error details</b>
 
-    LogAdd --> [*]: Complete
-    LogSkip --> [*]: Complete
-    LogError --> [*]: Complete
+    LogAdd --> [*]: <b>Complete</b>
+    LogSkip --> [*]: <b>Complete</b>
+    LogError --> [*]: <b>Complete</b>
 
     note right of CheckPermissions
         Verifies MANAGE_ROLES
@@ -364,30 +373,34 @@ client.on('guildMemberUpdate', async (oldMember, newMember) => {
 **Flow diagram:**
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
 flowchart TD
-    A[User posts messages] --> B[Mimu awards XP]
-    B --> C{Level up?}
-    C -->|Yes| D[Mimu assigns level role<br/>e.g., Engaged Fur LVL 15]
-    C -->|No| A
-    D --> E[Discord fires<br/>guildMemberUpdate event]
-    E --> F[Our bot receives event]
-    F --> G{Level role<br/>detected?}
-    G -->|No| Z[Ignore]
-    G -->|Yes| H[Look up rewards for level 15<br/>in database]
-    H --> I[Find: Byte Token Common]
-    I --> J{User already<br/>has token?}
-    J -->|No| K[Grant token role]
-    J -->|Yes| L[Skip assignment]
-    K --> M[Log to audit trail:<br/>action='add']
-    L --> N[Log to audit trail:<br/>action='skipped']
-    M --> O[User opens ticket<br/>when ready]
+    A["<b>User posts messages</b>"] --> B["<b>Mimu awards XP</b>"]
+    B --> C{"<b>Level up?</b>"}
+    C -->|"<b>Yes</b>"| D["<b>Mimu assigns level role</b><br/><i>e.g., Engaged Fur LVL 15</i>"]
+    C -->|"<b>No</b>"| A
+    D --> E["<b>Discord fires</b><br/><b>guildMemberUpdate event</b>"]
+    E --> F["<b>Our bot receives event</b>"]
+    F --> G{"<b>Level role<br/>detected?</b>"}
+    G -->|"<b>No</b>"| Z["<b>Ignore</b>"]
+    G -->|"<b>Yes</b>"| H["<b>Look up rewards for level 15</b><br/><b>in database</b>"]
+    H --> I["<b>Find: Byte Token [Common]</b>"]
+    I --> J{"<b>User already<br/>has token?</b>"}
+    J -->|"<b>No</b>"| K["<b>Grant token role</b>"]
+    J -->|"<b>Yes</b>"| L["<b>Skip assignment</b>"]
+    K --> M["<b>Log to audit trail:</b><br/><b>action='add'</b>"]
+    L --> N["<b>Log to audit trail:</b><br/><b>action='skipped'</b>"]
+    M --> O["<b>User opens ticket<br/>when ready</b>"]
     N --> O
-    O --> P[Staff manually<br/>activates boost]
+    O --> P["<b>Staff manually<br/>activates boost</b>"]
 
-    style D fill:#90EE90
-    style K fill:#87CEEB
-    style L fill:#FFD700
-    style P fill:#FFA07A
+    style D fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+    style K fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
+    style L fill:#FEE75C,stroke:#000,stroke-width:3px,color:#000
+    style P fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
+    style Z fill:#747F8D,stroke:#000,stroke-width:3px,color:#fff
+
+    linkStyle default stroke:#fff,stroke-width:2px
 ```
 
 ### 2.3 Level-Up Handler
@@ -474,17 +487,20 @@ Users can only hold ONE of each token type at a time (per server rules). The bot
 This matches the existing rule: "You can earn one @Byte Token [Rare] but can't get another until that previous token is redeemed."
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
 flowchart LR
-    A[User reaches level<br/>with token reward] --> B{Check:<br/>Has token role?}
-    B -->|No| C[Grant token role]
-    B -->|Yes| D[Skip assignment]
-    C --> E[Log: action='add'<br/>reason='level_up']
-    D --> F[Log: action='skipped'<br/>details='already owned']
-    E --> G[User can redeem<br/>via ticket]
-    F --> H[User must redeem<br/>existing token first]
+    A["<b>User reaches level<br/>with token reward</b>"] --> B{"<b>Check:<br/>Has token role?</b>"}
+    B -->|"<b>No</b>"| C["<b>Grant token role</b>"]
+    B -->|"<b>Yes</b>"| D["<b>Skip assignment</b>"]
+    C --> E["<b>Log: action='add'</b><br/><b>reason='level_up'</b>"]
+    D --> F["<b>Log: action='skipped'</b><br/><b>details='already owned'</b>"]
+    E --> G["<b>User can redeem<br/>via ticket</b>"]
+    F --> H["<b>User must redeem<br/>existing token first</b>"]
 
-    style C fill:#90EE90
-    style D fill:#FFD700
+    style C fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+    style D fill:#FEE75C,stroke:#000,stroke-width:3px,color:#000
+
+    linkStyle default stroke:#fff,stroke-width:2px
 ```
 
 ---
@@ -595,42 +611,45 @@ async function finalizeMovieAttendance(guildId: string, eventDate: string) {
 | 4 | Cinematic Royalty | 20+ | 5x Chat XP, Art Piece |
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'15px'}}}%%
 flowchart TD
-    A[Movie night event starts] --> B[Staff uses /movie start]
-    B --> C[Bot tracks VC join/leave events]
-    C --> D[User joins VC]
-    D --> E[Record session start time]
-    E --> F{User still<br/>in VC?}
-    F -->|Yes| F
-    F -->|No, left VC| G[Calculate session duration]
-    G --> H[Update cumulative total<br/>Update longest session]
-    H --> I{Event<br/>ended?}
-    I -->|No| C
-    I -->|Yes| J[Staff uses /movie end]
-    J --> K{Check guild<br/>mode}
-    K -->|Cumulative| L{Total time<br/>>= 30 min?}
-    K -->|Continuous| M{Longest session<br/>>= 30 min?}
-    L -->|Yes| N[Mark as qualified]
-    L -->|No| O[Mark as not qualified]
-    M -->|Yes| N
-    M -->|No| O
-    N --> P{Check total<br/>qualified movies}
-    P -->|1 movie| Q[Grant: Red Carpet Guest]
-    P -->|5 movies| R[Grant: Popcorn Club<br/>Remove: Red Carpet]
-    P -->|10 movies| S[Grant: Director's Cut<br/>Remove: Popcorn Club]
-    P -->|20+ movies| T[Grant: Cinematic Royalty<br/>Remove: Director's Cut]
-    Q --> U[Log to audit trail]
+    A["<b>Movie night event starts</b>"] --> B["<b>Staff uses /movie start</b>"]
+    B --> C["<b>Bot tracks VC join/leave events</b>"]
+    C --> D["<b>User joins VC</b>"]
+    D --> E["<b>Record session start time</b>"]
+    E --> F{"<b>User still<br/>in VC?</b>"}
+    F -->|"<b>Yes</b>"| F
+    F -->|"<b>No, left VC</b>"| G["<b>Calculate session duration</b>"]
+    G --> H["<b>Update cumulative total<br/>Update longest session</b>"]
+    H --> I{"<b>Event<br/>ended?</b>"}
+    I -->|"<b>No</b>"| C
+    I -->|"<b>Yes</b>"| J["<b>Staff uses /movie end</b>"]
+    J --> K{"<b>Check guild<br/>mode</b>"}
+    K -->|"<b>Cumulative</b>"| L{"<b>Total time<br/>>= 30 min?</b>"}
+    K -->|"<b>Continuous</b>"| M{"<b>Longest session<br/>>= 30 min?</b>"}
+    L -->|"<b>Yes</b>"| N["<b>Mark as qualified</b>"]
+    L -->|"<b>No</b>"| O["<b>Mark as not qualified</b>"]
+    M -->|"<b>Yes</b>"| N
+    M -->|"<b>No</b>"| O
+    N --> P{"<b>Check total<br/>qualified movies</b>"}
+    P -->|"<b>1 movie</b>"| Q["<b>Grant: Red Carpet Guest</b>"]
+    P -->|"<b>5 movies</b>"| R["<b>Grant: Popcorn Club<br/>Remove: Red Carpet</b>"]
+    P -->|"<b>10 movies</b>"| S["<b>Grant: Director's Cut<br/>Remove: Popcorn Club</b>"]
+    P -->|"<b>20+ movies</b>"| T["<b>Grant: Cinematic Royalty<br/>Remove: Director's Cut</b>"]
+    Q --> U["<b>Log to audit trail</b>"]
     R --> U
     S --> U
     T --> U
-    O --> V[No role change]
+    O --> V["<b>No role change</b>"]
 
-    style N fill:#90EE90
-    style O fill:#FF6B6B
-    style Q fill:#B22222
-    style R fill:#F4D35E
-    style S fill:#FF6347
-    style T fill:#6A0DAD
+    style N fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+    style O fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
+    style Q fill:#DC143C,stroke:#000,stroke-width:3px,color:#fff
+    style R fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
+    style S fill:#FF6347,stroke:#000,stroke-width:3px,color:#fff
+    style T fill:#9B59B6,stroke:#000,stroke-width:3px,color:#fff
+
+    linkStyle default stroke:#fff,stroke-width:2px
 ```
 
 ### 4.3 Movie Night Commands
@@ -733,26 +752,29 @@ async function resetMonthlyCredits() {
 ```
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'15px'}}}%%
 flowchart TD
-    A[Weekly scheduler triggers<br/>Sunday night] --> B[Query message_activity table<br/>for past 7 days]
-    B --> C[Calculate top 3 users<br/>by message count]
-    C --> D[Check 1st place<br/>for streak]
-    D --> E{Had role<br/>last week?}
-    E -->|Yes| F[Mark as streak<br/>Double rewards]
-    E -->|No| G[New winner<br/>Standard rewards]
-    F --> H[Grant: Fur of the Week<br/>XP: 10000, Currency: 17000<br/>Credits: +1]
-    G --> I[Grant: Fur of the Week<br/>XP: 5000, Currency: 8500<br/>Credits: +1]
-    H --> J[Remove role from<br/>previous 1st place]
+    A["<b>Weekly scheduler triggers<br/>Sunday night</b>"] --> B["<b>Query message_activity table<br/>for past 7 days</b>"]
+    B --> C["<b>Calculate top 3 users<br/>by message count</b>"]
+    C --> D["<b>Check 1st place<br/>for streak</b>"]
+    D --> E{"<b>Had role<br/>last week?</b>"}
+    E -->|"<b>Yes</b>"| F["<b>Mark as streak<br/>Double rewards</b>"]
+    E -->|"<b>No</b>"| G["<b>New winner<br/>Standard rewards</b>"]
+    F --> H["<b>Grant: Fur of the Week<br/>XP: 10000, Currency: 17000<br/>Credits: +1</b>"]
+    G --> I["<b>Grant: Fur of the Week<br/>XP: 5000, Currency: 8500<br/>Credits: +1</b>"]
+    H --> J["<b>Remove role from<br/>previous 1st place</b>"]
     I --> J
-    J --> K[Grant 2nd place:<br/>Chatter Fox<br/>XP: 3500, Currency: 4600]
-    K --> L[Grant 3rd place:<br/>Chatter Fox<br/>XP: 1500, Currency: 2400]
-    L --> M[Post announcement<br/>in configured channel]
-    M --> N[Log all changes<br/>to audit trail]
+    J --> K["<b>Grant 2nd place:<br/>Chatter Fox<br/>XP: 3500, Currency: 4600</b>"]
+    K --> L["<b>Grant 3rd place:<br/>Chatter Fox<br/>XP: 1500, Currency: 2400</b>"]
+    L --> M["<b>Post announcement<br/>in configured channel</b>"]
+    M --> N["<b>Log all changes<br/>to audit trail</b>"]
 
-    style H fill:#FFD700
-    style I fill:#FFD700
-    style K fill:#C0C0C0
-    style L fill:#CD7F32
+    style H fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
+    style I fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
+    style K fill:#C0C0C0,stroke:#000,stroke-width:3px,color:#000
+    style L fill:#CD7F32,stroke:#000,stroke-width:3px,color:#fff
+
+    linkStyle default stroke:#fff,stroke-width:2px
 ```
 
 ---
@@ -814,37 +836,39 @@ client.on('voiceStateUpdate', (oldState, newState) => {
 ## Implementation Priority
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'14px', 'gridColor':'#444', 'gridLineStartPadding':150}}}%%
 gantt
-    title Role Automation Implementation Timeline
+    title <b>Role Automation Implementation Timeline</b>
     dateFormat YYYY-MM-DD
-    section Phase 1: Foundation
-    Database schema migration           :p1a, 2025-01-01, 3d
-    Core role assignment service        :p1b, after p1a, 5d
-    Configuration commands              :p1c, after p1b, 3d
 
-    section Phase 2: Level Rewards
-    guildMemberUpdate listener          :p2a, after p1c, 3d
-    Level reward handler                :p2b, after p2a, 4d
-    Manual sync-level command           :p2c, after p2a, 2d
+    section <b>Phase 1: Foundation</b>
+    <b>Database schema migration</b>           :done, p1a, 2025-01-01, 3d
+    <b>Core role assignment service</b>        :active, p1b, after p1a, 5d
+    <b>Configuration commands</b>              :p1c, after p1b, 3d
 
-    section Phase 3: Token Assignment
-    Duplicate prevention logic          :p3a, after p2b, 2d
-    Token role assignment               :p3b, after p3a, 3d
-    Audit trail improvements            :p3c, after p3b, 2d
+    section <b>Phase 2: Level Rewards</b>
+    <b>guildMemberUpdate listener</b>          :p2a, after p1c, 3d
+    <b>Level reward handler</b>                :p2b, after p2a, 4d
+    <b>Manual sync-level command</b>           :p2c, after p2a, 2d
 
-    section Phase 4: Movie Nights
-    Voice state tracking                :p4a, after p3c, 4d
-    Movie attendance calculator         :p4b, after p4a, 3d
-    Movie tier role assignment          :p4c, after p4b, 2d
+    section <b>Phase 3: Token Assignment</b>
+    <b>Duplicate prevention logic</b>          :p3a, after p2b, 2d
+    <b>Token role assignment</b>               :p3b, after p3a, 3d
+    <b>Audit trail improvements</b>            :p3c, after p3b, 2d
 
-    section Phase 5: Activity Rewards
-    Weekly winner scheduler             :p5a, after p4c, 4d
-    Credit tracking system              :p5b, after p5a, 3d
-    Monthly pool winners                :p5c, after p5b, 3d
+    section <b>Phase 4: Movie Nights</b>
+    <b>Voice state tracking</b>                :p4a, after p3c, 4d
+    <b>Movie attendance calculator</b>         :p4b, after p4a, 3d
+    <b>Movie tier role assignment</b>          :p4c, after p4b, 2d
 
-    section Phase 6: Voice Activity
-    Voice activity tracking             :p6a, after p5c, 5d
-    Monthly winner calculation          :p6b, after p6a, 3d
+    section <b>Phase 5: Activity Rewards</b>
+    <b>Weekly winner scheduler</b>             :p5a, after p4c, 4d
+    <b>Credit tracking system</b>              :p5b, after p5a, 3d
+    <b>Monthly pool winners</b>                :p5c, after p5b, 3d
+
+    section <b>Phase 6: Voice Activity</b>
+    <b>Voice activity tracking</b>             :p6a, after p5c, 5d
+    <b>Monthly winner calculation</b>          :p6b, after p6a, 3d
 ```
 
 ### High Priority (Phase 1-2)
@@ -890,24 +914,27 @@ async function canManageRole(guild: Guild, roleId: string): Promise<boolean> {
 **Important**: The bot can only manage roles BELOW the Senior Moderator role (position 200) in the hierarchy. Ensure all automated roles are positioned below this.
 
 ```mermaid
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
 flowchart TD
-    A[Attempt to assign role] --> B{Bot has<br/>MANAGE_ROLES?}
-    B -->|No| C[Error: Missing permission]
-    B -->|Yes| D{Target role<br/>exists?}
-    D -->|No| E[Error: Unknown role]
-    D -->|Yes| F{Bot's highest role<br/>> target role<br/>position?}
-    F -->|No| G[Error: Role hierarchy<br/>Target above bot]
-    F -->|Yes| H[Assign role successfully]
+    A["<b>Attempt to assign role</b>"] --> B{"<b>Bot has<br/>MANAGE_ROLES?</b>"}
+    B -->|"<b>No</b>"| C["<b>Error: Missing permission</b>"]
+    B -->|"<b>Yes</b>"| D{"<b>Target role<br/>exists?</b>"}
+    D -->|"<b>No</b>"| E["<b>Error: Unknown role</b>"]
+    D -->|"<b>Yes</b>"| F{"<b>Bot's highest role<br/>> target role<br/>position?</b>"}
+    F -->|"<b>No</b>"| G["<b>Error: Role hierarchy<br/>Target above bot</b>"]
+    F -->|"<b>Yes</b>"| H["<b>Assign role successfully</b>"]
 
-    C --> I[Log error to audit trail]
+    C --> I["<b>Log error to audit trail</b>"]
     E --> I
     G --> I
-    H --> J[Log success to audit trail]
+    H --> J["<b>Log success to audit trail</b>"]
 
-    style C fill:#FF6B6B
-    style E fill:#FF6B6B
-    style G fill:#FF6B6B
-    style H fill:#90EE90
+    style C fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
+    style E fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
+    style G fill:#ED4245,stroke:#000,stroke-width:3px,color:#fff
+    style H fill:#57F287,stroke:#000,stroke-width:3px,color:#000
+
+    linkStyle default stroke:#fff,stroke-width:2px
 ```
 
 ---
