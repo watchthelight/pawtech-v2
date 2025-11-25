@@ -103,6 +103,7 @@ export const client = new Client({
     GatewayIntentBits.GuildMembers,
     GatewayIntentBits.GuildMessages,
     GatewayIntentBits.MessageContent,
+    GatewayIntentBits.GuildVoiceStates, // For movie night attendance tracking
   ],
   partials: [Partials.Channel],
 });
@@ -190,6 +191,12 @@ commands.set(statusupdate.data.name, wrapCommand("statusupdate", statusupdate.ex
 // Listopen output mode command (admin-only)
 import * as reviewSetListopenOutput from "./commands/review-set-listopen-output.js";
 commands.set(reviewSetListopenOutput.data.name, wrapCommand("review-set-listopen-output", reviewSetListopenOutput.execute));
+
+// Role automation commands
+import * as movie from "./commands/movie.js";
+import * as roles from "./commands/roles.js";
+commands.set(movie.data.name, wrapCommand("movie", movie.execute));
+commands.set(roles.data.name, wrapCommand("roles", roles.execute));
 
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
@@ -555,6 +562,62 @@ client.on("threadDelete", (thread) => {
       { err, threadId: thread.id },
       "[modmail] failed to clean up open_modmail on threadDelete"
     );
+  }
+});
+
+// ROLE AUTOMATION: Level rewards when Amaribot assigns level roles
+// WHY: Automatically grant token/ticket rewards when users level up
+// DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildMemberUpdate
+import { handleLevelRoleAdded } from "./features/levelRewards.js";
+
+client.on("guildMemberUpdate", async (oldMember, newMember) => {
+  try {
+    // Detect newly added roles
+    const addedRoles = newMember.roles.cache.filter(
+      (role) => !oldMember.roles.cache.has(role.id)
+    );
+
+    if (addedRoles.size === 0) return;
+
+    // Check each new role to see if it's a level role
+    for (const [roleId, role] of addedRoles) {
+      await handleLevelRoleAdded(newMember.guild, newMember, roleId);
+    }
+  } catch (err) {
+    logger.error({ evt: "guildMemberUpdate_error", err }, "Error in guildMemberUpdate handler");
+  }
+});
+
+// ROLE AUTOMATION: Movie night attendance tracking
+// WHY: Track VC participation for movie night tier roles
+// DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-voiceStateUpdate
+import {
+  getActiveMovieEvent,
+  handleMovieVoiceJoin,
+  handleMovieVoiceLeave,
+} from "./features/movieNight.js";
+
+client.on("voiceStateUpdate", async (oldState, newState) => {
+  try {
+    const guildId = newState.guild?.id;
+    if (!guildId) return;
+
+    const activeEvent = getActiveMovieEvent(guildId);
+    if (!activeEvent) return; // No active movie event
+
+    const userId = newState.member?.id;
+    if (!userId) return;
+
+    const joined = !oldState.channelId && newState.channelId === activeEvent.channelId;
+    const left = oldState.channelId === activeEvent.channelId && !newState.channelId;
+
+    if (joined) {
+      handleMovieVoiceJoin(guildId, userId);
+    } else if (left) {
+      handleMovieVoiceLeave(guildId, userId);
+    }
+  } catch (err) {
+    logger.error({ evt: "voiceStateUpdate_error", err }, "Error in voiceStateUpdate handler");
   }
 });
 

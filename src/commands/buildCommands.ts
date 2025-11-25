@@ -22,6 +22,8 @@ import { data as activityData } from "./activity.js";
 import { data as backfillData } from "./backfill.js";
 import { data as statusupdateData } from "./statusupdate.js";
 import { data as reviewSetListopenOutputData } from "./review-set-listopen-output.js";
+import { data as movieData } from "./movie.js";
+import { data as rolesData } from "./roles.js";
 
 export function buildCommands() {
   return [
@@ -53,6 +55,8 @@ export function buildCommands() {
     backfillData.toJSON(),
     statusupdateData.toJSON(),
     reviewSetListopenOutputData.toJSON(),
+    movieData.toJSON(),
+    rolesData.toJSON(),
     // Note: Context menu commands would be registered separately via a different API endpoint
     // modmailContextMenu.toJSON(),
   ];
