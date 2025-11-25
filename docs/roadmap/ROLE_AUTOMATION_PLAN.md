@@ -23,43 +23,46 @@ This document outlines the implementation plan for automating role management in
 ### System Architecture
 
 ```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'16px'}}}%%
-flowchart TB
-    MIMU["<b>Mimu Leveling Bot</b><br/>(External)"]
-    DISCORD["<b>Discord API</b>"]
-    STAFF["<b>Staff/Moderators</b>"]
+%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'18px'}}}%%
+flowchart LR
+    MIMU["<b>🤖 Mimu Bot</b>"]
+    DISCORD["<b>📡 Discord API</b>"]
 
-    EVENTS["<b>Event Listeners</b>"]
-    SCHED["<b>Schedulers</b>"]
-    ROLE["<b>Role Automation<br/>Service</b>"]
-    DB[("<b>SQLite<br/>Database</b>")]
+    EVENTS["<b>👂 Event<br/>Listeners</b>"]
+    ROLE["<b>⚙️ Role<br/>Automation</b>"]
+    DB[("<b>💾 Database</b>")]
+    SCHED["<b>⏰ Schedulers</b>"]
 
-    MIMU -->|"Assigns<br/>level roles"| DISCORD
-    STAFF -->|"Manual<br/>commands"| ROLE
-    STAFF -->|"Activates<br/>boosts"| DISCORD
+    STAFF["<b>👥 Staff</b>"]
 
-    DISCORD -->|"guildMember<br/>Update"| EVENTS
-    DISCORD -->|"voiceState<br/>Update"| EVENTS
-
-    EVENTS -->|"Level role<br/>detected"| ROLE
-    EVENTS -->|"VC join/<br/>leave"| ROLE
-
-    SCHED -->|"Check<br/>winners"| DB
-    SCHED -->|"Assign<br/>roles"| ROLE
-
-    ROLE -->|"Grant<br/>rewards"| DISCORD
-    ROLE -->|"Log"| DB
+    MIMU --> DISCORD
+    DISCORD --> EVENTS
+    EVENTS --> ROLE
+    SCHED --> ROLE
+    STAFF --> ROLE
+    ROLE --> DISCORD
+    ROLE --> DB
+    SCHED --> DB
 
     style MIMU fill:#FFD700,stroke:#000,stroke-width:4px,color:#000
     style DISCORD fill:#5865F2,stroke:#000,stroke-width:4px,color:#fff
-    style STAFF fill:#FF6B6B,stroke:#000,stroke-width:4px,color:#fff
     style EVENTS fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
-    style SCHED fill:#7289DA,stroke:#000,stroke-width:4px,color:#fff
     style ROLE fill:#00D9FF,stroke:#000,stroke-width:4px,color:#000
     style DB fill:#57F287,stroke:#000,stroke-width:4px,color:#000
+    style SCHED fill:#9B59B6,stroke:#000,stroke-width:4px,color:#fff
+    style STAFF fill:#FF6B6B,stroke:#000,stroke-width:4px,color:#fff
 
-    linkStyle default stroke:#fff,stroke-width:3px
+    linkStyle default stroke:#fff,stroke-width:4px
 ```
+
+**Data Flow:**
+1. **Mimu Bot** assigns level roles via Discord API
+2. **Discord API** fires events (guildMemberUpdate, voiceStateUpdate)
+3. **Event Listeners** detect role changes and VC activity
+4. **Role Automation** processes events and grants rewards
+5. **Schedulers** check weekly winners and trigger role updates
+6. **Staff** can manually trigger commands and activate boosts
+7. **Database** stores all role assignments and audit logs
 
 ---
 
