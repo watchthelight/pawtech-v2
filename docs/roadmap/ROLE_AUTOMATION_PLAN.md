@@ -12,13 +12,13 @@ This document outlines the implementation plan for automating role management in
 
 1. **Level Rewards** - Detect when Mimu assigns level roles, grant corresponding token/ticket rewards
 2. **Movie Night Attendance** - Track VC participation and assign tier roles
-3. **Activity Rewards** - Weekly winner roles and streak tracking
 
 **Key Notes:**
 - Mimu handles level role assignment (Newcomer Fur, Beginner Fur, etc.)
 - Our bot reacts to role changes and grants reward tokens/tickets
 - Token redemption (activating boosts) remains manual via staff tickets
 - This keeps users in control of when they activate their rewards
+- **Weekly/monthly activity rewards remain manual** - Staff will continue to assign Fur of the Week and Chatter Fox roles manually
 
 ### System Architecture
 
@@ -49,8 +49,7 @@ graph TB
         end
 
         subgraph SCHEDULED["Scheduled Tasks"]
-            SCHED["<b>Weekly/Monthly<br/>Schedulers</b><br/>src/scheduler/"]
-            ACTIVITY["Activity Winner<br/>Calculator"]
+            SCHED["<b>Future Schedulers</b><br/>src/scheduler/"]
         end
 
         subgraph DATA["Data Layer"]
@@ -78,8 +77,7 @@ graph TB
     LEVEL_SVC --> ROLE_SVC
     MOVIE_SVC --> ROLE_SVC
 
-    SCHED --> ACTIVITY
-    ACTIVITY --> ROLE_SVC
+    SCHED -.->|"Future use"| ROLE_SVC
 
     ROLE_SVC -->|"Grant roles"| API
     ROLE_SVC -->|"Audit log"| DB
@@ -101,8 +99,7 @@ graph TB
     style LEVEL_SVC fill:#1ABC9C,stroke:#000,stroke-width:2px,color:#fff
     style MOVIE_SVC fill:#1ABC9C,stroke:#000,stroke-width:2px,color:#fff
     style DB fill:#57F287,stroke:#000,stroke-width:3px,color:#000
-    style SCHED fill:#E67E22,stroke:#000,stroke-width:3px,color:#fff
-    style ACTIVITY fill:#E67E22,stroke:#000,stroke-width:2px,color:#fff
+    style SCHED fill:#747F8D,stroke:#000,stroke-width:3px,color:#fff
     style STAFF fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
     style COMMANDS fill:#FF6B6B,stroke:#000,stroke-width:2px,color:#fff
 
@@ -266,7 +263,6 @@ Extend `/config` to manage role tier and reward mappings:
 - `level` - Level milestone roles that Mimu assigns
 - `level_reward` - Token/ticket roles granted when user reaches a level
 - `movie_night` - Movie attendance tier roles
-- `activity_reward` - Weekly/monthly winner roles
 
 ### 1.3 Core Role Management Service
 
@@ -719,158 +715,27 @@ Next Tier: Director's Cut (2 more movies needed)
 
 ---
 
-## Phase 5: Weekly Activity Rewards
+## Phase 5: Future Enhancements (Out of Scope)
 
-### 5.1 Weekly Winner Detection
+The following features are **not included** in this automation plan and will remain manual:
 
-Use existing `message_activity` table to calculate weekly activity:
+### 5.1 Weekly Activity Rewards (Manual)
 
-```sql
-SELECT
-  user_id,
-  COUNT(*) as message_count
-FROM message_activity
-WHERE guild_id = ?
-  AND created_at_s >= ? -- Start of week (Unix timestamp)
-  AND created_at_s < ?  -- End of week
-GROUP BY user_id
-ORDER BY message_count DESC
-LIMIT 3;
-```
+**Staff will continue to:**
+- Manually track top users (Mimu does not expose an API)
+- Manually assign "Fur of the Week" and "Chatter Fox" roles
+- Award XP and currency bonuses via Mimu
+- Track monthly credits for art/nitro rewards
 
-### 5.2 Reward Tiers
+**Why manual:**
+- Mimu's activity data is not accessible via API
+- Requires human judgment for streak validation
+- XP/currency bonuses require Mimu bot commands
+- Credit redemption process is already ticket-based
 
-| Place | Role | XP Bonus | Currency | Credits |
-|-------|------|----------|----------|---------|
-| 1st | Fur of the Week | +5000 | +8500 | 1 monthly |
-| 2nd | Chatter Fox | +3500 | +4600 | - |
-| 3rd | Chatter Fox | +1500 | +2400 | - |
+### 5.2 Voice Activity Tracking (Out of Scope)
 
-**Streak Bonus**: 1st place doubles if user has consecutive wins.
-
-### 5.3 Credit System
-
-Track monthly credits for 1st place winners:
-
-```sql
-CREATE TABLE IF NOT EXISTS activity_credits (
-    guild_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    month TEXT NOT NULL,          -- 'YYYY-MM' format
-    credits INTEGER DEFAULT 0,
-    redeemed INTEGER DEFAULT 0,   -- 1 if already redeemed this month
-    PRIMARY KEY (guild_id, user_id, month)
-);
-```
-
-**Credit Rewards:**
-- 1 Credit: Headshot art piece
-- 2 Credits: Half-body art piece
-- 3 Credits: 2x $5 Discord Shop items
-- 4 Credits: $9.99 Nitro 2x Boost
-
-### 5.4 Scheduled Jobs
-
-```typescript
-// src/scheduler/activityRewardsScheduler.ts
-
-// Run weekly (Sunday night / Monday morning)
-async function processWeeklyWinners() {
-  // 1. Calculate top 3 for each guild
-  // 2. Check for streaks
-  // 3. Assign roles (remove from previous winners)
-  // 4. Grant XP and currency
-  // 5. Update credits for 1st place
-  // 6. Post announcement embed
-}
-
-// Run monthly (1st of month)
-async function resetMonthlyCredits() {
-  // 1. Archive previous month's credits
-  // 2. Post monthly winner announcement
-  // 3. Reset redeemed flags
-}
-```
-
-```mermaid
-%%{init: {'theme':'dark', 'themeVariables': { 'fontSize':'15px'}}}%%
-flowchart TD
-    A["<b>Weekly scheduler triggers<br/>Sunday night</b>"] --> B["<b>Query message_activity table<br/>for past 7 days</b>"]
-    B --> C["<b>Calculate top 3 users<br/>by message count</b>"]
-    C --> D["<b>Check 1st place<br/>for streak</b>"]
-    D --> E{"<b>Had role<br/>last week?</b>"}
-    E -->|"<b>Yes</b>"| F["<b>Mark as streak<br/>Double rewards</b>"]
-    E -->|"<b>No</b>"| G["<b>New winner<br/>Standard rewards</b>"]
-    F --> H["<b>Grant: Fur of the Week<br/>XP: 10000, Currency: 17000<br/>Credits: +1</b>"]
-    G --> I["<b>Grant: Fur of the Week<br/>XP: 5000, Currency: 8500<br/>Credits: +1</b>"]
-    H --> J["<b>Remove role from<br/>previous 1st place</b>"]
-    I --> J
-    J --> K["<b>Grant 2nd place:<br/>Chatter Fox<br/>XP: 3500, Currency: 4600</b>"]
-    K --> L["<b>Grant 3rd place:<br/>Chatter Fox<br/>XP: 1500, Currency: 2400</b>"]
-    L --> M["<b>Post announcement<br/>in configured channel</b>"]
-    M --> N["<b>Log all changes<br/>to audit trail</b>"]
-
-    style H fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
-    style I fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
-    style K fill:#C0C0C0,stroke:#000,stroke-width:3px,color:#000
-    style L fill:#CD7F32,stroke:#000,stroke-width:3px,color:#fff
-
-    linkStyle default stroke:#fff,stroke-width:2px
-```
-
----
-
-## Phase 6: Voice Activity Tracking
-
-### 6.1 Monthly Pool Winners
-
-Track both text AND voice activity for monthly rewards:
-
-```sql
-CREATE TABLE IF NOT EXISTS voice_activity (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    guild_id TEXT NOT NULL,
-    user_id TEXT NOT NULL,
-    channel_id TEXT NOT NULL,
-    joined_at INTEGER NOT NULL,
-    left_at INTEGER,
-    duration_minutes INTEGER,
-    date TEXT NOT NULL,           -- YYYY-MM-DD for daily aggregation
-    UNIQUE(guild_id, user_id, channel_id, joined_at)
-);
-
-CREATE INDEX idx_voice_activity_date ON voice_activity(guild_id, date);
-```
-
-### 6.2 Voice Tracking Implementation
-
-```typescript
-const voiceSessions = new Map<string, number>(); // `${guildId}:${userId}` -> joinedAt
-
-client.on('voiceStateUpdate', (oldState, newState) => {
-  const key = `${newState.guild.id}:${newState.member?.id}`;
-
-  // User joined VC
-  if (!oldState.channelId && newState.channelId) {
-    voiceSessions.set(key, Date.now());
-  }
-
-  // User left VC
-  if (oldState.channelId && !newState.channelId) {
-    const joinedAt = voiceSessions.get(key);
-    if (joinedAt) {
-      const duration = Math.floor((Date.now() - joinedAt) / 60000);
-      // Record to voice_activity table
-      voiceSessions.delete(key);
-    }
-  }
-
-  // User moved channels
-  if (oldState.channelId && newState.channelId && oldState.channelId !== newState.channelId) {
-    // End previous session, start new one
-  }
-});
-```
+Monthly voice activity winners will remain a manual staff process. The existing movie night attendance tracking (Phase 4) is sufficient for VC-based rewards.
 
 ---
 
@@ -885,21 +750,15 @@ flowchart LR
     P2["<b>Phase 2</b><br/>Level Rewards<br/>~9 days"]
     P3["<b>Phase 3</b><br/>Token Assignment<br/>~7 days"]
     P4["<b>Phase 4</b><br/>Movie Nights<br/>~9 days"]
-    P5["<b>Phase 5</b><br/>Activity Rewards<br/>~10 days"]
-    P6["<b>Phase 6</b><br/>Voice Activity<br/>~8 days"]
 
     P1 -->|"Complete"| P2
     P2 -->|"Complete"| P3
     P3 -->|"Complete"| P4
-    P4 -->|"Complete"| P5
-    P5 -->|"Complete"| P6
 
     style P1 fill:#57F287,stroke:#000,stroke-width:3px,color:#000
     style P2 fill:#00D9FF,stroke:#000,stroke-width:3px,color:#000
     style P3 fill:#FFD700,stroke:#000,stroke-width:3px,color:#000
     style P4 fill:#FF6B6B,stroke:#000,stroke-width:3px,color:#fff
-    style P5 fill:#9B59B6,stroke:#000,stroke-width:3px,color:#fff
-    style P6 fill:#7289DA,stroke:#000,stroke-width:3px,color:#fff
 
     linkStyle default stroke:#fff,stroke-width:3px
 ```
@@ -912,10 +771,8 @@ flowchart LR
 | **Phase 2: Level Rewards** | guildMemberUpdate listener<br/>Level reward handler<br/>Manual sync-level command | 3d<br/>4d<br/>2d | 🔴 Critical |
 | **Phase 3: Token Assignment** | Duplicate prevention logic<br/>Token role assignment<br/>Audit trail improvements | 2d<br/>3d<br/>2d | 🟡 High |
 | **Phase 4: Movie Nights** | Voice state tracking<br/>Movie attendance calculator<br/>Movie tier role assignment | 4d<br/>3d<br/>2d | 🟡 High |
-| **Phase 5: Activity Rewards** | Weekly winner scheduler<br/>Credit tracking system<br/>Monthly pool winners | 4d<br/>3d<br/>3d | 🟢 Medium |
-| **Phase 6: Voice Activity** | Voice activity tracking<br/>Monthly winner calculation | 5d<br/>3d | 🟢 Medium |
 
-**Total Estimated Time:** ~54 development days (~11 weeks)
+**Total Estimated Time:** ~36 development days (~7-8 weeks)
 
 ### High Priority (Phase 1-2)
 1. Database schema migration
@@ -928,11 +785,6 @@ flowchart LR
 6. Token/ticket role assignment on level-up
 7. Movie night attendance tracking
 8. Movie tier role assignment
-
-### Lower Priority (Phase 5-6)
-9. Weekly activity winner automation
-10. Voice activity tracking
-11. Monthly credit system
 
 ---
 
@@ -1010,8 +862,6 @@ Log failures to `action_log` with error details for debugging.
 - [ ] Skipped assignments are logged with reason
 - [ ] Movie attendance is tracked accurately (30 min threshold)
 - [ ] Movie tier roles are assigned at correct attendance counts
-- [ ] Weekly winners receive correct roles
-- [ ] Previous weekly winners have roles removed
 - [ ] Error handling prevents crashes on permission errors
 
 ---
@@ -1019,10 +869,11 @@ Log failures to `action_log` with error details for debugging.
 ## Future Considerations
 
 1. **Automated Boost Activation**: If staff decides tokens should auto-activate, add temporary role scheduler
-2. **Mimu Integration**: Direct API integration for inventory sync
-3. **Reaction Roles**: Self-assignable roles via reactions
-4. **Achievement System**: Badge roles for specific accomplishments
-5. **Level-up Announcements**: Post to a channel when users hit milestones
+2. **Mimu Integration**: Direct API integration for inventory sync and XP/currency bonuses
+3. **Weekly Activity Automation**: Automate Fur of the Week / Chatter Fox role assignment (requires Mimu API)
+4. **Reaction Roles**: Self-assignable roles via reactions
+5. **Achievement System**: Badge roles for specific accomplishments
+6. **Level-up Announcements**: Post to a channel when users hit milestones
 
 ---
 
@@ -1106,12 +957,14 @@ These are the **active boost roles** (assigned when a token is redeemed):
 | 5x | [5x] Byte | `1405369052829974543` | 83 |
 | 10x | [x10] Byte | `1269171052836294787` | 84 |
 
-### Activity Reward Roles (Positions 177-178)
+### Activity Reward Roles (Positions 177-178) - **NOT AUTOMATED**
+
+These roles are **manually assigned by staff** and are not part of the automation system:
 
 | Role Name | Role ID | Position | Purpose |
 |-----------|---------|----------|---------|
-| Chatter Fox | `1371630364178645102` | 177 | 2nd/3rd place weekly |
-| Fur of the Week | `973375865306120232` | 178 | 1st place weekly |
+| Chatter Fox | `1371630364178645102` | 177 | 2nd/3rd place weekly (manual) |
+| Fur of the Week | `973375865306120232` | 178 | 1st place weekly (manual) |
 
 ### Reward Item Roles
 
