@@ -393,7 +393,15 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
         inline: true,
       });
     }
-    if (meta.rewardRoleName) {
+    // Handle array of reward roles (consolidated logging for multiple rewards at same level)
+    if (Array.isArray(meta.rewardRoles) && meta.rewardRoles.length > 0) {
+      embed.addFields({
+        name: meta.rewardRoles.length === 1 ? "Reward Role" : "Reward Roles",
+        value: meta.rewardRoles.join("\n"),
+        inline: false, // Use full width for multiple roles
+      });
+    } else if (meta.rewardRoleName) {
+      // Legacy single reward format (backwards compat)
       embed.addFields({
         name: "Reward Role",
         value: meta.rewardRoleId ? `${meta.rewardRoleName} (<@&${meta.rewardRoleId}>)` : meta.rewardRoleName,

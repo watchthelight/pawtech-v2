@@ -13,6 +13,7 @@ import type { Guild, VoiceState } from "discord.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { assignRole, getRoleTiers, removeRole, type RoleAssignmentResult } from "./roleAutomation.js";
+import { isPanicMode } from "./panicStore.js";
 
 // ============================================================================
 // Types
@@ -278,6 +279,18 @@ export function getUserQualifiedMovieCount(guildId: string, userId: string): num
  */
 export async function updateMovieTierRole(guild: Guild, userId: string): Promise<RoleAssignmentResult[]> {
   const results: RoleAssignmentResult[] = [];
+
+  // Panic mode check - halt all automated role changes
+  // This is the emergency brake for role automation
+  if (isPanicMode(guild.id)) {
+    logger.warn({
+      evt: "movie_tier_blocked_panic",
+      guildId: guild.id,
+      userId,
+    }, "Movie tier update blocked - panic mode active");
+    return results;
+  }
+
   const qualifiedCount = getUserQualifiedMovieCount(guild.id, userId);
 
   logger.info({

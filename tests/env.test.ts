@@ -8,7 +8,25 @@
 import { describe, it, expect } from "vitest";
 import { z } from "zod";
 
+/**
+ * Tests for environment variable validation using Zod.
+ *
+ * The bot needs certain env vars to function (DISCORD_TOKEN, CLIENT_ID).
+ * Others have sensible defaults or are optional. These tests verify that
+ * the schema catches missing/invalid values at startup rather than failing
+ * mysteriously later.
+ *
+ * Why test the schema separately? The actual env parsing happens at module
+ * load time, which is hard to test in isolation. Testing the schema directly
+ * lets us verify validation logic without touching process.env.
+ */
 describe("Environment Validation", () => {
+  /**
+   * This schema mirrors src/lib/env.ts. Keep them in sync.
+   * - DISCORD_TOKEN and CLIENT_ID are required (bot can't start without them)
+   * - NODE_ENV only allows "development" or "production" (no "staging", "test", etc.)
+   * - Optional vars are for guild-scoped command registration and testing
+   */
   const envSchema = z.object({
     DISCORD_TOKEN: z.string().min(1, "Missing DISCORD_TOKEN"),
     CLIENT_ID: z.string().min(1, "Missing CLIENT_ID"),
@@ -19,6 +37,7 @@ describe("Environment Validation", () => {
     TEST_REVIEWER_ROLE_ID: z.string().optional(),
   });
 
+  /** Happy path: All required fields present with explicit values. */
   it("should validate complete environment", () => {
     const testEnv = {
       DISCORD_TOKEN: "test_token_123",
@@ -35,6 +54,10 @@ describe("Environment Validation", () => {
     }
   });
 
+  /**
+   * Minimal config: Only required fields provided, defaults should kick in.
+   * This is the likely scenario for a quick dev setup.
+   */
   it("should apply default values", () => {
     const testEnv = {
       DISCORD_TOKEN: "test_token",
@@ -49,6 +72,10 @@ describe("Environment Validation", () => {
     }
   });
 
+  /**
+   * Edge case: Empty string should fail validation (min(1) constraint).
+   * This catches the common mistake of setting DISCORD_TOKEN="" in .env.
+   */
   it("should fail when required fields are missing", () => {
     const testEnv = {
       DISCORD_TOKEN: "",
@@ -63,6 +90,10 @@ describe("Environment Validation", () => {
     }
   });
 
+  /**
+   * Enum validation: NODE_ENV must be exactly "development" or "production".
+   * Other values like "staging", "test", "local" are rejected.
+   */
   it("should fail when NODE_ENV is invalid", () => {
     const testEnv = {
       DISCORD_TOKEN: "test_token",
@@ -74,6 +105,10 @@ describe("Environment Validation", () => {
     expect(result.success).toBe(false);
   });
 
+  /**
+   * Optional fields test: GUILD_ID and TEST_* vars are for development.
+   * When present, they should pass through unchanged. When absent, no error.
+   */
   it("should accept optional fields", () => {
     const testEnv = {
       DISCORD_TOKEN: "test_token",

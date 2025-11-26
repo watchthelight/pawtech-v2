@@ -9,6 +9,14 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import { db } from "../src/db/db.js";
 import { nowUtc } from "../src/lib/time.js";
 
+/**
+ * Tests for the /modstats slash command which generates leaderboards and CSV exports
+ * of moderator activity. This command is used by server admins to track mod productivity.
+ *
+ * Note: These tests directly query the DB rather than invoking the command handler,
+ * so they're testing the query logic in isolation. The actual command handler
+ * is tested separately in integration tests.
+ */
 describe("Modstats Command", () => {
   const TEST_GUILD_ID = "test-guild-modstats-" + Date.now();
   const TEST_MOD_1 = "mod-user-1";
@@ -24,7 +32,15 @@ describe("Modstats Command", () => {
     db.prepare(`DELETE FROM action_log WHERE guild_id = ?`).run(TEST_GUILD_ID);
   });
 
+  /**
+   * Core aggregation logic. The leaderboard groups by actor_id and counts
+   * different action types separately so admins can see the full picture.
+   */
   describe("Leaderboard Query", () => {
+    /**
+     * Sets up two mods with different action mixes to verify counts are
+     * attributed correctly. Mod 1 is more approval-happy, Mod 2 rejects more.
+     */
     it("should aggregate moderator actions correctly", () => {
       const now = nowUtc();
 
@@ -164,6 +180,11 @@ describe("Modstats Command", () => {
       expect(mod2Row?.kicks).toBe(0);
     });
 
+    /**
+     * Time filtering is crucial for the "last 7 days" and "last 30 days" views.
+     * This test creates one action within range and one outside to verify
+     * the created_at_s filter works.
+     */
     it("should respect time range filter", () => {
       const now = nowUtc();
 
@@ -222,6 +243,11 @@ describe("Modstats Command", () => {
       expect(rows[0].total).toBe(1); // Only the recent action
     });
 
+    /**
+     * The leaderboard intentionally excludes non-terminal actions like "claim",
+     * "need_info", and "modmail_open" because those don't represent completed work.
+     * Only actual decisions count toward the rankings.
+     */
     it("should only include decision actions (accept, reject, kick)", () => {
       const now = nowUtc();
 
@@ -299,7 +325,15 @@ describe("Modstats Command", () => {
     });
   });
 
+  /**
+   * CSV export tests. The export is attached to Discord messages for admins
+   * who want to analyze data in Excel or import into their own tracking systems.
+   */
   describe("CSV Generation", () => {
+    /**
+     * Basic CSV structure test. The format is simple and doesn't use advanced
+     * features like quoted fields unless necessary.
+     */
     it("should generate valid CSV format", () => {
       const testData = [
         {
@@ -337,6 +371,11 @@ describe("Modstats Command", () => {
       expect(lines.length).toBe(3); // Header + 2 data rows
     });
 
+    /**
+     * Discord user IDs are numeric strings, but in theory someone could have
+     * a display name with commas. This test verifies quote-escaping works.
+     * In practice actor_id is always a snowflake ID so this is defensive.
+     */
     it("should handle special characters in CSV values", () => {
       const testData = [
         {
@@ -362,6 +401,10 @@ describe("Modstats Command", () => {
       expect(csvContent).toContain('"user,with,commas"');
     });
 
+    /**
+     * Empty result sets should still produce a valid CSV with just the header.
+     * This is important for brand new guilds with no mod activity yet.
+     */
     it("should handle empty results", () => {
       const testData: any[] = [];
 
@@ -378,7 +421,15 @@ describe("Modstats Command", () => {
     });
   });
 
+  /**
+   * Individual mod lookup is used when an admin wants to check a specific
+   * moderator's stats rather than viewing the full leaderboard.
+   */
   describe("Individual Moderator Stats", () => {
+    /**
+     * Verifies that filtering by actor_id correctly isolates one mod's actions
+     * and ignores other mods in the same guild.
+     */
     it("should query individual moderator stats correctly", () => {
       const now = nowUtc();
 
@@ -460,6 +511,11 @@ describe("Modstats Command", () => {
   });
 
   describe("Edge Cases", () => {
+    /**
+     * This catches a subtle SQLite behavior: SUM() returns NULL (not 0) when
+     * there are no matching rows. The command handler needs to coalesce these
+     * to 0 for display. The test documents this gotcha.
+     */
     it("should handle moderators with zero actions", () => {
       // Query non-existent moderator
       const row = db
@@ -493,6 +549,11 @@ describe("Modstats Command", () => {
       expect(row?.kicks).toBeNull();
     });
 
+    /**
+     * Stress test with 200 actions across 50 mods. Verifies the LIMIT clause
+     * works correctly and that the aggregation scales. Each mod ends up with
+     * exactly 4 actions (200 / 50) due to the round-robin insertion pattern.
+     */
     it("should handle very large datasets", () => {
       const now = nowUtc();
 

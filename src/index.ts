@@ -41,11 +41,39 @@ import {
   type ChatInputCommandInteraction,
   Events,
 } from "discord.js";
+import { logger } from "./lib/logger.js";
+import { captureException } from "./lib/sentry.js";
+
+// ===== Global Error Handlers =====
+// WHAT: Catch unhandled rejections and exceptions at process level
+// WHY: Prevents silent crashes, ensures errors are logged and reported to Sentry
+// DOCS: https://nodejs.org/api/process.html#event-uncaughtexception
+
+process.on("unhandledRejection", (reason, promise) => {
+  const error = reason instanceof Error ? reason : new Error(String(reason));
+  logger.error(
+    { evt: "unhandled_rejection", err: error, promise },
+    "[process] Unhandled promise rejection"
+  );
+  captureException(error, { context: "unhandledRejection" });
+  // Don't exit - Discord.js can recover from most rejections
+});
+
+process.on("uncaughtException", (error, origin) => {
+  logger.error(
+    { evt: "uncaught_exception", err: error, origin },
+    "[process] Uncaught exception - bot may be in unstable state"
+  );
+  captureException(error, { context: "uncaughtException", origin });
+  // For uncaught exceptions, we should exit after logging
+  // Give Sentry time to flush, then exit
+  setTimeout(() => process.exit(1), 1000);
+});
+
 import { newTrace, tlog, withStep } from "./lib/tracer.js";
 import { isOwner } from "./utils/owner.js";
 import { TRACE_INTERACTIONS, OWNER_IDS } from "./config.js";
 import type { ModalSubmitInteraction } from "discord.js";
-import { logger } from "./lib/logger.js";
 import { wrapEvent, wrapEventRateLimited } from "./lib/eventWrap.js";
 import { env } from "./lib/env.js";
 import { requireEnv } from "./util/ensureEnv.js";
@@ -74,6 +102,8 @@ import {
   routeThreadToDm,
   routeDmToThread,
   retrofitAllGuildsOnStartup,
+  hydrateOpenModmailThreadsOnStartup,
+  OPEN_MODMAIL_THREADS,
 } from "./features/modmail.js";
 import { initializeBannerSync } from "./features/bannerSync.js";
 import { forumPostNotify } from "./events/forumPostNotify.js";
@@ -241,6 +271,16 @@ client.once(Events.ClientReady, async () => {
     logger.error({ err }, "[startup] panic state load failed");
   }
 
+  // Hydrate open modmail threads from database into memory
+  // WHAT: Populates OPEN_MODMAIL_THREADS set from open_modmail table
+  // WHY: Enables efficient O(1) lookups in messageCreate to route modmail messages
+  // WHEN: Must run before message handlers start processing
+  try {
+    await hydrateOpenModmailThreadsOnStartup(client);
+  } catch (err) {
+    logger.error({ err }, "[startup] modmail thread hydration failed");
+  }
+
   // Heal legacy parent overwrites so moderators can speak in older modmail threads
   // WHAT: Ensures parent channels grant SendMessagesInThreads to configured mod roles
   // WHY: Private threads require BOTH thread membership AND parent channel permissions
@@ -295,19 +335,18 @@ client.once(Events.ClientReady, async () => {
   // See: ARCHITECTURE-DIAGRAMS.md for system documentation
   // ========================================
 
+  // ===== Scheduler Initialization =====
+  // Store interval handles for coordinated shutdown
+  let metricsInterval: NodeJS.Timeout | null = null;
+  let healthInterval: NodeJS.Timeout | null = null;
+
   // Start mod metrics periodic refresh scheduler
   // WHAT: Recalculates mod_metrics table every 15 minutes
   // WHY: Keeps performance analytics current without manual triggers
   // DOCS: See src/scheduler/modMetricsScheduler.ts
   try {
     const { startModMetricsScheduler } = await import("./scheduler/modMetricsScheduler.js");
-    const metricsInterval = startModMetricsScheduler(client);
-
-    // Graceful shutdown: stop scheduler on SIGTERM
-    process.on("SIGTERM", () => {
-      const { stopModMetricsScheduler } = require("./scheduler/modMetricsScheduler.js");
-      stopModMetricsScheduler(metricsInterval);
-    });
+    metricsInterval = startModMetricsScheduler(client);
   } catch (err) {
     logger.warn(
       { err },
@@ -323,13 +362,7 @@ client.once(Events.ClientReady, async () => {
     const { startOpsHealthScheduler } = await import("./scheduler/opsHealthScheduler.js");
     const { setHealthClient } = await import("./features/opsHealth.js");
     setHealthClient(client);
-    const healthInterval = startOpsHealthScheduler(client);
-
-    // Graceful shutdown: stop scheduler on SIGTERM
-    process.on("SIGTERM", () => {
-      const { stopOpsHealthScheduler } = require("./scheduler/opsHealthScheduler.js");
-      stopOpsHealthScheduler(healthInterval);
-    });
+    healthInterval = startOpsHealthScheduler(client);
   } catch (err) {
     logger.warn(
       { err },
@@ -346,6 +379,77 @@ client.once(Events.ClientReady, async () => {
       "[startup] banner sync failed to initialize - continuing without banner sync"
     );
   }
+
+  // ===== Coordinated Graceful Shutdown =====
+  // WHAT: Single handler for SIGTERM/SIGINT that shuts down all subsystems in order
+  // WHY: Prevents data loss, ensures transcripts are flushed, stops schedulers cleanly
+  // ORDER: 1) Log, 2) Stop schedulers, 3) Cleanup features, 4) Destroy client, 5) Close DB
+  let isShuttingDown = false;
+
+  const gracefulShutdown = async (signal: string) => {
+    if (isShuttingDown) {
+      logger.warn({ signal }, "[shutdown] Already shutting down, ignoring");
+      return;
+    }
+    isShuttingDown = true;
+
+    logger.info({ signal }, "[shutdown] Graceful shutdown initiated");
+
+    try {
+      // 1. Stop schedulers
+      if (metricsInterval) {
+        const { stopModMetricsScheduler } = await import("./scheduler/modMetricsScheduler.js");
+        stopModMetricsScheduler(metricsInterval);
+        logger.debug("[shutdown] Mod metrics scheduler stopped");
+      }
+      if (healthInterval) {
+        const { stopOpsHealthScheduler } = await import("./scheduler/opsHealthScheduler.js");
+        stopOpsHealthScheduler(healthInterval);
+        logger.debug("[shutdown] Ops health scheduler stopped");
+      }
+
+      // 2. Cleanup banner sync listeners
+      try {
+        const { cleanupBannerSync } = await import("./features/bannerSync.js");
+        cleanupBannerSync(client);
+        logger.debug("[shutdown] Banner sync listeners cleaned up");
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Banner sync cleanup failed (non-fatal)");
+      }
+
+      // 3. Cleanup notify limiter (stops cleanup interval)
+      try {
+        const { notifyLimiter } = await import("./lib/notifyLimiter.js");
+        if ("destroy" in notifyLimiter && typeof notifyLimiter.destroy === "function") {
+          (notifyLimiter as any).destroy();
+          logger.debug("[shutdown] Notify limiter cleanup interval stopped");
+        }
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Notify limiter cleanup failed (non-fatal)");
+      }
+
+      // 4. Destroy Discord client (closes WebSocket connection)
+      client.destroy();
+      logger.debug("[shutdown] Discord client destroyed");
+
+      // 5. Close database
+      try {
+        db.close();
+        logger.debug("[shutdown] Database closed");
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Database close failed (non-fatal)");
+      }
+
+      logger.info("[shutdown] Graceful shutdown complete");
+      process.exit(0);
+    } catch (err) {
+      logger.error({ err }, "[shutdown] Error during graceful shutdown");
+      process.exit(1);
+    }
+  };
+
+  process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+  process.on("SIGINT", () => gracefulShutdown("SIGINT"));
 
   logger.info({ tag: client.user?.tag, id: client.user?.id }, "Bot ready");
 
@@ -490,116 +594,87 @@ client.once(Events.ClientReady, async () => {
   }
 });
 
-client.on("guildCreate", async (guild) => {
-  try {
-    await syncCommandsToGuild(guild.id);
-  } catch (err) {
-    logger.warn({ guildId: guild.id, err }, "[cmdsync] sync on guildCreate failed");
-  }
-});
+client.on("guildCreate", wrapEvent("guildCreate", async (guild) => {
+  await syncCommandsToGuild(guild.id);
+}));
 
 // Optional: Clear commands on guildDelete to avoid leaving stale commands.
 // Docs: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildDelete
-client.on("guildDelete", async (guild) => {
-  try {
-    // goodbye, old friend
-    // Overwrite with empty array to clear commands.
-    const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
-    await rest.put(Routes.applicationGuildCommands(env.CLIENT_ID, guild.id), {
-      body: [],
-    });
-    logger.info({ guildId: guild.id }, "[cmdsync] cleared commands for removed guild");
-  } catch (err) {
-    logger.warn({ guildId: guild.id, err }, "[cmdsync] failed to clear commands on guildDelete");
-  }
-});
+client.on("guildDelete", wrapEvent("guildDelete", async (guild) => {
+  // goodbye, old friend
+  // Overwrite with empty array to clear commands.
+  const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
+  await rest.put(Routes.applicationGuildCommands(env.CLIENT_ID, guild.id), {
+    body: [],
+  });
+  logger.info({ guildId: guild.id }, "[cmdsync] cleared commands for removed guild");
+}));
 
 // Track member joins for join→submit ratio metrics + activity tracking (PR8)
 // WHY: Enables analysis of verification funnel (how many joiners attempt verification)
 // WHY (PR8): Track joined_at timestamp for Silent-Since-Join detection
 // DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildMemberAdd
-client.on("guildMemberAdd", async (member) => {
+client.on("guildMemberAdd", wrapEvent("guildMemberAdd", async (member) => {
   if (!member.guild) return;
 
-  try {
-    await logActionPretty(member.guild, {
-      actorId: member.id,
-      action: "member_join",
-    });
+  await logActionPretty(member.guild, {
+    actorId: member.id,
+    action: "member_join",
+  });
 
-    logger.debug({ userId: member.id, guildId: member.guild.id }, "[metrics] member join logged");
-  } catch (err) {
-    logger.warn(
-      { err, userId: member.id, guildId: member.guild.id },
-      "[metrics] failed to log member join"
-    );
-  }
+  logger.debug({ userId: member.id, guildId: member.guild.id }, "[metrics] member join logged");
 
   // Track join for Silent-Since-Join detection (PR8)
-  try {
-    const { trackJoin } = await import("./features/activityTracker.js");
-    const joinedAt = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
-    trackJoin(member.guild.id, member.id, joinedAt);
-  } catch (err) {
-    logger.warn(
-      { err, userId: member.id, guildId: member.guild.id },
-      "[activity] failed to track join"
-    );
-  }
-});
+  const { trackJoin } = await import("./features/activityTracker.js");
+  const joinedAt = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
+  trackJoin(member.guild.id, member.id, joinedAt);
+}));
 
-// Safety cleanup: Remove from open_modmail table if thread is deleted/archived manually
-// WHY: Prevents orphaned entries if a thread is deleted outside the normal close flow
+// Safety cleanup: Remove from open_modmail table AND OPEN_MODMAIL_THREADS set if thread is deleted
+// WHY: Prevents orphaned entries and stale in-memory state if a thread is deleted outside the normal close flow
 // DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-threadDelete
-client.on("threadDelete", (thread) => {
+client.on("threadDelete", wrapEvent("threadDelete", async (thread) => {
   if (!thread.guildId) return;
 
-  try {
-    const result = db
-      .prepare(
-        `
-      DELETE FROM open_modmail
-      WHERE thread_id = ?
-    `
-      )
-      .run(thread.id);
+  // Remove from in-memory set (fast, always succeeds)
+  const wasInSet = OPEN_MODMAIL_THREADS.delete(thread.id);
 
-    if (result.changes > 0) {
-      logger.info(
-        { threadId: thread.id, guildId: thread.guildId },
-        "[modmail] cleaned up orphaned open_modmail entry on threadDelete"
-      );
-    }
-  } catch (err) {
-    logger.warn(
-      { err, threadId: thread.id },
-      "[modmail] failed to clean up open_modmail on threadDelete"
+  // Remove from database guard table
+  const result = db
+    .prepare(
+      `
+    DELETE FROM open_modmail
+    WHERE thread_id = ?
+  `
+    )
+    .run(thread.id);
+
+  if (result.changes > 0 || wasInSet) {
+    logger.info(
+      { threadId: thread.id, guildId: thread.guildId, dbDeleted: result.changes > 0, setRemoved: wasInSet },
+      "[modmail] cleaned up orphaned modmail state on threadDelete"
     );
   }
-});
+}));
 
 // ROLE AUTOMATION: Level rewards when Amaribot assigns level roles
 // WHY: Automatically grant token/ticket rewards when users level up
 // DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildMemberUpdate
 import { handleLevelRoleAdded } from "./features/levelRewards.js";
 
-client.on("guildMemberUpdate", async (oldMember, newMember) => {
-  try {
-    // Detect newly added roles
-    const addedRoles = newMember.roles.cache.filter(
-      (role) => !oldMember.roles.cache.has(role.id)
-    );
+client.on("guildMemberUpdate", wrapEvent("guildMemberUpdate", async (oldMember, newMember) => {
+  // Detect newly added roles
+  const addedRoles = newMember.roles.cache.filter(
+    (role) => !oldMember.roles.cache.has(role.id)
+  );
 
-    if (addedRoles.size === 0) return;
+  if (addedRoles.size === 0) return;
 
-    // Check each new role to see if it's a level role
-    for (const [roleId, role] of addedRoles) {
-      await handleLevelRoleAdded(newMember.guild, newMember, roleId);
-    }
-  } catch (err) {
-    logger.error({ evt: "guildMemberUpdate_error", err }, "Error in guildMemberUpdate handler");
+  // Check each new role to see if it's a level role
+  for (const [roleId, role] of addedRoles) {
+    await handleLevelRoleAdded(newMember.guild, newMember, roleId);
   }
-});
+}));
 
 // ROLE AUTOMATION: Movie night attendance tracking
 // WHY: Track VC participation for movie night tier roles
@@ -610,29 +685,25 @@ import {
   handleMovieVoiceLeave,
 } from "./features/movieNight.js";
 
-client.on("voiceStateUpdate", async (oldState, newState) => {
-  try {
-    const guildId = newState.guild?.id;
-    if (!guildId) return;
+client.on("voiceStateUpdate", wrapEvent("voiceStateUpdate", async (oldState, newState) => {
+  const guildId = newState.guild?.id;
+  if (!guildId) return;
 
-    const activeEvent = getActiveMovieEvent(guildId);
-    if (!activeEvent) return; // No active movie event
+  const activeEvent = getActiveMovieEvent(guildId);
+  if (!activeEvent) return; // No active movie event
 
-    const userId = newState.member?.id;
-    if (!userId) return;
+  const userId = newState.member?.id;
+  if (!userId) return;
 
-    const joined = !oldState.channelId && newState.channelId === activeEvent.channelId;
-    const left = oldState.channelId === activeEvent.channelId && !newState.channelId;
+  const joined = !oldState.channelId && newState.channelId === activeEvent.channelId;
+  const left = oldState.channelId === activeEvent.channelId && !newState.channelId;
 
-    if (joined) {
-      handleMovieVoiceJoin(guildId, userId);
-    } else if (left) {
-      handleMovieVoiceLeave(guildId, userId);
-    }
-  } catch (err) {
-    logger.error({ evt: "voiceStateUpdate_error", err }, "Error in voiceStateUpdate handler");
+  if (joined) {
+    handleMovieVoiceJoin(guildId, userId);
+  } else if (left) {
+    handleMovieVoiceLeave(guildId, userId);
   }
-});
+}));
 
 client.on("interactionCreate", async (interaction) => {
   const trace = newTrace("gate", "interactionCreate"); // feature tag "gate" keeps logs grouped
@@ -1298,13 +1369,9 @@ client.on("messageCreate", async (message) => {
 // SAFETY: Uses allowedMentions, permission checks, and audit logging
 // DOCS: See src/events/forumPostNotify.ts
 // NOTE: This replaced the previous messageCreate approach which incorrectly pinged for every message
-client.on("threadCreate", async (thread) => {
-  try {
-    await forumPostNotify(thread);
-  } catch (err) {
-    logger.warn({ err, threadId: thread.id }, "[threadCreate] forum post notify failed");
-  }
-});
+client.on("threadCreate", wrapEvent("threadCreate", async (thread) => {
+  await forumPostNotify(thread);
+}));
 
 async function main() {
   // Step 1: Database health check (fail fast if corrupted)

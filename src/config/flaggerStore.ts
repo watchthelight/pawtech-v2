@@ -20,6 +20,48 @@ export interface FlaggerConfig {
   silentDays: number;
 }
 
+// ============================================================================
+// Cache Layer
+// ============================================================================
+// Simple TTL cache to avoid DB round-trips on every call. getFlaggerConfig
+// is called on every message (for first-message detection), so caching is critical.
+
+interface CacheEntry {
+  value: FlaggerConfig;
+  expiresAt: number;
+}
+
+const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL - balances freshness vs DB load
+const flaggerConfigCache = new Map<string, CacheEntry>();
+
+/**
+ * Get from cache if not expired
+ */
+function getCached(guildId: string): FlaggerConfig | undefined {
+  const entry = flaggerConfigCache.get(guildId);
+  if (entry && Date.now() < entry.expiresAt) {
+    return entry.value;
+  }
+  return undefined; // Cache miss or expired
+}
+
+/**
+ * Set cache entry with TTL
+ */
+function setCache(guildId: string, value: FlaggerConfig): void {
+  flaggerConfigCache.set(guildId, {
+    value,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+}
+
+/**
+ * Invalidate cache entry for a guild (call after writes)
+ */
+function invalidateCache(guildId: string): void {
+  flaggerConfigCache.delete(guildId);
+}
+
 /**
  * WHAT: Get flagger configuration for a guild (channel + threshold).
  * WHY: Supports per-guild override with fallback to process.env.
@@ -39,6 +81,12 @@ export interface FlaggerConfig {
  * console.log(`Silent threshold: ${config.silentDays} days`);
  */
 export function getFlaggerConfig(guildId: string): FlaggerConfig {
+  // Check cache first
+  const cached = getCached(guildId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
   let channelId: string | null = null;
   let silentDays: number = 7; // Default threshold (7 days)
 
@@ -89,7 +137,11 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
     silentDays = Number(envDays);
   }
 
-  return { channelId, silentDays };
+  const result = { channelId, silentDays };
+
+  // Cache the result
+  setCache(guildId, result);
+  return result;
 }
 
 /**
@@ -102,6 +154,9 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
  * setFlagsChannelId('123456789', '987654321');
  */
 export function setFlagsChannelId(guildId: string, channelId: string): void {
+  // Invalidate cache BEFORE write to ensure stale reads are impossible
+  invalidateCache(guildId);
+
   const now = new Date().toISOString();
 
   try {
@@ -151,6 +206,9 @@ export function setSilentFirstMsgDays(guildId: string, days: number): void {
   if (days < 7 || days > 365) {
     throw new Error("Silent days threshold must be between 7 and 365 days");
   }
+
+  // Invalidate cache BEFORE write to ensure stale reads are impossible
+  invalidateCache(guildId);
 
   const now = new Date().toISOString();
 

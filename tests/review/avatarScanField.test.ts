@@ -1,7 +1,10 @@
 /**
- * WHAT: Proves the avatar scan field builds correct reverse-image links from guild config.
- * HOW: Calls buildReverseImageUrl with different templates and asserts final URLs.
- * DOCS: https://vitest.dev/guide/
+ * Tests for buildReverseImageUrl which generates reverse-image-search links
+ * for moderator review embeds. Mods click these to check if an avatar is stolen
+ * artwork, AI-generated slop, or a known problematic image.
+ *
+ * Guilds can configure their preferred search engine (Google Lens, TinEye, etc.)
+ * via the image_search_url_template config field.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import { describe, it, expect } from "vitest";
@@ -9,6 +12,11 @@ import { buildReverseImageUrl } from "../../src/features/avatarScan.js";
 import type { GuildConfig } from "../../src/lib/config.js";
 
 describe("avatar scan field and lens link", () => {
+  /**
+   * The default/common case: Google Lens with {avatarUrl} placeholder.
+   * Note the URL encoding - Discord CDN URLs contain special chars that
+   * need escaping in query strings.
+   */
   it("builds correct Google Lens URL with template", () => {
     const cfg: Pick<GuildConfig, "image_search_url_template"> = {
       image_search_url_template: "https://lens.google.com/uploadbyurl?url={avatarUrl}",
@@ -20,6 +28,10 @@ describe("avatar scan field and lens link", () => {
     );
   });
 
+  /**
+   * Some guilds prefer alternative search engines. The template system
+   * is flexible enough to support any service that accepts a URL parameter.
+   */
   it("builds URL with custom template", () => {
     const cfg: Pick<GuildConfig, "image_search_url_template"> = {
       image_search_url_template: "https://example.com/search?img={avatarUrl}",
@@ -31,6 +43,10 @@ describe("avatar scan field and lens link", () => {
     );
   });
 
+  /**
+   * Fallback behavior when admins forget to include {avatarUrl} in their template.
+   * Rather than breaking, we append ?avatar= to make it work anyway.
+   */
   it("appends avatar param when template lacks placeholder", () => {
     const cfg: Pick<GuildConfig, "image_search_url_template"> = {
       image_search_url_template: "https://example.com/search",
@@ -42,6 +58,10 @@ describe("avatar scan field and lens link", () => {
     );
   });
 
+  /**
+   * Edge case: template already has query params (contains ?). We need to use &
+   * instead of ? to avoid malformed URLs. This is a common mistake in configs.
+   */
   it("appends with & when template already has query params", () => {
     const cfg: Pick<GuildConfig, "image_search_url_template"> = {
       image_search_url_template: "https://example.com/search?foo=bar",

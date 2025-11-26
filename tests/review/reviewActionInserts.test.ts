@@ -1,12 +1,17 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 /**
- * Tests for review_action inserts with all allowed actions
- * WHAT: Verifies all action types (including permreject, copy_uid) can be inserted.
- * WHY: Ensures no CHECK constraint blocks new actions; validates explicit created_at.
- * FLOWS:
- *  - Insert one row for each allowed action
- *  - Verify created_at is INTEGER and matches input
- *  - Verify meta JSON is preserved
+ * Review Action Insert Tests
+ *
+ * Tests database operations for the review_action table after the CHECK
+ * constraint was removed. Key scenarios:
+ * - All action types in ALLOWED_ACTIONS can be inserted without constraint violations
+ * - created_at is stored as INTEGER (Unix seconds), not TEXT
+ * - Foreign key CASCADE properly cleans up orphaned actions
+ *
+ * Schema Context:
+ * The review_action table was migrated to remove a restrictive CHECK constraint
+ * that prevented adding new action types. These tests verify the post-migration
+ * schema accepts all current action types.
  */
 import { describe, it, expect, beforeEach } from "vitest";
 import Database from "better-sqlite3";
@@ -18,10 +23,12 @@ type BetterDb = Database.Database;
 describe("review_action inserts with all allowed actions", () => {
   let db: BetterDb;
 
+  // Fresh in-memory DB for each test - isolation prevents cross-test pollution
   beforeEach(() => {
     db = new Database(":memory:");
 
-    // Create migrated schema (no CHECK, INTEGER created_at)
+    // Schema matches the post-migration state: no CHECK constraint on action column,
+    // created_at as INTEGER (Unix seconds), composite index for efficient app history queries
     db.exec(`
       CREATE TABLE application (
         id TEXT PRIMARY KEY,
@@ -42,6 +49,8 @@ describe("review_action inserts with all allowed actions", () => {
         FOREIGN KEY (app_id) REFERENCES application(id) ON DELETE CASCADE
       );
 
+      -- Composite index: (app_id, created_at DESC) optimizes the common query pattern
+      -- of fetching recent actions for a specific application
       CREATE INDEX idx_review_action_app_time ON review_action(app_id, created_at DESC);
 
       INSERT INTO application (id, guild_id, user_id, status) VALUES
@@ -49,10 +58,12 @@ describe("review_action inserts with all allowed actions", () => {
     `);
   });
 
+  // Exhaustive test: insert every action type from ALLOWED_ACTIONS.
+  // If a new action type is added but the schema blocks it, this test will catch it.
   it("allows all actions in ALLOWED_ACTIONS set", () => {
     const timestamp = nowUtc();
 
-    // Verify ALLOWED_ACTIONS contains expected actions
+    // Sanity check: ALLOWED_ACTIONS should contain all expected moderator actions
     expect(ALLOWED_ACTIONS.has("approve")).toBe(true);
     expect(ALLOWED_ACTIONS.has("reject")).toBe(true);
     expect(ALLOWED_ACTIONS.has("perm_reject")).toBe(true);
@@ -82,6 +93,8 @@ describe("review_action inserts with all allowed actions", () => {
     expect(count.count).toBe(actions.length);
   });
 
+  // perm_reject is a newer action type that wasn't in the original CHECK constraint.
+  // This was one of the primary motivations for removing the CHECK.
   it("inserts perm_reject action successfully", () => {
     const timestamp = nowUtc();
     const result = db
@@ -108,6 +121,8 @@ describe("review_action inserts with all allowed actions", () => {
     expect(row.created_at).toBe(timestamp);
   });
 
+  // copy_uid is a utility action (copy user ID to clipboard) - not a decision,
+  // but still tracked in the action log for audit purposes
   it("inserts copy_uid action successfully", () => {
     const timestamp = nowUtc();
     const result = db
@@ -133,6 +148,8 @@ describe("review_action inserts with all allowed actions", () => {
     expect(row.created_at).toBe(timestamp);
   });
 
+  // The meta column stores arbitrary JSON for action-specific data.
+  // Common uses: dmDelivered (was the user notified?), roleApplied (did role assignment succeed?)
   it("preserves meta JSON in insert", () => {
     const timestamp = nowUtc();
     const meta = { dmDelivered: true, roleApplied: true };
@@ -161,8 +178,10 @@ describe("review_action inserts with all allowed actions", () => {
     expect(parsed.roleApplied).toBe(true);
   });
 
+  // Verifies we can backdate actions (useful for data migration or testing).
+  // The DB has a DEFAULT but our code should always provide explicit timestamps.
   it("uses explicit created_at (not DB default)", () => {
-    const explicitTimestamp = 1000000000; // Old timestamp (2001-09-09)
+    const explicitTimestamp = 1000000000; // Sept 9, 2001 - obviously not "now"
 
     const result = db
       .prepare(
@@ -185,8 +204,10 @@ describe("review_action inserts with all allowed actions", () => {
     expect(row.created_at).not.toBeCloseTo(nowUtc(), -2); // Not current time
   });
 
+  // Uses EXPLAIN QUERY PLAN to verify SQLite picks our composite index.
+  // If the index isn't used, queries degrade to O(n) table scans.
   it("query by app_id uses idx_review_action_app_time index", () => {
-    // Insert multiple actions
+    // Insert actions out of order to verify index handles sorting
     const timestamps = [1729468800, 1729468900, 1729469000];
     timestamps.forEach((ts, i) => {
       db.prepare(
@@ -229,6 +250,8 @@ describe("review_action inserts with all allowed actions", () => {
     expect(planText).toMatch(/idx_review_action_app_time/i);
   });
 
+  // Gotcha: SQLite foreign keys are OFF by default. The PRAGMA must be enabled
+  // per-connection. This test verifies CASCADE works when properly configured.
   it("foreign key CASCADE on application delete", () => {
     const timestamp = nowUtc();
 
@@ -244,7 +267,8 @@ describe("review_action inserts with all allowed actions", () => {
     };
     expect(countBefore.count).toBe(1);
 
-    // Enable foreign keys (required for CASCADE)
+    // IMPORTANT: Foreign keys are disabled by default in SQLite. Without this PRAGMA,
+    // the CASCADE clause is ignored and orphan rows accumulate.
     db.exec(`PRAGMA foreign_keys = ON`);
 
     // Delete application → should cascade delete review_action
@@ -257,7 +281,11 @@ describe("review_action inserts with all allowed actions", () => {
   });
 });
 
+// Separate describe block for the time utility - not strictly DB-related
+// but used throughout the insert tests
 describe("nowUtc time utility", () => {
+  // Critical sanity check: JavaScript Date.now() returns milliseconds, but SQLite
+  // and most Unix tooling expects seconds. A mismatch causes dates in year ~56000.
   it("returns Unix seconds (not milliseconds)", () => {
     const timestamp = nowUtc();
     const milliseconds = Date.now();
@@ -268,11 +296,12 @@ describe("nowUtc time utility", () => {
     expect(timestamp).toBeLessThan(2000000000); // Sanity: before year 2033
   });
 
+  // Flaky test mitigation: allow 1 second drift since test execution isn't instant
   it("matches floor(Date.now() / 1000)", () => {
     const timestamp = nowUtc();
     const expected = Math.floor(Date.now() / 1000);
 
-    // Allow 1 second difference due to execution timing
+    // The 1-second tolerance handles the race between calling nowUtc() and Date.now()
     expect(Math.abs(timestamp - expected)).toBeLessThanOrEqual(1);
   });
 });

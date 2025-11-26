@@ -16,7 +16,18 @@ import {
   __test__clearModMetricsCache,
 } from "../src/features/modPerformance.js";
 
+/**
+ * These tests exercise the mod performance metrics engine which tracks reviewer activity
+ * and calculates response time percentiles. The engine is used to power leaderboards and
+ * performance dashboards for moderation teams.
+ *
+ * Key gotchas:
+ * - Response time is measured from app_submitted to claim, NOT from claim to decision
+ * - Percentile calculations require multiple data points to be meaningful
+ * - The cache has TTL=0 in tests so it always refreshes (production uses longer TTL)
+ */
 describe("Mod Performance Engine", () => {
+  // Using Date.now() suffix prevents test pollution when running in parallel
   const TEST_GUILD_ID = "test-guild-metrics-" + Date.now();
   const TEST_MOD_1 = "mod-user-1";
   const TEST_MOD_2 = "mod-user-2";
@@ -65,6 +76,11 @@ describe("Mod Performance Engine", () => {
   });
 
   describe("recalcModMetrics", () => {
+    /**
+     * Tests the fundamental counting logic. Each moderator's actions are aggregated
+     * across their entire history in the guild. Note that claims are counted separately
+     * from decisions - a mod who claims but never decides will still have claim metrics.
+     */
     it("should calculate basic action counts correctly", async () => {
       const now = nowUtc();
 
@@ -188,6 +204,13 @@ describe("Mod Performance Engine", () => {
       expect(mod2Metrics?.total_rejects).toBe(0);
     });
 
+    /**
+     * Percentile calculation test. We deliberately use nice round numbers (10, 20, 30, 40, 50s)
+     * so expected values are easy to reason about. Real-world response times would be messier.
+     *
+     * The p95 assertion uses a range check because different interpolation methods give
+     * slightly different results - we just care that it's in the right ballpark.
+     */
     it("should calculate response time percentiles correctly", async () => {
       const now = nowUtc();
 
@@ -263,6 +286,10 @@ describe("Mod Performance Engine", () => {
       expect(metrics?.p95_response_time_s).toBeLessThanOrEqual(50);
     });
 
+    /**
+     * Edge case: mod claims apps but never makes decisions. This happens when mods
+     * go AFK or when apps are reassigned. Metrics should still exist with null percentiles.
+     */
     it("should handle moderators with only claims (no decisions)", async () => {
       const now = nowUtc();
 
@@ -289,6 +316,11 @@ describe("Mod Performance Engine", () => {
       expect(metrics?.p95_response_time_s).toBeNull();
     });
 
+    /**
+     * Metrics recalculation is idempotent. Running it twice with new data should
+     * produce updated counts, not duplicates. This is critical for the cron job
+     * that refreshes metrics periodically.
+     */
     it("should update existing metrics on recalculation", async () => {
       const now = nowUtc();
 
@@ -335,6 +367,10 @@ describe("Mod Performance Engine", () => {
       expect(metrics2?.total_accepts).toBe(2);
     });
 
+    /**
+     * New guilds or test environments may have no action history at all.
+     * The engine should handle this gracefully without throwing.
+     */
     it("should handle empty action log", async () => {
       const emptyGuildId = "test-guild-empty-" + Date.now();
       const updatedCount = await recalcModMetrics(emptyGuildId);
@@ -345,7 +381,15 @@ describe("Mod Performance Engine", () => {
     });
   });
 
+  /**
+   * Cache behavior tests. In production the cache has a 5-minute TTL to avoid
+   * hammering the DB on every leaderboard request. Tests use TTL=0 for determinism.
+   */
   describe("getCachedMetrics", () => {
+    /**
+     * With TTL=0, every call triggers a fresh DB query. This test verifies that
+     * new data appears immediately rather than being stale-cached.
+     */
     it("should refresh when cache stale (TTL=0 in tests)", async () => {
       const cacheGuildId = "test-guild-cache-" + Date.now();
       const now = nowUtc();
@@ -396,7 +440,15 @@ describe("Mod Performance Engine", () => {
     });
   });
 
+  /**
+   * Leaderboard query tests. The leaderboard is sorted by accepts by default
+   * because that's the primary productivity metric for mod teams.
+   */
   describe("getTopModerators", () => {
+    /**
+     * Simulates a typical leaderboard query. We set up three mods with clearly
+     * different accept counts to verify ordering works correctly.
+     */
     it("should return moderators sorted by total_accepts DESC", async () => {
       const now = nowUtc();
 
@@ -464,6 +516,10 @@ describe("Mod Performance Engine", () => {
       expect(topMods[2].total_accepts).toBe(1);
     });
 
+    /**
+     * Large guilds might have 100+ mods. The limit parameter prevents
+     * returning massive result sets for UI display.
+     */
     it("should respect limit parameter", async () => {
       const limitGuildId = "test-guild-limit-" + Date.now();
       const now = nowUtc();
@@ -503,7 +559,14 @@ describe("Mod Performance Engine", () => {
     });
   });
 
+  /**
+   * Edge cases that have caused production bugs in the past.
+   */
   describe("Edge Cases", () => {
+    /**
+     * Modmail opens are tracked separately because they represent proactive
+     * outreach rather than reactive application processing.
+     */
     it("should handle modmail_open actions", async () => {
       const now = nowUtc();
 
@@ -524,6 +587,10 @@ describe("Mod Performance Engine", () => {
       expect(metrics?.total_modmail_opens).toBe(1);
     });
 
+    /**
+     * Kicks are terminal decisions that remove users from the server.
+     * They need separate tracking because they're more severe than rejects.
+     */
     it("should handle kick actions", async () => {
       const now = nowUtc();
 
@@ -544,6 +611,13 @@ describe("Mod Performance Engine", () => {
       expect(metrics?.total_kicks).toBe(1);
     });
 
+    /**
+     * This is the critical response time test. Response time measures how long
+     * applicants wait before a mod even looks at their app (submission -> claim),
+     * NOT how long the mod takes to decide (claim -> decision).
+     *
+     * In this test: submit at -50s, claim at -30s = 20s response time.
+     */
     it("should calculate response time from claim to decision", async () => {
       const now = nowUtc();
 

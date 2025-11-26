@@ -1,18 +1,30 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 /**
- * Tests for review_action free-text migration
- * WHAT: Verifies migration removes CHECK constraint, converts created_at to INTEGER, preserves data.
- * WHY: Ensures safe schema evolution without data loss or corruption.
- * FLOWS:
- *  - Seed old schema with CHECK constraint and TEXT created_at
- *  - Run migration
- *  - Assert: no CHECK, INTEGER created_at, row count preserved, indexes exist
+ * Review Action Migration Tests
+ *
+ * Tests the schema migration that:
+ * 1. Removes the restrictive CHECK constraint on the action column
+ * 2. Converts created_at from TEXT (ISO datetime) to INTEGER (Unix seconds)
+ * 3. Preserves all existing data through the migration
+ *
+ * Why This Migration Exists:
+ * The original CHECK constraint listed all valid action types inline, making it
+ * impossible to add new actions without a schema change. Converting to free-text
+ * moves validation to the application layer (ALLOWED_ACTIONS set).
+ *
+ * The TEXT->INTEGER change for created_at improves storage efficiency and query
+ * performance while standardizing on Unix timestamps throughout the codebase.
  */
 import { describe, it, expect, vi, beforeEach } from "vitest";
 import Database from "better-sqlite3";
 
 type BetterDb = Database.Database;
 
+/**
+ * Loads the migration module with mocked logger.
+ * vi.resetModules() is critical here - without it, cached imports would bypass
+ * the mock and potentially log to stdout during tests.
+ */
 async function loadMigration(db: BetterDb) {
   vi.resetModules();
   vi.doMock("../../src/lib/logger.js", () => ({
@@ -27,6 +39,11 @@ async function loadMigration(db: BetterDb) {
   return mod.migrateReviewActionFreeText as (db: BetterDb) => void;
 }
 
+/**
+ * Loads the ensure function which wraps the migration for production use.
+ * This is called at bot startup to ensure the schema is current.
+ * Note: We mock db.js to inject our test database instance.
+ */
 async function loadEnsure(db: BetterDb) {
   vi.resetModules();
   vi.doMock("../../src/db/db.js", () => ({ db }));
@@ -42,6 +59,9 @@ async function loadEnsure(db: BetterDb) {
   return mod.ensureReviewActionFreeText as () => void;
 }
 
+// Helper functions for inspecting SQLite schema via PRAGMA commands
+
+/** Returns column metadata: name, type, nullability, default value */
 function getColumnInfo(db: BetterDb, tableName: string) {
   return db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
     name: string;
@@ -51,11 +71,13 @@ function getColumnInfo(db: BetterDb, tableName: string) {
   }>;
 }
 
+/** Checks if a named index exists on the table */
 function hasIndex(db: BetterDb, tableName: string, indexName: string): boolean {
   const indexes = db.prepare(`PRAGMA index_list('${tableName}')`).all() as Array<{ name: string }>;
   return indexes.some((idx) => idx.name === indexName);
 }
 
+/** Returns the columns covered by an index (for composite index verification) */
 function getIndexInfo(db: BetterDb, indexName: string) {
   return db.prepare(`PRAGMA index_info('${indexName}')`).all() as Array<{
     seqno: number;
@@ -65,11 +87,13 @@ function getIndexInfo(db: BetterDb, indexName: string) {
 }
 
 describe("review_action migration: remove CHECK constraint + INTEGER created_at", () => {
+  // The main migration test: starts with legacy schema and verifies complete transformation
   it("migrates legacy schema with CHECK constraint and TEXT created_at", async () => {
     const db = new Database(":memory:");
 
     try {
-      // Seed old schema with CHECK constraint and TEXT created_at
+      // This is the EXACT schema that exists in production before migration.
+      // The CHECK constraint explicitly lists allowed actions - adding new ones fails.
       db.exec(`
         CREATE TABLE application (
           id TEXT PRIMARY KEY,
@@ -108,18 +132,19 @@ describe("review_action migration: remove CHECK constraint + INTEGER created_at"
       };
       expect(countBefore.count).toBe(3);
 
-      // Verify CHECK constraint exists (attempt invalid action)
+      // Prove the CHECK constraint is blocking new action types before migration.
+      // copy_uid wasn't in the original list, so this should fail.
       expect(() => {
         db.prepare(
           `INSERT INTO review_action (app_id, moderator_id, action) VALUES ('app-1', 'mod-1', 'copy_uid')`
         ).run();
       }).toThrow(/CHECK constraint failed/);
 
-      // Run migration
+      // Run migration - this is the system under test
       const migrate = await loadMigration(db);
       migrate(db);
 
-      // Verify: no CHECK constraint (copy_uid should succeed)
+      // After migration, the CHECK is gone - this insert should succeed
       const insertResult = db
         .prepare(
           `
@@ -152,7 +177,8 @@ describe("review_action migration: remove CHECK constraint + INTEGER created_at"
       expect(indexCols[0].name).toBe("app_id");
       expect(indexCols[1].name).toBe("created_at");
 
-      // Verify: data integrity (timestamps converted from TEXT to INTEGER)
+      // Most critical check: verify TEXT timestamps were converted to INTEGER.
+      // The migration parses ISO strings like "2024-10-20 12:00:00" and outputs Unix seconds.
       const rows = db
         .prepare(
           `
@@ -166,14 +192,18 @@ describe("review_action migration: remove CHECK constraint + INTEGER created_at"
 
       expect(rows).toHaveLength(3);
       rows.forEach((row) => {
+        // If this is a string, the migration failed to convert
         expect(typeof row.created_at).toBe("number");
-        expect(row.created_at).toBeGreaterThan(1000000000); // Sanity check: valid Unix timestamp
+        // Sanity: should be a plausible Unix timestamp (after 2001, before 2033)
+        expect(row.created_at).toBeGreaterThan(1000000000);
       });
     } finally {
       db.close();
     }
   });
 
+  // Idempotency is critical for production: the migration runs on every bot startup,
+  // so it must detect "already migrated" and do nothing.
   it("is idempotent: running migration twice is safe", async () => {
     const db = new Database(":memory:");
 
@@ -221,11 +251,13 @@ describe("review_action migration: remove CHECK constraint + INTEGER created_at"
     }
   });
 
+  // Edge case: what if a row has NULL created_at? This shouldn't happen in practice
+  // (column has NOT NULL in prod schema), but the migration should handle it gracefully.
   it("handles NULL created_at by backfilling with current time", async () => {
     const db = new Database(":memory:");
 
     try {
-      // Seed schema with nullable created_at (pathological case)
+      // Artificially create nullable created_at - a pathological but possible state
       db.exec(`
         CREATE TABLE application (id TEXT PRIMARY KEY);
         CREATE TABLE review_action (
@@ -255,6 +287,8 @@ describe("review_action migration: remove CHECK constraint + INTEGER created_at"
     }
   });
 
+  // Regression test: SQLite's table recreation can accidentally drop columns or
+  // foreign key constraints. Verify every field survives the migration intact.
   it("preserves all columns and foreign keys after migration", async () => {
     const db = new Database(":memory:");
 
@@ -312,6 +346,8 @@ describe("review_action migration: remove CHECK constraint + INTEGER created_at"
   });
 });
 
+// These tests verify the startup-time wrapper (ensureReviewActionFreeText) that
+// calls the migration. This is what actually runs in production.
 describe("ensureReviewActionFreeText", () => {
   it("runs migration on legacy schema", async () => {
     const db = new Database(":memory:");
@@ -359,11 +395,13 @@ describe("ensureReviewActionFreeText", () => {
     }
   });
 
+  // Simulates a bot restart after the migration has already run.
+  // The ensure function should detect the migrated state and skip work.
   it("is idempotent: no-op on already migrated schema", async () => {
     const db = new Database(":memory:");
 
     try {
-      // Seed already-migrated schema (no CHECK, INTEGER created_at)
+      // Schema already has INTEGER created_at and no CHECK - the post-migration state
       db.exec(`
         CREATE TABLE application (id TEXT PRIMARY KEY);
         CREATE TABLE review_action (

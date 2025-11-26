@@ -250,29 +250,6 @@ try {
   // Table may not exist yet if action_log schema hasn't been created
 }
 
-async function closeDatabase() {
-  // Philosophy: never crash on shutdown; prefer logs over throws here.
-  logger.info("Closing database connection...");
-  try {
-    db.close();
-    logger.info("Database closed successfully");
-  } catch (err) {
-    logger.error({ err }, "Error closing database");
-  }
-
-  try {
-    const { flushSentry } = await import("../lib/sentry.js");
-    await flushSentry();
-    logger.info("Sentry events flushed");
-  } catch (err) {
-    logger.warn({ err }, "Failed to flush Sentry events");
-  }
-}
-
-process.on("SIGTERM", () => {
-  closeDatabase().finally(() => process.exit(0));
-});
-
-process.on("SIGINT", () => {
-  closeDatabase().finally(() => process.exit(0));
-});
+// NOTE: Database shutdown is handled by the coordinated graceful shutdown in index.ts
+// which ensures proper ordering (stop schedulers → cleanup features → close DB)
+// Do NOT add SIGTERM/SIGINT handlers here - they would conflict with the coordinated shutdown

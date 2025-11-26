@@ -1,4 +1,18 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
+/**
+ * Welcome Message Tests
+ *
+ * Verifies the welcome message flow when new members join a guild.
+ * These tests cover:
+ * - Successful welcome embed delivery with proper Discord formatting
+ * - Permission checks before attempting to send messages
+ * - Structured logging for observability
+ *
+ * Mock Setup Notes:
+ * - guild.channels.fetch returns a mocked channel with permission checks
+ * - guild.emojis mocked to return undefined (simulates no custom emojis)
+ * - client.user provides the bot's avatar URL for embed author icon
+ */
 import { describe, it, expect, afterEach, vi } from "vitest";
 import { ChannelType } from "discord.js";
 import { postWelcomeMessage, logWelcomeFailure } from "../../src/features/review.js";
@@ -9,6 +23,8 @@ describe("postWelcomeMessage", () => {
     vi.restoreAllMocks();
   });
 
+  // Happy path: full mock of Discord objects to verify embed structure.
+  // The channel.send mock captures the payload for inspection.
   it("sends default welcome embed with mention and structured logs", async () => {
     const send = vi.fn().mockResolvedValue({ id: "msg-123" });
     const permissions = { has: vi.fn().mockReturnValue(true) };
@@ -33,6 +49,7 @@ describe("postWelcomeMessage", () => {
       },
     } as unknown as any;
 
+    // Member mock includes displayAvatarURL for the embed thumbnail
     const member = {
       id: "user-123",
       displayName: "Watcher",
@@ -40,6 +57,7 @@ describe("postWelcomeMessage", () => {
       user: { tag: "Watcher#0001", username: "Watcher" },
     } as unknown as any;
 
+    // Spy on logger to verify structured logging format (important for log aggregation)
     const infoSpy = vi.spyOn(logger, "info").mockImplementation(() => undefined as any);
     const debugSpy = vi.spyOn(logger, "debug").mockImplementation(() => undefined as any);
 
@@ -53,6 +71,7 @@ describe("postWelcomeMessage", () => {
     expect(result).toEqual({ ok: true, messageId: "msg-123" });
     expect(send).toHaveBeenCalledTimes(1);
     const payload = send.mock.calls[0][0];
+    // allowedMentions restricts pings to only the new member, preventing @everyone abuse
     expect(payload.content).toBe("<@user-123>");
     expect(payload.allowedMentions).toEqual({ users: ["user-123"] });
     expect(payload.embeds).toHaveLength(1);
@@ -92,6 +111,9 @@ describe("postWelcomeMessage", () => {
     );
   });
 
+  // Critical edge case: bot lacks SEND_MESSAGES permission.
+  // The function should detect this BEFORE attempting to send, avoiding
+  // a DiscordAPIError[50013] that would spam error logs.
   it("returns missing_permissions when channel denies messages", async () => {
     const send = vi.fn();
     const permissions = { has: vi.fn().mockReturnValue(false) };
@@ -138,8 +160,11 @@ describe("logWelcomeFailure", () => {
     vi.restoreAllMocks();
   });
 
+  // Verifies structured error logging with Discord-specific error codes.
+  // Code 50013 = Missing Permissions - a common issue when bot roles change.
   it("logs warning payload with code and message", () => {
     const warnSpy = vi.spyOn(logger, "warn").mockImplementation(() => undefined as any);
+    // Simulating a real DiscordAPIError with numeric code property
     const error = new Error("Missing Access") as Error & { code: number };
     error.name = "DiscordAPIError";
     error.code = 50013;

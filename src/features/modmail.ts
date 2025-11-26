@@ -1848,8 +1848,35 @@ export async function reopenModmailThread(params: {
   }
 
   try {
-    // Reopen in DB
-    reopenTicket(ticket.id);
+    // Reopen in DB and restore guard table in single transaction
+    db.transaction(() => {
+      reopenTicket(ticket.id);
+
+      // Restore open_modmail guard table entry
+      // CRITICAL: Without this, the guard table will think no ticket is open,
+      // allowing duplicate threads to be created for this user
+      if (interaction.guildId && ticket.user_id && ticket.thread_id) {
+        db.prepare(
+          `
+          INSERT INTO open_modmail (guild_id, applicant_id, thread_id, created_at)
+          VALUES (?, ?, ?, strftime('%s','now'))
+          ON CONFLICT(guild_id, applicant_id) DO UPDATE SET thread_id=excluded.thread_id
+        `
+        ).run(interaction.guildId, ticket.user_id, ticket.thread_id);
+
+        logger.debug(
+          { guildId: interaction.guildId, userId: ticket.user_id, threadId: ticket.thread_id },
+          "[modmail] restored open_modmail guard table entry on reopen"
+        );
+      }
+    })();
+
+    // Restore in-memory set for efficient routing
+    // CRITICAL: Without this, messageCreate won't recognize the thread as a modmail thread
+    if (ticket.thread_id) {
+      OPEN_MODMAIL_THREADS.add(ticket.thread_id);
+      logger.debug({ threadId: ticket.thread_id }, "[modmail] restored OPEN_MODMAIL_THREADS entry on reopen");
+    }
 
     // Unlock and unarchive thread
     if (ticket.thread_id) {

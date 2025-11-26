@@ -18,7 +18,22 @@ import type {
 } from "discord.js";
 import { ChannelType } from "discord.js";
 
-// Mock interaction factory
+/**
+ * Factory for creating mock Discord interactions.
+ *
+ * The default mock represents the "happy path": a guild member with no special
+ * roles sending a basic text message. Callers override specific properties to
+ * test different scenarios (role restrictions, long messages, attachments, etc.).
+ *
+ * Key defaults:
+ * - Empty role cache (user has no roles)
+ * - silent: true (no pings by default)
+ * - embed: false (plain text message)
+ * - No attachment
+ *
+ * Gotcha: The mockMember.roles.cache is a Map, so role checks use Map.has().
+ * When testing role-based access, populate this map with the expected role IDs.
+ */
 function createMockInteraction(
   overrides: Partial<ChatInputCommandInteraction> = {}
 ): ChatInputCommandInteraction {
@@ -76,10 +91,29 @@ function createMockInteraction(
   } as ChatInputCommandInteraction;
 }
 
+/**
+ * Tests for the /send command - anonymous staff messaging.
+ *
+ * This command lets staff send messages to channels without revealing who sent them.
+ * Use cases: announcements, moderation warnings, community updates.
+ *
+ * Security considerations tested:
+ * - Role-based access control (SEND_ALLOWED_ROLE_IDS)
+ * - @everyone/@here mention neutralization (prevent abuse)
+ * - Message length limits (Discord API constraints)
+ * - Guild-only restriction (no DM usage)
+ */
 describe("/send command", () => {
-  // Wrap the execute function to create CommandContext
+  /**
+   * wrapCommand adds the CommandContext wrapper that the execute function expects.
+   * This mimics how the bot's command handler invokes commands in production.
+   */
   const wrappedExecute = wrapCommand("send", execute);
 
+  /**
+   * Clean slate for each test. Environment variables are deleted to ensure
+   * tests don't leak state (e.g., a role restriction from one test affecting another).
+   */
   beforeEach(() => {
     vi.clearAllMocks();
     delete process.env.SEND_ALLOWED_ROLE_IDS;
@@ -87,6 +121,11 @@ describe("/send command", () => {
     delete process.env.LOGGING_CHANNEL_ID;
   });
 
+  /**
+   * Happy path: Message sent, ephemeral confirmation returned to the sender.
+   * The allowedMentions: { parse: [] } is critical - it prevents the bot from
+   * actually pinging anyone when silent mode is on.
+   */
   it("should send a basic message and reply ephemerally", async () => {
     const interaction = createMockInteraction();
 
@@ -105,6 +144,11 @@ describe("/send command", () => {
     });
   });
 
+  /**
+   * Security: @everyone and @here are neutered with zero-width spaces.
+   * This prevents staff from accidentally (or maliciously) pinging the entire server.
+   * The "\u200b" is a zero-width space that breaks the mention syntax.
+   */
   it("should neutralize @everyone and @here in messages", async () => {
     const interaction = createMockInteraction({
       options: {
@@ -157,6 +201,11 @@ describe("/send command", () => {
     );
   });
 
+  /**
+   * Discord API limit: Plain text messages max out at 2000 characters.
+   * We reject at the boundary (+1 char) to ensure we catch exactly the limit.
+   * Better to fail early than get a cryptic API error.
+   */
   it("should reject messages exceeding plain text limit (2000 chars)", async () => {
     const longMessage = "a".repeat(2001);
     const interaction = createMockInteraction({
@@ -182,6 +231,10 @@ describe("/send command", () => {
     expect(interaction.channel?.send).not.toHaveBeenCalled();
   });
 
+  /**
+   * Embed descriptions have a higher limit (4096) than plain text.
+   * This tests that we enforce the correct limit for the selected format.
+   */
   it("should reject messages exceeding embed limit (4096 chars)", async () => {
     const longMessage = "a".repeat(4097);
     const interaction = createMockInteraction({
@@ -210,6 +263,11 @@ describe("/send command", () => {
     expect(interaction.channel?.send).not.toHaveBeenCalled();
   });
 
+  /**
+   * When silent:false, user and role mentions are allowed to ping.
+   * Note: @everyone/@here are still blocked (they're sanitized in the content itself).
+   * The repliedUser: false prevents pinging if replying to a message.
+   */
   it("should allow user/role mentions when silent:false", async () => {
     const interaction = createMockInteraction({
       options: {
@@ -234,6 +292,11 @@ describe("/send command", () => {
     );
   });
 
+  /**
+   * Role-based access control: When SEND_ALLOWED_ROLE_IDS is set, only members
+   * with at least one of those roles can use the command.
+   * The default mock has an empty role cache, simulating a user with no roles.
+   */
   it("should deny access if SEND_ALLOWED_ROLE_IDS is set and user has no matching role", async () => {
     process.env.SEND_ALLOWED_ROLE_IDS = "role-111,role-222";
 
@@ -251,6 +314,10 @@ describe("/send command", () => {
     expect(interaction.channel?.send).not.toHaveBeenCalled();
   });
 
+  /**
+   * Positive case for role check: User has role-222, which is in the allowed list.
+   * Having just one matching role is sufficient (it's OR, not AND).
+   */
   it("should allow access if user has at least one required role", async () => {
     process.env.SEND_ALLOWED_ROLE_IDS = "role-111,role-222";
 
@@ -299,6 +366,11 @@ describe("/send command", () => {
     );
   });
 
+  /**
+   * Graceful degradation: If reply_to message can't be fetched (deleted, wrong ID,
+   * permissions), we send the message anyway without the reply reference.
+   * This prevents confusing error states where the user's message is lost.
+   */
   it("should handle reply_to gracefully when message fetch fails", async () => {
     const mockChannel: Partial<TextChannel> = {
       id: "test-channel-456",
@@ -332,6 +404,10 @@ describe("/send command", () => {
     });
   });
 
+  /**
+   * DM protection: This command only makes sense in a guild context.
+   * Without a guild, there's no channel to send to and no audit trail.
+   */
   it("should deny command if not in a guild", async () => {
     const interaction = createMockInteraction({
       guild: null as any,

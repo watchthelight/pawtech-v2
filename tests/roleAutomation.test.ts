@@ -3,6 +3,10 @@
  * - Level tier detection
  * - Level rewards lookup
  * - Panic mode
+ *
+ * This file uses a real SQLite database (not mocked) to ensure our queries
+ * work correctly against actual SQL. The tradeoff is slightly slower tests,
+ * but we catch SQL syntax errors and type mismatches that mocks would miss.
  */
 import { describe, it, expect, beforeAll, afterAll } from "vitest";
 import Database from "better-sqlite3";
@@ -10,7 +14,8 @@ import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
-// Create a test database
+// Using a real temp directory ensures tests are isolated and don't pollute
+// the project directory. The db is nuked in afterAll.
 let testDb: Database.Database;
 let tempDir: string;
 
@@ -18,7 +23,8 @@ beforeAll(() => {
   tempDir = mkdtempSync(join(tmpdir(), "roleautomation-test-"));
   testDb = new Database(join(tempDir, "test.db"));
 
-  // Create tables
+  // Schema mirrors production. If you change the real schema, update this too
+  // or tests will pass here but fail in prod (ask me how I know).
   testDb.exec(`
     CREATE TABLE role_tiers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -40,7 +46,11 @@ beforeAll(() => {
     );
   `);
 
-  // Insert test data
+  // Test data covers several important scenarios:
+  // - Multiple level tiers at different thresholds (1, 5, 10, 15)
+  // - Level 50 has TWO rewards (tests multi-reward handling)
+  // - Level 10 has NO rewards (tests the empty case)
+  // - Movie night is a separate tier_type (tests type filtering)
   testDb.exec(`
     -- Level tiers
     INSERT INTO role_tiers (guild_id, tier_type, tier_name, role_id, threshold) VALUES
@@ -64,11 +74,14 @@ beforeAll(() => {
 });
 
 afterAll(() => {
+  // Always close before delete, or Windows will complain about locked files.
   testDb.close();
   rmSync(tempDir, { recursive: true, force: true });
 });
 
 describe("Role Tier Queries", () => {
+  // These tests verify the SQL queries work correctly. The actual bot receives
+  // a role ID from Discord events and needs to look up what tier it belongs to.
   it("should find level tier by role ID", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM role_tiers
@@ -84,6 +97,8 @@ describe("Role Tier Queries", () => {
     expect(tier.threshold).toBe(15);
   });
 
+  // Important edge case: random roles that aren't tier roles should be ignored.
+  // This happens constantly since users have many non-tier roles.
   it("should return undefined for unknown role ID", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM role_tiers
@@ -95,6 +110,8 @@ describe("Role Tier Queries", () => {
     expect(tier).toBeUndefined();
   });
 
+  // Ordering matters for display in /levels command and for determining
+  // which tier a user should have based on their current level.
   it("should get all level tiers ordered by threshold", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM role_tiers
@@ -111,6 +128,8 @@ describe("Role Tier Queries", () => {
     expect(tiers[3].threshold).toBe(15);
   });
 
+  // tier_type filtering is critical - we don't want movie attendance
+  // to accidentally trigger level rewards or vice versa.
   it("should get movie night tiers separately", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM role_tiers
@@ -127,6 +146,8 @@ describe("Role Tier Queries", () => {
 });
 
 describe("Level Rewards Queries", () => {
+  // Rewards are bonus roles granted at specific levels (separate from tier roles).
+  // The bot checks for rewards every time a user levels up.
   it("should get rewards for a level with rewards", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM level_rewards
@@ -139,6 +160,8 @@ describe("Level Rewards Queries", () => {
     expect(rewards[0].role_name).toBe("Byte Token [Common]");
   });
 
+  // Most levels have no rewards - this is the common case.
+  // The bot should gracefully handle empty results without crashing.
   it("should return empty array for level without rewards", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM level_rewards
@@ -150,6 +173,8 @@ describe("Level Rewards Queries", () => {
     expect(rewards).toHaveLength(0);
   });
 
+  // Level 50 is configured with two rewards - verifies we don't accidentally
+  // return just the first one due to LIMIT 1 or similar query bugs.
   it("should get multiple rewards for same level", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM level_rewards
@@ -165,7 +190,9 @@ describe("Level Rewards Queries", () => {
 });
 
 describe("Panic Mode", () => {
-  // Test the panic store in isolation
+  // Panic mode is an emergency kill switch that disables all role automation
+  // for a guild. Used when the bot is misbehaving (e.g., granting wrong roles
+  // due to misconfiguration) and staff need to stop the damage immediately.
   it("should track panic state per guild", async () => {
     const { isPanicMode, setPanicMode, getPanicGuilds } = await import("../src/features/panicStore.js");
 
@@ -183,7 +210,8 @@ describe("Panic Mode", () => {
     expect(isPanicMode("guild-1")).toBe(true);
     expect(isPanicMode("guild-2")).toBe(true);
 
-    // Get all panic guilds
+    // getPanicGuilds is used by the /panic-status command to show admins
+    // which servers are currently in panic mode across the entire bot.
     const panicGuilds = getPanicGuilds();
     expect(panicGuilds).toContain("guild-1");
     expect(panicGuilds).toContain("guild-2");
@@ -199,6 +227,9 @@ describe("Panic Mode", () => {
 });
 
 describe("Integration: Level Up Flow", () => {
+  // These tests simulate the actual event flow: user gains a role -> bot looks
+  // up if it's a tier role -> if so, checks for rewards at that level.
+  // This is the critical path that runs on every guildMemberUpdate event.
   it("should correctly identify when a level role triggers rewards", () => {
     // Simulate: User gets "Engaged Fur" role (level 15)
     const roleId = "role-15";
@@ -226,6 +257,8 @@ describe("Integration: Level Up Flow", () => {
     expect(rewards[0].role_name).toBe("Byte Token [Common]");
   });
 
+  // Most tiers don't have rewards - the bot should recognize the tier
+  // but not try to grant non-existent rewards.
   it("should correctly identify when a level role has NO rewards", () => {
     // Simulate: User gets "Chatty Fur" role (level 10) - no rewards
     const roleId = "role-10";
@@ -249,6 +282,9 @@ describe("Integration: Level Up Flow", () => {
     expect(rewards).toHaveLength(0);
   });
 
+  // This is the most common case in production - random role assignments
+  // (color roles, pronoun roles, etc.) that have nothing to do with levels.
+  // The bot needs to quickly identify "not a tier role" and bail out.
   it("should NOT trigger for non-level roles", () => {
     // If someone gets a random role that's not a level tier
     const roleId = "some-random-role";

@@ -134,6 +134,11 @@ export async function handleLevelRoleAdded(
     // We add 1.1s delay between grants to stay well under the limit.
     const ROLE_GRANT_DELAY_MS = 1100;
 
+    // Collect results by category for consolidated logging
+    const grantedRewards: Array<{ name: string; id: string }> = [];
+    const skippedRewards: Array<{ name: string; id: string; reason: string }> = [];
+    const failedRewards: Array<{ name: string; id: string; error: string }> = [];
+
     for (let i = 0; i < rewards.length; i++) {
       const reward = rewards[i];
       const result = await assignRole(
@@ -153,24 +158,7 @@ export async function handleLevelRoleAdded(
           level,
           rewardRole: reward.role_name,
         }, `Granted reward: ${reward.role_name}`);
-
-        // Log to Discord channel
-        await logActionPretty(guild, {
-          actorId: botId,
-          subjectId: member.id,
-          action: "role_grant",
-          reason: `Level ${level} reward`,
-          meta: {
-            level,
-            levelRoleName: tier.tier_name,
-            levelRoleId: tier.role_id,
-            rewardRoleName: reward.role_name,
-            rewardRoleId: reward.role_id,
-          },
-        }).catch((err) => {
-          logger.warn({ err, guildId: guild.id, userId: member.id },
-            "[levelRewards] Failed to log action - audit trail incomplete");
-        });
+        grantedRewards.push({ name: reward.role_name, id: reward.role_id });
       } else if (result.action === "skipped") {
         // "skipped" usually means user already has the role. This is normal
         // for users who re-join or when Amaribot re-syncs levels after downtime.
@@ -182,24 +170,7 @@ export async function handleLevelRoleAdded(
           rewardRole: reward.role_name,
           reason: result.reason,
         }, `Skipped reward: ${reward.role_name} (${result.reason})`);
-
-        // Log skips to Discord channel too
-        await logActionPretty(guild, {
-          actorId: botId,
-          subjectId: member.id,
-          action: "role_grant_skipped",
-          reason: result.reason || "Already has role",
-          meta: {
-            level,
-            levelRoleName: tier.tier_name,
-            levelRoleId: tier.role_id,
-            rewardRoleName: reward.role_name,
-            rewardRoleId: reward.role_id,
-          },
-        }).catch((err) => {
-          logger.warn({ err, guildId: guild.id, userId: member.id },
-            "[levelRewards] Failed to log action - audit trail incomplete");
-        });
+        skippedRewards.push({ name: reward.role_name, id: reward.role_id, reason: result.reason || "Already has role" });
       } else if (!result.success) {
         logger.error({
           evt: "reward_error",
@@ -209,24 +180,7 @@ export async function handleLevelRoleAdded(
           rewardRole: reward.role_name,
           error: result.error,
         }, `Failed to grant reward: ${reward.role_name}`);
-
-        // Log errors to Discord channel
-        await logActionPretty(guild, {
-          actorId: botId,
-          subjectId: member.id,
-          action: "role_grant_blocked",
-          reason: result.error || "Unknown error",
-          meta: {
-            level,
-            levelRoleName: tier.tier_name,
-            levelRoleId: tier.role_id,
-            rewardRoleName: reward.role_name,
-            rewardRoleId: reward.role_id,
-          },
-        }).catch((err) => {
-          logger.warn({ err, guildId: guild.id, userId: member.id },
-            "[levelRewards] Failed to log action - audit trail incomplete");
-        });
+        failedRewards.push({ name: reward.role_name, id: reward.role_id, error: result.error || "Unknown error" });
       }
 
       // Rate limit delay between role grants to avoid hitting Discord's 429s
@@ -234,6 +188,66 @@ export async function handleLevelRoleAdded(
       if (i < rewards.length - 1) {
         await new Promise((resolve) => setTimeout(resolve, ROLE_GRANT_DELAY_MS));
       }
+    }
+
+    // Log consolidated results to Discord channel (one embed for all rewards)
+    // This bunches together multiple rewards at the same level into a single log entry
+    if (grantedRewards.length > 0) {
+      await logActionPretty(guild, {
+        actorId: botId,
+        subjectId: member.id,
+        action: "role_grant",
+        reason: `Level ${level} reward`,
+        meta: {
+          level,
+          levelRoleName: tier.tier_name,
+          levelRoleId: tier.role_id,
+          // Include all granted rewards as arrays
+          rewardRoles: grantedRewards.map(r => `${r.name} (<@&${r.id}>)`),
+          rewardCount: grantedRewards.length,
+        },
+      }).catch((err) => {
+        logger.warn({ err, guildId: guild.id, userId: member.id },
+          "[levelRewards] Failed to log action - audit trail incomplete");
+      });
+    }
+
+    if (skippedRewards.length > 0) {
+      await logActionPretty(guild, {
+        actorId: botId,
+        subjectId: member.id,
+        action: "role_grant_skipped",
+        reason: skippedRewards.map(r => r.reason).join("; "),
+        meta: {
+          level,
+          levelRoleName: tier.tier_name,
+          levelRoleId: tier.role_id,
+          rewardRoles: skippedRewards.map(r => `${r.name} (<@&${r.id}>)`),
+          rewardCount: skippedRewards.length,
+        },
+      }).catch((err) => {
+        logger.warn({ err, guildId: guild.id, userId: member.id },
+          "[levelRewards] Failed to log action - audit trail incomplete");
+      });
+    }
+
+    if (failedRewards.length > 0) {
+      await logActionPretty(guild, {
+        actorId: botId,
+        subjectId: member.id,
+        action: "role_grant_blocked",
+        reason: failedRewards.map(r => r.error).join("; "),
+        meta: {
+          level,
+          levelRoleName: tier.tier_name,
+          levelRoleId: tier.role_id,
+          rewardRoles: failedRewards.map(r => `${r.name} (<@&${r.id}>)`),
+          rewardCount: failedRewards.length,
+        },
+      }).catch((err) => {
+        logger.warn({ err, guildId: guild.id, userId: member.id },
+          "[levelRewards] Failed to log action - audit trail incomplete");
+      });
     }
 
     return results;

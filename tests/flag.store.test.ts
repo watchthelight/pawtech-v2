@@ -10,7 +10,10 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
-// Mock logger before importing flagsStore
+/**
+ * Mock the logger to prevent console noise during tests.
+ * This must be called before importing flagsStore.
+ */
 vi.mock("../src/lib/logger.js", () => ({
   logger: {
     info: vi.fn(),
@@ -20,7 +23,13 @@ vi.mock("../src/lib/logger.js", () => ({
   },
 }));
 
-// Mock db module
+/**
+ * Mock the database module with a getter.
+ *
+ * Gotcha: We use a getter here because testDb gets reassigned in beforeEach.
+ * A plain object { db: testDb } would capture the initial undefined value.
+ * The getter ensures we always get the current testDb instance.
+ */
 let testDb: Database.Database;
 vi.mock("../src/db/db.js", () => ({
   get db() {
@@ -30,15 +39,32 @@ vi.mock("../src/db/db.js", () => ({
 
 import { getExistingFlag, isAlreadyFlagged, upsertManualFlag } from "../src/store/flagsStore.js";
 
+/**
+ * Tests for the flags store - the persistence layer for user moderation flags.
+ *
+ * The flagging system lets moderators mark users for review. Flags can be:
+ * - Manual (mod flagged someone explicitly)
+ * - Automatic (avatar scan, account age, etc.)
+ *
+ * Key behaviors tested:
+ * - CRUD operations on flags
+ * - Upsert semantics (create or update)
+ * - Input sanitization (trimming, truncation)
+ * - Idempotency checks (isAlreadyFlagged)
+ */
 describe("flagsStore", () => {
   const testDbPath = path.join(process.cwd(), "tests", "test-flags-store.db");
 
+  /**
+   * Fresh database for each test. The user_activity table stores both
+   * activity tracking and flag data (denormalized for query performance).
+   *
+   * Note: Timestamps are stored as Unix epoch integers, not ISO strings.
+   */
   beforeEach(() => {
-    // Create fresh test database
     testDb = new Database(testDbPath);
     testDb.pragma("foreign_keys = ON");
 
-    // Create user_activity table with all required columns
     testDb.exec(`
       CREATE TABLE user_activity (
         guild_id           TEXT NOT NULL,
@@ -61,12 +87,18 @@ describe("flagsStore", () => {
     }
   });
 
+  /**
+   * getExistingFlag: Retrieves a user's flag record if one exists.
+   * Returns null if the user doesn't exist OR exists but isn't flagged.
+   */
   describe("getExistingFlag", () => {
+    /** User not in database at all. */
     it("returns null when user is not flagged", () => {
       const result = getExistingFlag("guild123", "user456");
       expect(result).toBeNull();
     });
 
+    /** User exists and is flagged - should return full flag data. */
     it("returns flag row when user is flagged", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -88,12 +120,15 @@ describe("flagsStore", () => {
       expect(result?.flagged_by).toBe("mod789");
     });
 
+    /**
+     * Edge case: User has activity record but flagged_at is NULL.
+     * This happens when we track a user's join/messages but haven't flagged them.
+     */
     it("returns null when user exists but is not flagged", () => {
       const guildId = "guild123";
       const userId = "user456";
       const now = Math.floor(Date.now() / 1000);
 
-      // Insert user without flag
       testDb
         .prepare(
           `INSERT INTO user_activity (guild_id, user_id, joined_at, flagged_at)
@@ -106,12 +141,17 @@ describe("flagsStore", () => {
     });
   });
 
+  /**
+   * isAlreadyFlagged: Quick boolean check for flag existence.
+   * Used to prevent duplicate flags or show existing flag info in UI.
+   */
   describe("isAlreadyFlagged", () => {
     it("returns false when user is not flagged", () => {
       const result = isAlreadyFlagged("guild123", "user456");
       expect(result).toBe(false);
     });
 
+    /** Manual flag (mod-initiated) should count. */
     it("returns true when user is manually flagged", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -128,6 +168,10 @@ describe("flagsStore", () => {
       expect(result).toBe(true);
     });
 
+    /**
+     * Auto-flag (system-initiated, e.g. avatar scan) should also count.
+     * Note: manual_flag=0 distinguishes from manual flags.
+     */
     it("returns true when user is auto-flagged", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -145,7 +189,15 @@ describe("flagsStore", () => {
     });
   });
 
+  /**
+   * upsertManualFlag: Creates or updates a manual flag for a user.
+   * "Upsert" means INSERT if new, UPDATE if exists.
+   */
   describe("upsertManualFlag", () => {
+    /**
+     * Insert case: User doesn't exist in user_activity yet.
+     * Should create a new row with all flag data populated.
+     */
     it("creates new flag record when user does not exist", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -171,6 +223,11 @@ describe("flagsStore", () => {
       expect(result.flagged_at).toBeGreaterThan(0);
     });
 
+    /**
+     * Update case: User exists (tracked join/message) but not flagged yet.
+     * Should add flag data without clobbering existing activity data.
+     * The joined_at preservation is key - we don't want to lose when they actually joined.
+     */
     it("updates existing user_activity row with flag data", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -201,6 +258,10 @@ describe("flagsStore", () => {
       expect(result.joined_at).toBe(joinedAt); // Original joined_at preserved
     });
 
+    /**
+     * Input sanitization: Long reasons are truncated to 512 chars.
+     * Prevents DB bloat and potential DoS from extremely long strings.
+     */
     it("truncates reason to 512 characters", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -218,6 +279,7 @@ describe("flagsStore", () => {
       expect(result.flagged_reason).toBe("x".repeat(512));
     });
 
+    /** Input sanitization: Leading/trailing whitespace is stripped. */
     it("trims whitespace from reason", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -234,6 +296,10 @@ describe("flagsStore", () => {
       expect(result.flagged_reason).toBe("Spam account");
     });
 
+    /**
+     * Default handling: When joinedAt isn't provided (e.g., flagging a user
+     * who left and rejoined), use current time as a fallback.
+     */
     it("uses current timestamp for joined_at when not provided", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -255,6 +321,10 @@ describe("flagsStore", () => {
       expect(result.joined_at).toBeLessThanOrEqual(afterTime);
     });
 
+    /**
+     * Integration: After upserting, isAlreadyFlagged and getExistingFlag
+     * should both work correctly. This verifies the data is stored properly.
+     */
     it("prevents duplicate manual flags via isAlreadyFlagged check", () => {
       const guildId = "guild123";
       const userId = "user456";
@@ -273,6 +343,10 @@ describe("flagsStore", () => {
     });
   });
 
+  /**
+   * End-to-end test: Full workflow from unflagged -> flagged -> retrieved.
+   * This catches integration issues between the three store functions.
+   */
   describe("round-trip test", () => {
     it("successfully creates flag, retrieves it, and confirms isAlreadyFlagged", () => {
       const guildId = "guild999";
@@ -303,7 +377,7 @@ describe("flagsStore", () => {
       // Now flagged
       expect(isAlreadyFlagged(guildId, userId)).toBe(true);
 
-      // Retrieve flag
+      // Retrieve flag - data should match what we inserted
       const retrieved = getExistingFlag(guildId, userId);
       expect(retrieved).not.toBeNull();
       expect(retrieved?.flagged_reason).toBe(reason);

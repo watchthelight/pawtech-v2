@@ -175,6 +175,9 @@ export async function initializeBannerSync(client: Client): Promise<void> {
       logger.warn({ err, guildId }, "Periodic banner sync check failed");
     }
   }, PERIODIC_CHECK_MS);
+  // .unref() allows Node.js to exit even if this interval is still pending
+  // This prevents the interval from keeping the process alive during shutdown
+  periodicCheckInterval.unref();
 
   logger.info({ intervalHours: 6 }, "Periodic banner sync check scheduled");
 

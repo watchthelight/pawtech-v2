@@ -10,16 +10,35 @@ import Database from "better-sqlite3";
 import fs from "node:fs";
 import path from "node:path";
 
+/**
+ * Tests for guild configuration storage.
+ *
+ * These are low-level database tests that verify SQLite behaves as expected
+ * for the guild_config table. We're testing the schema itself, not the
+ * application's config layer (that's in configStore tests).
+ *
+ * Why use a file-based DB instead of :memory:? This mimics production more
+ * closely and catches file permission issues. The afterEach cleanup ensures
+ * no test artifacts are left behind.
+ */
 describe("Config Management", () => {
   let testDb: Database.Database;
   const testDbPath = path.join(process.cwd(), "tests", "test-config.db");
 
+  /**
+   * Each test gets a fresh database with the full guild_config schema.
+   * foreign_keys = ON ensures referential integrity (if we add FKs later).
+   */
   beforeEach(() => {
-    //make fresh test database
     testDb = new Database(testDbPath);
     testDb.pragma("foreign_keys = ON");
 
-    //make guild_config table
+    /**
+     * This schema mirrors production. Note the SQLite-specific default syntax:
+     * - TEXT columns default to NULL unless specified
+     * - datetime('now') generates timestamps in UTC
+     * - INTEGER for booleans (SQLite has no native bool type)
+     */
     testDb.exec(`
       CREATE TABLE guild_config (
         guild_id TEXT PRIMARY KEY,
@@ -42,6 +61,7 @@ describe("Config Management", () => {
     `);
   });
 
+  /** Clean up the test database file after each test. */
   afterEach(() => {
     testDb.close();
     if (fs.existsSync(testDbPath)) {
@@ -49,6 +69,7 @@ describe("Config Management", () => {
     }
   });
 
+  /** Basic insert test. Discord snowflake IDs are 18-digit strings. */
   it("should insert new guild config", () => {
     const guildId = "123456789012345678";
     const reviewChannelId = "987654321098765432";
@@ -66,6 +87,10 @@ describe("Config Management", () => {
     expect(result.review_channel_id).toBe(reviewChannelId);
   });
 
+  /**
+   * UPDATE test: Simulates an admin changing the reapply cooldown.
+   * This is the primary way configs are modified post-setup.
+   */
   it("should update existing guild config", () => {
     const guildId = "123456789012345678";
 
@@ -86,6 +111,11 @@ describe("Config Management", () => {
     expect(result.reapply_cooldown_hours).toBe(48);
   });
 
+  /**
+   * Defaults test: A minimal insert (just guild_id) should populate all
+   * NOT NULL columns with sensible defaults. This is critical for the
+   * onboarding flow where a guild might not configure everything immediately.
+   */
   it("should use default values when not specified", () => {
     const guildId = "123456789012345678";
 
@@ -104,6 +134,11 @@ describe("Config Management", () => {
     );
   });
 
+  /**
+   * PK constraint test: Attempting to insert a duplicate guild_id should throw.
+   * This protects against accidental config overwrites and ensures upsert
+   * logic (INSERT OR REPLACE / ON CONFLICT) is used intentionally.
+   */
   it("should enforce primary key constraint", () => {
     const guildId = "123456789012345678";
 

@@ -14,6 +14,48 @@ import { db } from "../db/db.js";
 import { nowUtc } from "../lib/time.js";
 import { logger } from "../lib/logger.js";
 
+// ============================================================================
+// Cache Layer
+// ============================================================================
+// Simple TTL cache to avoid DB round-trips on every call. getLoggingChannelId
+// is called frequently (every action log), so caching is important.
+
+interface CacheEntry {
+  value: string | null;
+  expiresAt: number;
+}
+
+const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL - balances freshness vs DB load
+const loggingChannelCache = new Map<string, CacheEntry>();
+
+/**
+ * Get from cache if not expired
+ */
+function getCached(guildId: string): string | null | undefined {
+  const entry = loggingChannelCache.get(guildId);
+  if (entry && Date.now() < entry.expiresAt) {
+    return entry.value;
+  }
+  return undefined; // Cache miss or expired
+}
+
+/**
+ * Set cache entry with TTL
+ */
+function setCache(guildId: string, value: string | null): void {
+  loggingChannelCache.set(guildId, {
+    value,
+    expiresAt: Date.now() + CACHE_TTL_MS,
+  });
+}
+
+/**
+ * Invalidate cache entry for a guild (call after writes)
+ */
+function invalidateCache(guildId: string): void {
+  loggingChannelCache.delete(guildId);
+}
+
 /**
  * WHAT: Get logging channel ID for a guild.
  * WHY: Supports per-guild override with fallback to process.env.LOGGING_CHANNEL.
@@ -27,6 +69,14 @@ import { logger } from "../lib/logger.js";
  * }
  */
 export function getLoggingChannelId(guildId: string): string | null {
+  // Check cache first
+  const cached = getCached(guildId);
+  if (cached !== undefined) {
+    return cached;
+  }
+
+  let result: string | null = null;
+
   try {
     // First, check for guild-specific override in guild_config table
     // This allows individual guilds to set their own logging channel via /config set logging
@@ -35,7 +85,9 @@ export function getLoggingChannelId(guildId: string): string | null {
       .get(guildId) as { logging_channel_id: string | null } | undefined;
 
     if (row?.logging_channel_id) {
-      return row.logging_channel_id;
+      result = row.logging_channel_id;
+      setCache(guildId, result);
+      return result;
     }
   } catch (err) {
     // Gracefully handle missing table/column (pre-migration databases)
@@ -46,7 +98,11 @@ export function getLoggingChannelId(guildId: string): string | null {
   // Fallback to env variable (applies to all guilds without override)
   // Set LOGGING_CHANNEL in .env to configure default logging destination
   const envChannel = process.env.LOGGING_CHANNEL;
-  return envChannel || null;
+  result = envChannel || null;
+
+  // Cache the result (including null/env fallback)
+  setCache(guildId, result);
+  return result;
 }
 
 /**
@@ -59,6 +115,10 @@ export function getLoggingChannelId(guildId: string): string | null {
  * setLoggingChannelId('123456789', '987654321');
  */
 export function setLoggingChannelId(guildId: string, channelId: string): void {
+  // Invalidate cache BEFORE write to ensure stale reads are impossible
+  // If DB write fails, cache will repopulate on next read
+  invalidateCache(guildId);
+
   // Use ISO8601 timestamp to match guild_config.updated_at column (TEXT type)
   // Note: guild_config uses updated_at (TEXT), not updated_at_s (INTEGER) like action_log
   const now = new Date().toISOString();

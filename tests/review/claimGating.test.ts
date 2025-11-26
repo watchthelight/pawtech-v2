@@ -1,7 +1,14 @@
 /**
- * WHAT: Proves claim-gating hides scary buttons from non-claimers and shows Claim state appropriately.
- * HOW: Uses buildDecisionComponents and claimGuard along with shortCode helper.
- * DOCS: https://vitest.dev/guide/
+ * Claim-gating tests. The review system requires mods to "claim" an application
+ * before they can make decisions on it. This prevents two mods from accidentally
+ * approving/rejecting the same application simultaneously.
+ *
+ * The UI reflects claim state:
+ * - Unclaimed: Only shows "Claim" button
+ * - Claimed: Shows full decision palette (Accept, Reject, Kick, etc.)
+ * - Resolved: No buttons (application already processed)
+ *
+ * The claimGuard function enforces that only the claiming mod can make decisions.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import { describe, it, expect } from "vitest";
@@ -14,6 +21,10 @@ import {
 import { shortCode } from "../../src/lib/ids.js";
 
 describe("review decision buttons", () => {
+  /**
+   * Unclaimed apps only show the Claim button. This is the first state any
+   * application is in when it enters the review queue.
+   */
   it("shows only Claim when unclaimed", () => {
     const rows = buildDecisionComponents("submitted", "app-123", "user-123", null);
     expect(rows).toHaveLength(1);
@@ -23,6 +34,13 @@ describe("review decision buttons", () => {
     expect(buttons[0].custom_id).toBe(`v1:decide:claim:code${shortCode("app-123")}`);
   });
 
+  /**
+   * Once claimed, the full button palette appears. Note there are TWO action rows:
+   * Row 1: Terminal decisions (Accept, Reject, Permanently Reject, Kick)
+   * Row 2: Non-terminal actions (Modmail, Copy UID, Ping)
+   *
+   * The button custom_ids include the shortCode which maps back to the app_id.
+   */
   it("shows decisions when claimed", () => {
     const claim: ReviewClaimRow = {
       app_id: "app-456",
@@ -62,6 +80,10 @@ describe("review decision buttons", () => {
     expect(secondRowButtons[2].custom_id).toBe(`v1:ping:code${code}:user${userId}`);
   });
 
+  /**
+   * Resolved applications (approved, rejected, etc.) show no buttons.
+   * The claim row exists but the status is terminal so there's nothing to do.
+   */
   it("hides buttons once resolved", () => {
     const rows = buildDecisionComponents("approved", "app-789", "user-789", {
       app_id: "app-789",
@@ -72,7 +94,15 @@ describe("review decision buttons", () => {
   });
 });
 
+/**
+ * claimGuard is the authorization check that runs before any decision action.
+ * It ensures the user clicking the button is the same one who claimed the app.
+ */
 describe("claim guard", () => {
+  /**
+   * Happy path: the mod who claimed the app is making the decision.
+   * Returns null to indicate "proceed".
+   */
   it("allows claimer", () => {
     const claim: ReviewClaimRow = {
       app_id: "app-aaa",
@@ -82,6 +112,11 @@ describe("claim guard", () => {
     expect(claimGuard(claim, "user-1")).toBeNull();
   });
 
+  /**
+   * Someone else tries to make a decision on an app they didn't claim.
+   * Returns an error message that gets shown as an ephemeral reply.
+   * The message includes the claimer's ID so the user knows who to talk to.
+   */
   it("denies non-claimer", () => {
     const claim: ReviewClaimRow = {
       app_id: "app-bbb",
