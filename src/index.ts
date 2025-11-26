@@ -195,8 +195,10 @@ commands.set(reviewSetListopenOutput.data.name, wrapCommand("review-set-listopen
 // Role automation commands
 import * as movie from "./commands/movie.js";
 import * as roles from "./commands/roles.js";
+import * as panic from "./commands/panic.js";
 commands.set(movie.data.name, wrapCommand("movie", movie.execute));
 commands.set(roles.data.name, wrapCommand("roles", roles.execute));
+commands.set(panic.data.name, wrapCommand("panic", panic.execute));
 
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else

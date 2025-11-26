@@ -14,13 +14,13 @@
 import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
-  PermissionFlagsBits,
   EmbedBuilder,
   ChannelType,
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
+import { requireStaff } from "../lib/config.js";
 import {
   startMovieEvent,
   getActiveMovieEvent,
@@ -73,15 +73,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  // Check ManageEvents permission
-  const member = interaction.member;
-  if (!member || typeof member.permissions === "string" || !member.permissions.has("ManageEvents")) {
-    await interaction.reply({
-      content: "❌ You need the **Manage Events** permission to use this command.",
-      ephemeral: true,
-    });
-    return;
-  }
+  // Check staff permissions
+  if (!requireStaff(interaction)) return;
 
   const subcommand = interaction.options.getSubcommand();
 

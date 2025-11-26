@@ -17,6 +17,8 @@ import {
   getRoleTierByRoleId,
   type RoleAssignmentResult,
 } from "./roleAutomation.js";
+import { isPanicMode } from "./panicStore.js";
+import { logActionPretty } from "../logging/pretty.js";
 
 /**
  * Handle when a user receives a level role from Amaribot
@@ -28,6 +30,27 @@ export async function handleLevelRoleAdded(
   levelRoleId: string
 ): Promise<RoleAssignmentResult[]> {
   const results: RoleAssignmentResult[] = [];
+
+  // Check panic mode - emergency shutoff
+  if (isPanicMode(guild.id)) {
+    logger.warn({
+      evt: "level_reward_blocked_panic",
+      guildId: guild.id,
+      userId: member.id,
+      roleId: levelRoleId,
+    }, "Level reward blocked - panic mode active");
+
+    // Log to Discord channel
+    await logActionPretty(guild, {
+      actorId: "system",
+      subjectId: member.id,
+      action: "role_grant_blocked",
+      reason: "Panic mode active",
+      meta: { roleId: levelRoleId },
+    }).catch(() => {}); // Don't fail if logging fails
+
+    return results;
+  }
 
   try {
     // Get the level tier for this role
@@ -101,6 +124,15 @@ export async function handleLevelRoleAdded(
           level,
           rewardRole: reward.role_name,
         }, `Granted reward: ${reward.role_name}`);
+
+        // Log to Discord channel
+        await logActionPretty(guild, {
+          actorId: "system",
+          subjectId: member.id,
+          action: "role_grant",
+          reason: `Level ${level} reward`,
+          meta: { level, roleName: reward.role_name, roleId: reward.role_id },
+        }).catch(() => {});
       } else if (result.action === "skipped") {
         logger.info({
           evt: "reward_skipped",
@@ -110,6 +142,15 @@ export async function handleLevelRoleAdded(
           rewardRole: reward.role_name,
           reason: result.reason,
         }, `Skipped reward: ${reward.role_name} (${result.reason})`);
+
+        // Log skips to Discord channel too
+        await logActionPretty(guild, {
+          actorId: "system",
+          subjectId: member.id,
+          action: "role_grant_skipped",
+          reason: result.reason || "Already has role",
+          meta: { level, roleName: reward.role_name, roleId: reward.role_id },
+        }).catch(() => {});
       } else if (!result.success) {
         logger.error({
           evt: "reward_error",
@@ -119,6 +160,15 @@ export async function handleLevelRoleAdded(
           rewardRole: reward.role_name,
           error: result.error,
         }, `Failed to grant reward: ${reward.role_name}`);
+
+        // Log errors to Discord channel
+        await logActionPretty(guild, {
+          actorId: "system",
+          subjectId: member.id,
+          action: "role_grant_blocked",
+          reason: result.error || "Unknown error",
+          meta: { level, roleName: reward.role_name, roleId: reward.role_id },
+        }).catch(() => {});
       }
     }
 

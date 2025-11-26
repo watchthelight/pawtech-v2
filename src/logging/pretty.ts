@@ -48,7 +48,12 @@ export type ActionType =
   | "forum_post_ping_fail"
   | "modhistory_view"
   | "modhistory_export"
-  | "modhistory_list";
+  | "modhistory_list"
+  | "role_grant"
+  | "role_grant_skipped"
+  | "role_grant_blocked"
+  | "panic_enabled"
+  | "panic_disabled";
 
 /**
  * Parameters for logging an action
@@ -207,6 +212,31 @@ function getActionMeta(action: ActionType): ActionMeta {
       title: "Moderator List Viewed",
       color: 0x5865f2, // Discord blurple
       emoji: "👥",
+    },
+    role_grant: {
+      title: "Role Granted (Auto)",
+      color: 0x57f287, // Green
+      emoji: "🎁",
+    },
+    role_grant_skipped: {
+      title: "Role Grant Skipped",
+      color: 0x99aab5, // Gray
+      emoji: "⏭️",
+    },
+    role_grant_blocked: {
+      title: "Role Grant Blocked",
+      color: 0xed4245, // Red
+      emoji: "🚫",
+    },
+    panic_enabled: {
+      title: "PANIC MODE ENABLED",
+      color: 0xed4245, // Red
+      emoji: "🚨",
+    },
+    panic_disabled: {
+      title: "Panic Mode Disabled",
+      color: 0x57f287, // Green
+      emoji: "✅",
     },
   };
 

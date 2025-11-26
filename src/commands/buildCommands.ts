@@ -24,6 +24,7 @@ import { data as statusupdateData } from "./statusupdate.js";
 import { data as reviewSetListopenOutputData } from "./review-set-listopen-output.js";
 import { data as movieData } from "./movie.js";
 import { data as rolesData } from "./roles.js";
+import { data as panicData } from "./panic.js";
 
 export function buildCommands() {
   return [
@@ -57,6 +58,7 @@ export function buildCommands() {
     reviewSetListopenOutputData.toJSON(),
     movieData.toJSON(),
     rolesData.toJSON(),
+    panicData.toJSON(),
     // Note: Context menu commands would be registered separately via a different API endpoint
     // modmailContextMenu.toJSON(),
   ];
