@@ -374,6 +374,31 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
     });
   }
 
+  // Add meta fields for role grant actions
+  if (meta && (action === "role_grant" || action === "role_grant_skipped" || action === "role_grant_blocked")) {
+    if (meta.level !== undefined) {
+      embed.addFields({
+        name: "Level",
+        value: `${meta.level}`,
+        inline: true,
+      });
+    }
+    if (meta.levelRoleName) {
+      embed.addFields({
+        name: "Level Role",
+        value: meta.levelRoleId ? `${meta.levelRoleName} (<@&${meta.levelRoleId}>)` : meta.levelRoleName,
+        inline: true,
+      });
+    }
+    if (meta.rewardRoleName) {
+      embed.addFields({
+        name: "Reward Role",
+        value: meta.rewardRoleId ? `${meta.rewardRoleName} (<@&${meta.rewardRoleId}>)` : meta.rewardRoleName,
+        inline: true,
+      });
+    }
+  }
+
   // Send embed to logging channel
   // IMPORTANT: allowedMentions: { parse: [] } prevents @mentions from pinging users
   // This is critical for audit logs - we want to show WHO acted, not ping them
