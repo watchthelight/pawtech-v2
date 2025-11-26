@@ -212,23 +212,23 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     }
 
     // Insert action_log entry
+    // Schema: guild_id, app_id, app_code, actor_id, subject_id, action, reason, meta_json, created_at_s
     db.prepare(
       `
-      INSERT INTO action_log (guild_id, actor_id, action, target_type, target_id, reason, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO action_log (guild_id, actor_id, action, reason, meta_json, created_at_s)
+      VALUES (?, ?, ?, ?, ?, ?)
     `
     ).run(
       guildId,
       userId,
-      "set_notify_config",
-      "guild_config",
-      guildId,
+      "forum_post_ping", // Using existing action type for config changes
       "Updated forum post notification configuration",
       JSON.stringify({
         old_config: oldConfig,
         new_config: newConfig,
         updated_fields: Object.keys(updateConfig),
-      })
+      }),
+      Math.floor(Date.now() / 1000)
     );
 
     logger.info(

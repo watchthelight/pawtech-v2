@@ -130,6 +130,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   // Type assertion is safe after the channel type check above
   const textChannel = channel as TextChannel;
 
+  // Validate bot has required permissions before starting
+  const botMember = interaction.guild?.members.me;
+  if (botMember) {
+    const permissions = textChannel.permissionsFor(botMember);
+    if (!permissions?.has(["ManageMessages", "ReadMessageHistory"])) {
+      await interaction.reply({
+        content: "I don't have ManageMessages and ReadMessageHistory permissions in this channel.",
+        ephemeral: true,
+      });
+      return;
+    }
+  }
+
   // Defer reply - this will take time
   await interaction.deferReply({ ephemeral: true });
 

@@ -310,11 +310,35 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
   } else {
     const keys = Object.keys(partial) as Array<keyof typeof partial>;
     if (keys.length === 0) return;
-    // Dynamic SQL construction here. The column names come from our own code (Object.keys
-    // of a typed partial), not user input, so this is safe. Values are parameterized.
-    const sets = keys.map((k) => `${k} = ?`).join(", ") + ", updated_at = datetime('now')";
+
+    // Allowlist of valid guild_config columns to prevent SQL injection via column names.
+    // Even though keys come from typed partial, we add explicit validation for defense in depth.
+    const ALLOWED_CONFIG_COLUMNS = new Set([
+      "review_channel_id", "gate_channel_id", "general_channel_id", "unverified_channel_id",
+      "accepted_role_id", "reviewer_role_id", "welcome_template", "info_channel_id",
+      "rules_channel_id", "welcome_ping_role_id", "mod_role_ids", "gatekeeper_role_id",
+      "modmail_log_channel_id", "modmail_delete_on_close", "review_roles_mode",
+      "dadmode_enabled", "dadmode_odds", "listopen_public_output", "leadership_role_id",
+      "ping_dev_on_app", "image_search_url_template", "reapply_cooldown_hours",
+      "min_account_age_hours", "min_join_age_hours", "avatar_scan_enabled",
+      "avatar_scan_nsfw_threshold", "avatar_scan_skin_edge_threshold",
+      "avatar_scan_weight_model", "avatar_scan_weight_edge", "flags_channel_id",
+      "silent_first_msg_days", "logging_channel_id", "notify_mode", "notify_role_id",
+      "forum_channel_id", "notification_channel_id", "notify_cooldown_seconds",
+      "notify_max_per_hour",
+    ]);
+
+    const validKeys = keys.filter((k) => ALLOWED_CONFIG_COLUMNS.has(k as string));
+    if (validKeys.length !== keys.length) {
+      const rejected = keys.filter((k) => !ALLOWED_CONFIG_COLUMNS.has(k as string));
+      logger.error({ rejected, guildId }, "[upsertConfig] Invalid column names rejected");
+    }
+    if (validKeys.length === 0) return;
+
+    // Dynamic SQL construction with validated column names. Values are parameterized.
+    const sets = validKeys.map((k) => `${k} = ?`).join(", ") + ", updated_at = datetime('now')";
     // SQLite doesn't have boolean type - store as 0/1 integers.
-    const vals = keys.map((k) => {
+    const vals = validKeys.map((k) => {
       const val = partial[k];
       return typeof val === "boolean" ? (val ? 1 : 0) : val;
     });

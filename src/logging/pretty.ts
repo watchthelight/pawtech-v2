@@ -115,7 +115,7 @@ function getActionMeta(action: ActionType): ActionMeta {
     },
     perm_reject: {
       title: "Permanently Rejected",
-      color: 0x99000, // Dark red
+      color: 0x990000, // Dark red
       emoji: "⛔",
     },
     kick: {

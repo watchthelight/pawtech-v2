@@ -79,16 +79,14 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
     }
   }
 
+  // Only use env fallback for silentDays if DB didn't provide a value.
+  // We already checked DB above, so just check if we still have the default value
+  // and if the env var is set. This avoids a redundant DB query.
   const envDays = process.env.SILENT_FIRST_MSG_DAYS;
-  if (envDays && !isNaN(Number(envDays))) {
-    // Only override if DB didn't provide a value
-    const row = db
-      .prepare(`SELECT silent_first_msg_days FROM guild_config WHERE guild_id = ?`)
-      .get(guildId) as { silent_first_msg_days: number | null } | undefined;
-
-    if (!row || row.silent_first_msg_days === null) {
-      silentDays = Number(envDays);
-    }
+  if (envDays && !isNaN(Number(envDays)) && silentDays === 7) {
+    // silentDays === 7 means DB either didn't have a row or had null for this field
+    // (since we initialized to 7 and only changed it if DB had a non-null value)
+    silentDays = Number(envDays);
   }
 
   return { channelId, silentDays };

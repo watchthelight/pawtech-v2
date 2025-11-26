@@ -136,19 +136,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
     // Direct DB insert for the action_log table. This gives us queryable
     // audit history independent of the Discord audit channel.
+    // Schema: guild_id, app_id, app_code, actor_id, subject_id, action, reason, meta_json, created_at_s
     db.prepare(
       `
-      INSERT INTO action_log (guild_id, actor_id, action, target_type, target_id, reason, metadata)
-      VALUES (?, ?, ?, ?, ?, ?, ?)
+      INSERT INTO action_log (guild_id, actor_id, action, reason, meta_json, created_at_s)
+      VALUES (?, ?, ?, ?, ?, ?)
     `
     ).run(
       guildId,
       userId,
-      "view_notify_config",
-      "guild_config",
-      guildId,
+      "forum_post_ping", // Using existing action type for config views
       "Viewed forum post notification configuration",
-      JSON.stringify({ config })
+      JSON.stringify({ config }),
+      Math.floor(Date.now() / 1000)
     );
 
     logger.info({ guildId, userId, config }, "[getNotifyConfig] config viewed by admin");

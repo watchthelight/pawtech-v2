@@ -23,6 +23,10 @@ let cachedBannerURL: string | null = null;
 let cachedGuildBannerHash: string | null = null;
 let lastSyncTime: number | null = null;
 
+// Store reference to guildUpdate listener for cleanup
+let guildUpdateListener: ((oldGuild: any, newGuild: any) => Promise<void>) | null = null;
+let periodicCheckInterval: NodeJS.Timeout | null = null;
+
 // Rate limiting: don't update bot banner more than once per 10 minutes
 // Discord's API has stricter limits on profile updates, but 10 min is conservative
 // and prevents hammering the API if someone rapidly changes the server banner.
@@ -127,6 +131,16 @@ export async function syncBannerFromGuild(
 export async function initializeBannerSync(client: Client): Promise<void> {
   logger.info("Initializing banner sync feature");
 
+  // Clean up existing listeners to prevent duplicates if called multiple times
+  if (guildUpdateListener) {
+    client.off("guildUpdate", guildUpdateListener);
+    logger.debug("[bannerSync] removed old guildUpdate listener");
+  }
+  if (periodicCheckInterval) {
+    clearInterval(periodicCheckInterval);
+    logger.debug("[bannerSync] cleared old periodic check interval");
+  }
+
   // Sync banner immediately (we're already in the ready event)
   const guildId = env.GUILD_ID;
   if (!guildId) {
@@ -152,7 +166,7 @@ export async function initializeBannerSync(client: Client): Promise<void> {
   // reconnection lost the event, or Discord just didn't send it (rare but happens).
   // 6 hours is a reasonable balance between freshness and not being wasteful.
   const PERIODIC_CHECK_MS = 6 * 60 * 60 * 1000; // 6 hours
-  setInterval(async () => {
+  periodicCheckInterval = setInterval(async () => {
     try {
       logger.debug("Running periodic banner sync check");
       const guild = await client.guilds.fetch(guildId);
@@ -168,7 +182,7 @@ export async function initializeBannerSync(client: Client): Promise<void> {
   // This is the primary sync mechanism - guildUpdate fires whenever guild settings change.
   // We compare banner hashes rather than URLs because the hash is the canonical identifier
   // and URLs can vary (different CDN subdomains, query params, etc.).
-  client.on("guildUpdate", async (oldGuild, newGuild) => {
+  guildUpdateListener = async (oldGuild, newGuild) => {
     // Only sync for the configured guild
     if (newGuild.id !== env.GUILD_ID) return;
 
@@ -185,7 +199,28 @@ export async function initializeBannerSync(client: Client): Promise<void> {
 
       await syncBannerFromGuild(client, newGuild);
     }
-  });
+  };
+  client.on("guildUpdate", guildUpdateListener);
 
   logger.info("Banner sync event listeners registered");
+}
+
+/**
+ * cleanupBannerSync
+ * WHAT: Removes event listeners and intervals to allow clean shutdown/restart
+ * WHY: Prevents memory leaks and duplicate listeners
+ * PARAMS:
+ *  - client: Discord.js Client instance
+ */
+export function cleanupBannerSync(client: Client): void {
+  if (guildUpdateListener) {
+    client.off("guildUpdate", guildUpdateListener);
+    guildUpdateListener = null;
+    logger.debug("[bannerSync] guildUpdate listener removed");
+  }
+  if (periodicCheckInterval) {
+    clearInterval(periodicCheckInterval);
+    periodicCheckInterval = null;
+    logger.debug("[bannerSync] periodic check interval cleared");
+  }
 }

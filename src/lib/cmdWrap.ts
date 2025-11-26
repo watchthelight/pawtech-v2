@@ -360,10 +360,14 @@ export async function withStep<T>(
 export function withSql<T>(ctx: SqlTrackingCtx, sql: string, run: () => T): T {
   ctx.setLastSql(sql);
   try {
-    return run();
-  } finally {
-    // Always clear, even on success - we don't want stale SQL in the context
+    const result = run();
+    // Only clear on success - if run() throws, we want the error handler
+    // to have access to the failing SQL for debugging
     ctx.setLastSql(null);
+    return result;
+  } catch (err) {
+    // Don't clear SQL on error - leave it for error handling/logging
+    throw err;
   }
 }
 

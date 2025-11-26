@@ -72,8 +72,28 @@ import { findAppByShortCode } from "./appLookup.js";
 
 // In-memory set to track warned users for missing account age
 // Design: Prevents log spam when the same user's account age is unavailable across multiple card renders.
-// Memory grows unbounded during bot runtime but resets on restart. Acceptable tradeoff for a Discord bot.
+// Now bounded with LRU-style eviction to prevent memory growth in long-running bot instances.
+const MAX_WARNED_SET_SIZE = 10000;
 const missingAccountAgeWarned = new Set<string>();
+
+// Bounded add helper - evicts oldest entries when set grows too large
+function addToBoundedSet(set: Set<string>, value: string, maxSize: number): void {
+  if (set.size >= maxSize) {
+    // Evict oldest entries (first 10% of the set) - Set maintains insertion order
+    const entriesToDelete = Math.ceil(maxSize * 0.1);
+    let deleted = 0;
+    for (const item of set) {
+      if (deleted >= entriesToDelete) break;
+      set.delete(item);
+      deleted++;
+    }
+    logger.debug(
+      { setSize: set.size, evicted: deleted },
+      "[review] bounded set eviction triggered"
+    );
+  }
+  set.add(value);
+}
 
 // Add this helper (or move it to your db layer if you prefer)
 export function getReviewClaim(appId: string): ReviewClaimRow | undefined {
@@ -991,14 +1011,8 @@ async function handleUnclaimAction(interaction: ButtonInteraction, app: Applicat
     return;
   }
 
-  // Insert review_action for audit trail (legacy table)
-  try {
-    db.prepare(
-      `INSERT INTO review_action (app_id, moderator_id, action, created_at) VALUES (?, ?, 'unclaim', ?)`
-    ).run(app.id, interaction.user.id, Math.floor(Date.now() / 1000));
-  } catch (err) {
-    logger.warn({ err, appId: app.id }, "[review] failed to insert review_action (non-fatal)");
-  }
+  // NOTE: unclaimTx already inserts into review_action table inside its transaction,
+  // so we don't need to insert again here. The audit trail is complete from unclaimTx.
 
   logger.info(
     {
@@ -2604,7 +2618,7 @@ export async function ensureReviewMessage(
     } else if (user) {
       const warnKey = `${appRow.guild_id}:${user.id}`;
       if (!missingAccountAgeWarned.has(warnKey)) {
-        missingAccountAgeWarned.add(warnKey);
+        addToBoundedSet(missingAccountAgeWarned, warnKey, MAX_WARNED_SET_SIZE);
         logger.warn(
           { guildId: appRow.guild_id, userId: user.id },
           "[review] account age unavailable"

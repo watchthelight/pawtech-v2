@@ -388,6 +388,23 @@ export const handleResetModal = wrapCommand<ModalSubmitInteraction>("gate:reset"
 
   const guildId = interaction.guildId;
 
+  // Re-validate permissions immediately before destructive operation.
+  // User's permissions could have changed between modal open and submit (race condition).
+  ctx.step("permission_recheck");
+  const memberRecheck = interaction.member as GuildMember | null;
+  const stillHasPermission =
+    canRunAllCommands(memberRecheck, guildId) ||
+    hasManageGuild(memberRecheck) ||
+    isReviewer(guildId, memberRecheck);
+  if (!stillHasPermission) {
+    logger.warn(
+      { evt: "gate_reset_permission_revoked", guildId, userId: interaction.user.id },
+      "[gate] Permission revoked between modal open and submit"
+    );
+    await interaction.editReply({ content: "Your permissions were revoked. Reset cancelled." });
+    return;
+  }
+
   /*
    * RESET TRANSACTION:
    * All tables are wiped in a single transaction for atomicity. If any delete

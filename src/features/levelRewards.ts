@@ -130,7 +130,12 @@ export async function handleLevelRoleAdded(
     // Grant rewards sequentially, not in parallel.
     // Why? Discord rate limits role changes per guild. Parallel requests
     // can hit 429s and cause partial failures that are hard to recover from.
-    for (const reward of rewards) {
+    // Rate limit: Discord allows ~5 role changes per 5 seconds per guild.
+    // We add 1.1s delay between grants to stay well under the limit.
+    const ROLE_GRANT_DELAY_MS = 1100;
+
+    for (let i = 0; i < rewards.length; i++) {
+      const reward = rewards[i];
       const result = await assignRole(
         guild,
         member.id,
@@ -222,6 +227,12 @@ export async function handleLevelRoleAdded(
           logger.warn({ err, guildId: guild.id, userId: member.id },
             "[levelRewards] Failed to log action - audit trail incomplete");
         });
+      }
+
+      // Rate limit delay between role grants to avoid hitting Discord's 429s
+      // Only delay if there are more rewards to process
+      if (i < rewards.length - 1) {
+        await new Promise((resolve) => setTimeout(resolve, ROLE_GRANT_DELAY_MS));
       }
     }
 

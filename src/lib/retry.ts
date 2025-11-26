@@ -70,6 +70,11 @@ export async function withRetry<T>(
     label = "operation",
   } = options;
 
+  // Validate maxAttempts to prevent undefined behavior
+  if (maxAttempts < 1) {
+    throw new Error(`withRetry: maxAttempts must be >= 1, got ${maxAttempts}`);
+  }
+
   let lastError: unknown;
   let delayMs = initialDelayMs;
 
@@ -158,6 +163,7 @@ export class CircuitBreaker {
   private successes = 0;
   private lastFailure = 0;
   private lastStateChange = Date.now();
+  private halfOpenInProgress = false; // Guards against race condition in half-open state
 
   constructor(
     private name: string,
@@ -194,7 +200,19 @@ export class CircuitBreaker {
     // This is time-based: after resetTimeMs, we let one request through to test.
     if (this.state === "open") {
       if (Date.now() - this.lastFailure > this.resetTimeMs) {
-        this.transitionTo("half-open");
+        // Race condition guard: only allow ONE request to enter half-open state.
+        // Other concurrent requests should still fail fast.
+        if (!this.halfOpenInProgress) {
+          this.halfOpenInProgress = true;
+          this.transitionTo("half-open");
+        } else {
+          // Another request is already testing, fail this one
+          logger.debug(
+            { breaker: this.name, state: this.state },
+            `[circuit-breaker] ${this.name} half-open test in progress, failing fast`
+          );
+          throw new CircuitBreakerOpenError(this.name);
+        }
       } else {
         // Fail fast - don't even try
         logger.debug(
@@ -242,6 +260,7 @@ export class CircuitBreaker {
       this.successes++;
       if (this.successes >= this.halfOpenSuccesses) {
         // Service is healthy again - close the circuit
+        this.halfOpenInProgress = false; // Clear guard
         this.transitionTo("closed");
       }
     } else if (this.state === "closed") {
@@ -259,6 +278,7 @@ export class CircuitBreaker {
       // We were testing recovery and it failed. Back to open state.
       // This is intentionally aggressive - we don't want to let more
       // requests through if the service is still struggling.
+      this.halfOpenInProgress = false; // Clear guard
       this.transitionTo("open");
     } else if (this.state === "closed" && this.failures >= this.threshold) {
       // Too many failures - open the circuit to stop the bleeding

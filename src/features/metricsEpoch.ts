@@ -96,10 +96,30 @@ export function setMetricsEpoch(guildId: string, startAt: Date): void {
  *   const query = `SELECT * FROM action_log WHERE guild_id = ? ${sql}`;
  *   const rows = db.prepare(query).all(guildId, ...params);
  */
+// Allowlist of valid timestamp column names to prevent SQL injection.
+// Only these columns can be used in epoch predicates.
+const ALLOWED_TIME_COLUMNS = new Set([
+  "created_at_s",
+  "created_at",
+  "updated_at",
+  "timestamp",
+  "claimed_at",
+  "submitted_at",
+]);
+
 export function getEpochPredicate(
   guildId: string,
   timeColumnName: string = "created_at_s"
 ): { sql: string; params: any[] } {
+  // Validate column name against allowlist to prevent SQL injection
+  if (!ALLOWED_TIME_COLUMNS.has(timeColumnName)) {
+    logger.error(
+      { guildId, timeColumnName },
+      "[metricsEpoch] Invalid time column name - rejecting to prevent SQL injection"
+    );
+    throw new Error(`Invalid time column: ${timeColumnName}`);
+  }
+
   const epoch = getMetricsEpoch(guildId);
 
   if (!epoch) {
@@ -112,8 +132,7 @@ export function getEpochPredicate(
   // timestamps as integer seconds, not milliseconds. Don't forget the /1000.
   const epochSec = Math.floor(epoch.getTime() / 1000);
 
-  // WARNING: timeColumnName is interpolated directly into SQL. This is safe
-  // only because callers control the column name. Never pass user input here.
+  // Column name is validated above, safe to interpolate
   return {
     sql: `AND ${timeColumnName} >= ?`,
     params: [epochSec],
