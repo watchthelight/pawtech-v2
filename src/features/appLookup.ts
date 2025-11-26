@@ -72,7 +72,7 @@ export function findAppByShortCode(guildId: string, code: string) {
       .prepare("SELECT app_id FROM app_short_codes WHERE guild_id=? AND code=? LIMIT 1")
       .get(guildId, normalized) as { app_id: string } | undefined;
 
-    if (row) {
+    if (row && row.app_id) {
       const app = db.prepare("SELECT * FROM application WHERE id=?").get(row.app_id);
       logger.debug({ code: normalized, appId: row.app_id }, "[appLookup] found via mapping table");
       return app;
@@ -136,7 +136,7 @@ export function findAppByCodeOrMessage({
       .prepare("SELECT app_id FROM review_card WHERE message_id = ? LIMIT 1")
       .get(messageId) as { app_id: string } | undefined;
 
-    if (rc) {
+    if (rc && rc.app_id) {
       const app = db.prepare("SELECT * FROM application WHERE id = ?").get(rc.app_id);
       if (app) {
         logger.debug({ messageId, appId: rc.app_id }, "[appLookup] found via message ID");

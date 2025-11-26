@@ -60,6 +60,9 @@ const isVitest = !!process.env.VITEST_WORKER_ID;
 const wantPretty =
   isVitest || (process.env.LOG_PRETTY === "true" && process.stdout.isTTY);
 
+const MAX_LOG_SIZE = parseInt(process.env.MAX_LOG_SIZE_MB ?? "100", 10) * 1024 * 1024;
+const MAX_LOG_FILES = parseInt(process.env.MAX_LOG_FILES ?? "5", 10);
+
 export const logger = pino({
   level: logLevel,
   // Conditional pretty-printing. When disabled, outputs newline-delimited JSON
@@ -76,7 +79,18 @@ export const logger = pino({
           },
         },
       }
-    : {}),
+    : process.env.LOG_FILE
+      ? {
+          transport: {
+            target: "pino/file",
+            options: {
+              destination: process.env.LOG_FILE,
+              maxSize: MAX_LOG_SIZE,
+              maxFiles: MAX_LOG_FILES,
+            },
+          },
+        }
+      : {}),
   base: undefined, // Omit pid/hostname from JSON output too
   // Custom error serializer extracts only the useful fields, avoiding
   // circular refs or huge stack traces from discord.js errors

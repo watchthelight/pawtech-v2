@@ -18,6 +18,8 @@ import {
 import { withStep, type CommandContext } from '../lib/cmdWrap.js';
 import { fetchActivityData, generateHeatmap } from '../lib/activityHeatmap.js';
 import { requireStaff } from '../lib/config.js';
+import { classifyError, userFriendlyMessage } from '../lib/errors.js';
+import { logger } from '../lib/logger.js';
 
 // Discord enforces min/max on their side, but we still default to 1 if not provided.
 // The 8-week cap exists because image generation time grows linearly and Discord
@@ -121,8 +123,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       });
     });
   } catch (error) {
+    const classified = classifyError(error);
+    logger.error({ error: classified, guildId }, '[activity] Failed to generate heatmap');
+
+    const message = userFriendlyMessage(classified);
     await interaction.editReply({
-      content: `Error generating activity heatmap: ${error instanceof Error ? error.message : 'Unknown error'}`,
+      content: `Error generating activity heatmap: ${message}`,
+    }).catch(() => {
+      logger.warn({ guildId }, '[activity] Failed to send error message (interaction expired)');
     });
   }
 }

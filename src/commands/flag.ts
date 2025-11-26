@@ -22,6 +22,9 @@ import { env } from "../lib/env.js";
 import { getExistingFlag, isAlreadyFlagged, upsertManualFlag } from "../store/flagsStore.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
 
+const FLAG_RATE_LIMIT_MS = 2000;
+const flagCooldowns = new Map<string, number>();
+
 export const data = new SlashCommandBuilder()
   .setName("flag")
   .setDescription("Manually flag a user as a bot")
@@ -45,6 +48,20 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   // Require staff permissions
   if (!requireStaff(interaction)) return;
+
+  const moderatorId = interaction.user.id;
+  const now = Date.now();
+  const cooldownKey = `${guildId}:${moderatorId}`;
+  const lastFlagTime = flagCooldowns.get(cooldownKey);
+
+  if (lastFlagTime && now - lastFlagTime < FLAG_RATE_LIMIT_MS) {
+    const remainingMs = FLAG_RATE_LIMIT_MS - (now - lastFlagTime);
+    await interaction.reply({
+      content: `⏱️ Please wait ${Math.ceil(remainingMs / 1000)}s before flagging another user.`,
+      ephemeral: true,
+    });
+    return;
+  }
 
   const targetUser = interaction.options.getUser("user", true);
   const reason = interaction.options.getString("reason") || "Manually flagged as a bot";
@@ -104,6 +121,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       { guildId, userId: targetUser.id, moderatorId: interaction.user.id, reason },
       "[flag] User manually flagged"
     );
+
+    flagCooldowns.set(cooldownKey, Date.now());
 
     // Send confirmation to moderator
     await interaction.editReply({

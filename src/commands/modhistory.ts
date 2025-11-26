@@ -34,9 +34,8 @@ import { randomBytes } from "node:crypto";
 
 const DEFAULT_DAYS = 30;
 const MAX_DAYS = 365;
-// Cap for percentile calculation to prevent memory issues with very active servers
-// 30k rows is enough for statistically meaningful p50/p95 while staying reasonable
 const MAX_PERCENTILE_ROWS = 30000;
+const MAX_EXPORT_ROWS = 50000;
 
 export const data = new SlashCommandBuilder()
   .setName("modhistory")
@@ -215,12 +214,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     // Build embed
     const embed = new EmbedBuilder()
       .setTitle(`📊 Moderator History: ${moderator.tag}`)
-      .setDescription(`Activity summary for the last ${days} days`)
+      .setDescription(
+        totalActions > 10000
+          ? `Activity summary for the last ${days} days\n⚠️ High volume (${totalActions.toLocaleString()} actions) - some statistics may be sampled`
+          : `Activity summary for the last ${days} days`
+      )
       .setColor(anomaly.isAnomaly ? 0xfaa61a : 0x5865f2)
       .addFields(
-        { name: "Total Actions", value: totalActions.toString(), inline: true },
-        { name: "Approvals", value: (counts["approve"] || 0).toString(), inline: true },
-        { name: "Rejections", value: (counts["reject"] || 0).toString(), inline: true },
+        { name: "Total Actions", value: totalActions.toLocaleString(), inline: true },
+        { name: "Approvals", value: (counts["approve"] || 0).toLocaleString(), inline: true },
+        { name: "Rejections", value: (counts["reject"] || 0).toLocaleString(), inline: true },
         { name: "Reject Rate", value: `${rejectRate}%`, inline: true },
         {
           name: "Response Time (p50)",
@@ -258,14 +261,32 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
     // Export CSV if requested
     if (exportCsv) {
+      const countRow = db
+        .prepare(
+          `SELECT COUNT(*) as total
+           FROM action_log
+           WHERE actor_id = ? AND guild_id = ? AND created_at_s >= ?`
+        )
+        .get(moderator.id, guildId, fromTimestamp) as { total: number } | undefined;
+
+      const totalRows = countRow?.total || 0;
+
+      if (totalRows > MAX_EXPORT_ROWS) {
+        await interaction.editReply({
+          content: `❌ Export too large: ${totalRows.toLocaleString()} rows exceeds limit of ${MAX_EXPORT_ROWS.toLocaleString()}. Please narrow your time range (try fewer days).`,
+        });
+        return;
+      }
+
       const rows = db
         .prepare(
           `SELECT id, action, actor_id, subject_id, created_at_s, reason, meta_json, guild_id
            FROM action_log
            WHERE actor_id = ? AND guild_id = ? AND created_at_s >= ?
-           ORDER BY created_at_s DESC`
+           ORDER BY created_at_s DESC
+           LIMIT ?`
         )
-        .all(moderator.id, guildId, fromTimestamp) as any[];
+        .all(moderator.id, guildId, fromTimestamp, MAX_EXPORT_ROWS) as any[];
 
       const csv = generateModHistoryCsv(rows);
 

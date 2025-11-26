@@ -25,6 +25,8 @@ import { classifyError, errorContext, shouldReportToSentry } from "./errors.js";
  */
 type EventHandler<T extends unknown[]> = (...args: T) => Promise<void> | void;
 
+const DEFAULT_EVENT_TIMEOUT_MS = parseInt(process.env.EVENT_TIMEOUT_MS ?? "30000", 10);
+
 /**
  * Wrap an event handler with error protection
  *
@@ -41,13 +43,19 @@ type EventHandler<T extends unknown[]> = (...args: T) => Promise<void> | void;
  */
 export function wrapEvent<T extends unknown[]>(
   eventName: string,
-  handler: EventHandler<T>
+  handler: EventHandler<T>,
+  timeoutMs: number = DEFAULT_EVENT_TIMEOUT_MS
 ): EventHandler<T> {
   // Return an async wrapper that will never throw. This is critical -
   // an unhandled rejection in an event handler can crash the process.
   return async (...args: T) => {
     try {
-      await handler(...args);
+      await Promise.race([
+        handler(...args),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`Event handler timeout after ${timeoutMs}ms`)), timeoutMs)
+        ),
+      ]);
     } catch (err) {
       const classified = classifyError(err);
 
@@ -97,12 +105,18 @@ export function wrapEvent<T extends unknown[]>(
  */
 export function wrapEventWithTiming<T extends unknown[]>(
   eventName: string,
-  handler: EventHandler<T>
+  handler: EventHandler<T>,
+  timeoutMs: number = DEFAULT_EVENT_TIMEOUT_MS
 ): EventHandler<T> {
   return async (...args: T) => {
     const startMs = Date.now();
     try {
-      await handler(...args);
+      await Promise.race([
+        handler(...args),
+        new Promise<void>((_, reject) =>
+          setTimeout(() => reject(new Error(`Event handler timeout after ${timeoutMs}ms`)), timeoutMs)
+        ),
+      ]);
       const durationMs = Date.now() - startMs;
 
       // 5 seconds is a long time for an event handler. If you're hitting this
@@ -244,7 +258,7 @@ export function wrapEventRateLimited<T extends unknown[]>(
       return; // Drop the event
     }
 
-    // Delegate to wrapped handler
-    return wrapEvent(eventName, handler)(...args);
+    // Delegate to wrapped handler with timeout
+    return wrapEvent(eventName, handler, 1000)(...args);
   };
 }

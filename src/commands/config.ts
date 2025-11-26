@@ -183,6 +183,13 @@ async function executeSetModRoles(ctx: CommandContext<ChatInputCommandInteractio
   for (let i = 1; i <= 5; i++) {
     const role = interaction.options.getRole(`role${i}`);
     if (role) {
+      if (!/^\d{17,20}$/.test(role.id)) {
+        await replyOrEdit(interaction, {
+          content: `❌ Invalid role ID format for ${role.name}. Please try again.`,
+          flags: MessageFlags.Ephemeral
+        });
+        return;
+      }
       roles.push(role.id);
       logger.info(
         {
@@ -254,6 +261,14 @@ async function executeSetGatekeeper(ctx: CommandContext<ChatInputCommandInteract
   ctx.step("get_role");
   const role = interaction.options.getRole("role", true);
 
+  if (!/^\d{17,20}$/.test(role.id)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid role ID format. Please try again.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
   ctx.step("persist_role");
   upsertConfig(interaction.guildId!, { gatekeeper_role_id: role.id });
 
@@ -288,6 +303,14 @@ async function executeSetModmailLogChannel(ctx: CommandContext<ChatInputCommandI
 
   ctx.step("get_channel");
   const channel = interaction.options.getChannel("channel", true);
+
+  if (!/^\d{17,20}$/.test(channel.id)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid channel ID format. Please try again.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
 
   ctx.step("persist_channel");
   upsertConfig(interaction.guildId!, { modmail_log_channel_id: channel.id });
@@ -360,6 +383,14 @@ async function executeSetLogging(ctx: CommandContext<ChatInputCommandInteraction
 
   ctx.step("get_channel");
   const channel = interaction.options.getChannel("channel", true);
+
+  if (!/^\d{17,20}$/.test(channel.id)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid channel ID format. Please try again.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
 
   ctx.step("persist_channel");
   setLoggingChannelId(interaction.guildId!, channel.id);
@@ -441,6 +472,14 @@ async function executeSetFlagsChannel(ctx: CommandContext<ChatInputCommandIntera
   ctx.step("get_channel");
   const channel = interaction.options.getChannel("channel", true);
 
+  if (!/^\d{17,20}$/.test(channel.id)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid channel ID format. Please try again.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
   // Validate channel is text-based
   if (!("isTextBased" in channel) || !channel.isTextBased()) {
     await replyOrEdit(interaction, {
@@ -479,6 +518,14 @@ async function executeSetFlagsThreshold(ctx: CommandContext<ChatInputCommandInte
 
   ctx.step("get_days");
   const days = interaction.options.getInteger("days", true);
+
+  if (days < 7 || days > 365 || !Number.isInteger(days)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid days value. Must be an integer between 7 and 365.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
 
   ctx.step("persist_threshold");
   try {

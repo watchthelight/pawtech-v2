@@ -86,6 +86,7 @@ import { handleStartButton, handleGateModalSubmit, handleDoneButton } from "./fe
 import {
   handleReviewButton,
   handleRejectModal,
+  handleAcceptModal,
   handleModmailButton,
   handlePermRejectButton,
   handlePermRejectModal,
@@ -1168,6 +1169,29 @@ client.on("interactionCreate", async (interaction) => {
                 "review_perm_reject",
                 async (commandCtx) => {
                   await handlePermRejectModal(commandCtx.interaction);
+                }
+              );
+              await executor(interaction);
+              succeeded = true;
+              return;
+            }
+
+            if (route?.type === "review_accept") {
+              logger.info(
+                {
+                  evt: "ix_route_match",
+                  kind: "modal",
+                  route: "review_accept",
+                  id: customId,
+                  code: route.code,
+                  traceId,
+                },
+                "route: accept modal"
+              );
+              const executor = wrapCommand<ModalSubmitInteraction>(
+                "review_accept",
+                async (commandCtx) => {
+                  await handleAcceptModal(commandCtx.interaction);
                 }
               );
               await executor(interaction);

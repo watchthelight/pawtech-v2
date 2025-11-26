@@ -222,19 +222,25 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
     const modActionsList = Array.from(MOD_ACTIONS)
       .map(() => "?")
       .join(",");
-    const moderators = db
-      .prepare(
-        `
-      SELECT DISTINCT actor_id
-      FROM action_log
-      WHERE guild_id = ?
-        AND action IN (${modActionsList})
-        ${epochFilter.sql}
-    `
-      )
-      .all(guildId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as Array<{
-      actor_id: string;
-    }>;
+    let moderators: Array<{ actor_id: string }>;
+    try {
+      moderators = db
+        .prepare(
+          `
+        SELECT DISTINCT actor_id
+        FROM action_log
+        WHERE guild_id = ?
+          AND action IN (${modActionsList})
+          ${epochFilter.sql}
+      `
+        )
+        .all(guildId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as Array<{
+        actor_id: string;
+      }>;
+    } catch (err) {
+      logger.error({ err, guildId }, "[metrics] failed to query moderators");
+      throw err;
+    }
 
     if (moderators.length === 0) {
       logger.info({ guildId }, "[metrics] no actions found for guild");
@@ -247,27 +253,39 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
     for (const { actor_id: moderatorId } of moderators) {
       try {
         // Count actions by type (only MOD_ACTIONS, filtered by epoch)
-        const counts = db
-          .prepare(
-            `
-          SELECT
-            SUM(CASE WHEN action = 'claim' THEN 1 ELSE 0 END) as claims,
-            SUM(CASE WHEN action = 'approve' THEN 1 ELSE 0 END) as accepts,
-            SUM(CASE WHEN action = 'reject' THEN 1 ELSE 0 END) as rejects,
-            SUM(CASE WHEN action = 'kick' THEN 1 ELSE 0 END) as kicks,
-            SUM(CASE WHEN action = 'modmail_open' THEN 1 ELSE 0 END) as modmail_opens
-          FROM action_log
-          WHERE guild_id = ? AND actor_id = ? AND action IN (${modActionsList})
-            ${epochFilter.sql}
-        `
-          )
-          .get(guildId, moderatorId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as {
+        let counts: {
           claims: number;
           accepts: number;
           rejects: number;
           kicks: number;
           modmail_opens: number;
         };
+        try {
+          counts = db
+            .prepare(
+              `
+            SELECT
+              SUM(CASE WHEN action = 'claim' THEN 1 ELSE 0 END) as claims,
+              SUM(CASE WHEN action = 'approve' THEN 1 ELSE 0 END) as accepts,
+              SUM(CASE WHEN action = 'reject' THEN 1 ELSE 0 END) as rejects,
+              SUM(CASE WHEN action = 'kick' THEN 1 ELSE 0 END) as kicks,
+              SUM(CASE WHEN action = 'modmail_open' THEN 1 ELSE 0 END) as modmail_opens
+            FROM action_log
+            WHERE guild_id = ? AND actor_id = ? AND action IN (${modActionsList})
+              ${epochFilter.sql}
+          `
+            )
+            .get(guildId, moderatorId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as {
+            claims: number;
+            accepts: number;
+            rejects: number;
+            kicks: number;
+            modmail_opens: number;
+          };
+        } catch (err) {
+          logger.error({ err, guildId, moderatorId }, "[metrics] failed to query action counts");
+          continue;
+        }
 
         // Compute response times. Note: computeResponseTimes returns unsorted,
         // we sort here for percentile calculation (though calculatePercentile
@@ -284,39 +302,44 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
         const p95 = calculatePercentile(responseTimes, 95);
 
         // UPSERT into mod_metrics
-        db.prepare(
+        try {
+          db.prepare(
+            `
+            INSERT INTO mod_metrics (
+              moderator_id, guild_id,
+              total_claims, total_accepts, total_rejects, total_kicks, total_modmail_opens,
+              avg_response_time_s, p50_response_time_s, p95_response_time_s,
+              updated_at
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ON CONFLICT(moderator_id, guild_id) DO UPDATE SET
+              total_claims = excluded.total_claims,
+              total_accepts = excluded.total_accepts,
+              total_rejects = excluded.total_rejects,
+              total_kicks = excluded.total_kicks,
+              total_modmail_opens = excluded.total_modmail_opens,
+              avg_response_time_s = excluded.avg_response_time_s,
+              p50_response_time_s = excluded.p50_response_time_s,
+              p95_response_time_s = excluded.p95_response_time_s,
+              updated_at = excluded.updated_at
           `
-          INSERT INTO mod_metrics (
-            moderator_id, guild_id,
-            total_claims, total_accepts, total_rejects, total_kicks, total_modmail_opens,
-            avg_response_time_s, p50_response_time_s, p95_response_time_s,
-            updated_at
-          )
-          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-          ON CONFLICT(moderator_id, guild_id) DO UPDATE SET
-            total_claims = excluded.total_claims,
-            total_accepts = excluded.total_accepts,
-            total_rejects = excluded.total_rejects,
-            total_kicks = excluded.total_kicks,
-            total_modmail_opens = excluded.total_modmail_opens,
-            avg_response_time_s = excluded.avg_response_time_s,
-            p50_response_time_s = excluded.p50_response_time_s,
-            p95_response_time_s = excluded.p95_response_time_s,
-            updated_at = excluded.updated_at
-        `
-        ).run(
-          moderatorId,
-          guildId,
-          counts.claims || 0,
-          counts.accepts || 0,
-          counts.rejects || 0,
-          counts.kicks || 0,
-          counts.modmail_opens || 0,
-          avgResponseTime,
-          p50,
-          p95,
-          now
-        );
+          ).run(
+            moderatorId,
+            guildId,
+            counts.claims || 0,
+            counts.accepts || 0,
+            counts.rejects || 0,
+            counts.kicks || 0,
+            counts.modmail_opens || 0,
+            avgResponseTime,
+            p50,
+            p95,
+            now
+          );
+        } catch (err) {
+          logger.error({ err, guildId, moderatorId }, "[metrics] failed to upsert mod_metrics");
+          continue;
+        }
 
         processed++;
       } catch (err) {
@@ -370,13 +393,19 @@ export async function getCachedMetrics(
   // what's persisted, not some intermediate state.
   await recalcModMetrics(guildId);
 
-  const metrics = db
-    .prepare(
-      `
-    SELECT * FROM mod_metrics WHERE guild_id = ?
-  `
-    )
-    .all(guildId) as ModMetrics[];
+  let metrics: ModMetrics[];
+  try {
+    metrics = db
+      .prepare(
+        `
+      SELECT * FROM mod_metrics WHERE guild_id = ?
+    `
+      )
+      .all(guildId) as ModMetrics[];
+  } catch (err) {
+    logger.error({ err, guildId }, "[metrics] failed to query metrics after recalc");
+    throw err;
+  }
 
   // Update cache with fresh timestamp
   _metricsCache.set(guildId, { metrics, timestamp: now });

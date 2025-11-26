@@ -130,7 +130,16 @@ export function getEpochPredicate(
 
   // Convert Date to Unix timestamp (seconds). Important: action_log stores
   // timestamps as integer seconds, not milliseconds. Don't forget the /1000.
-  const epochSec = Math.floor(epoch.getTime() / 1000);
+  const epochTime = epoch.getTime();
+  if (!Number.isFinite(epochTime) || isNaN(epochTime)) {
+    logger.error(
+      { guildId, epoch },
+      "[metricsEpoch] Invalid epoch date, skipping filter"
+    );
+    return { sql: "", params: [] };
+  }
+
+  const epochSec = Math.floor(epochTime / 1000);
 
   // Column name is validated above, safe to interpolate
   return {

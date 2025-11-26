@@ -95,6 +95,18 @@ export async function handleLevelRoleAdded(
     }
 
     const level = tier.threshold;
+
+    if (typeof level !== 'number' || level < 0 || !Number.isFinite(level)) {
+      logger.error({
+        evt: "invalid_level_threshold",
+        guildId: guild.id,
+        userId: member.id,
+        roleId: levelRoleId,
+        threshold: level,
+      }, "Invalid level threshold value");
+      return results;
+    }
+
     logger.info({
       evt: "level_up_detected",
       guildId: guild.id,

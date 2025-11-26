@@ -31,6 +31,9 @@ import type { Client } from "discord.js";
 const CRITICAL_TABLES = [
   "application",
   "guild_config",
+] as const;
+
+const NON_CRITICAL_TABLES = [
   "action_log",
   "modmail_ticket",
 ] as const;
@@ -61,6 +64,7 @@ export interface StartupHealthResult {
   healthy: boolean;
   criticalIssues: string[];
   warnings: string[];
+  degradedMode: boolean;
   summary: {
     tablesOk: number;
     tablesMissing: string[];
@@ -81,8 +85,9 @@ export interface StartupHealthResult {
  * The try/catch per table ensures one corrupt/inaccessible table doesn't prevent
  * us from checking the others.
  */
-export function validateCriticalTables(): { ok: boolean; missing: string[] } {
+export function validateCriticalTables(): { ok: boolean; missing: string[]; degraded: boolean; nonCriticalMissing: string[] } {
   const missing: string[] = [];
+  const nonCriticalMissing: string[] = [];
 
   for (const table of CRITICAL_TABLES) {
     try {
@@ -96,15 +101,33 @@ export function validateCriticalTables(): { ok: boolean; missing: string[] } {
         missing.push(table);
       }
     } catch (err) {
-      // If we can't even query sqlite_master, something is very wrong
       logger.error({ err, table }, "[startup] Failed to check table existence");
       missing.push(table);
+    }
+  }
+
+  for (const table of NON_CRITICAL_TABLES) {
+    try {
+      const exists = db
+        .prepare(
+          `SELECT name FROM sqlite_master WHERE type='table' AND name=?`
+        )
+        .get(table);
+
+      if (!exists) {
+        nonCriticalMissing.push(table);
+      }
+    } catch (err) {
+      logger.warn({ err, table }, "[startup] Failed to check non-critical table existence");
+      nonCriticalMissing.push(table);
     }
   }
 
   return {
     ok: missing.length === 0,
     missing,
+    degraded: nonCriticalMissing.length > 0,
+    nonCriticalMissing,
   };
 }
 
@@ -171,12 +194,20 @@ export function validateStartup(): StartupHealthResult {
     }
   }
 
+  if (tableResult.degraded) {
+    for (const t of tableResult.nonCriticalMissing) {
+      warnings.push(`Missing non-critical table: ${t} (some features may be disabled)`);
+    }
+  }
+
   const healthy = criticalIssues.length === 0;
+  const degradedMode = tableResult.degraded;
 
   const result: StartupHealthResult = {
     healthy,
     criticalIssues,
     warnings,
+    degradedMode,
     summary: {
       tablesOk: CRITICAL_TABLES.length - tableResult.missing.length,
       tablesMissing: tableResult.missing,
@@ -195,6 +226,14 @@ export function validateStartup(): StartupHealthResult {
         warnings,
       },
       "[startup] Critical issues detected during startup validation"
+    );
+  } else if (degradedMode) {
+    logger.warn(
+      {
+        evt: "startup_validation_degraded",
+        warnings,
+      },
+      "[startup] Startup validation passed but running in degraded mode"
     );
   } else if (warnings.length > 0) {
     logger.warn(
@@ -244,6 +283,8 @@ export function logStartupHealth(client: Client): void {
     database: {
       tablesOk: CRITICAL_TABLES.length - tableResult.missing.length,
       tablesMissing: tableResult.missing,
+      degraded: tableResult.degraded,
+      nonCriticalMissing: tableResult.nonCriticalMissing,
     },
     config: {
       envVarsOk: REQUIRED_ENV_VARS.length,
@@ -253,7 +294,11 @@ export function logStartupHealth(client: Client): void {
     warnings: envResult.warnings,
   };
 
-  logger.info(health, "[startup] Bot health summary");
+  if (tableResult.degraded) {
+    logger.warn(health, "[startup] Bot health summary (DEGRADED MODE)");
+  } else {
+    logger.info(health, "[startup] Bot health summary");
+  }
 
   // Log individual warnings at warn level
   if (envResult.warnings.length > 0) {

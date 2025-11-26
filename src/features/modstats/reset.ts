@@ -72,6 +72,44 @@ export async function resetModstats(
   };
 
   try {
+    if (opts.guildIds && opts.guildIds.length > 0) {
+      for (const guildId of opts.guildIds) {
+        if (!guildId || typeof guildId !== 'string' || guildId.trim() === '') {
+          const error = `Invalid guild ID: ${guildId}`;
+          result.errors?.push(error);
+          log.warn({ guildId }, "[modstats:reset] invalid guild ID provided");
+          throw new Error(error);
+        }
+      }
+    }
+
+    let guildsCount = 0;
+    try {
+      let guildsQuery = "SELECT COUNT(DISTINCT guild_id) as count FROM action_log";
+      const params: string[] = [];
+      if (opts.guildIds && opts.guildIds.length > 0) {
+        const placeholders = opts.guildIds.map(() => "?").join(",");
+        guildsQuery += ` WHERE guild_id IN (${placeholders})`;
+        params.push(...opts.guildIds);
+      }
+      const guildsRow = db.prepare(guildsQuery).get(...params) as { count: number } | undefined;
+      guildsCount = guildsRow?.count ?? 0;
+    } catch (err) {
+      const error = `Failed to validate guilds: ${(err as Error).message}`;
+      result.errors?.push(error);
+      log.error({ err }, "[modstats:reset] failed to validate guilds");
+      throw err;
+    }
+
+    if (guildsCount === 0 && !opts.guildIds) {
+      const error = "No guilds found in action_log. Reset cancelled to prevent accidental data loss.";
+      result.errors?.push(error);
+      log.warn("[modstats:reset] no guilds found, cancelling reset");
+      throw new Error(error);
+    }
+
+    log.info({ guildsCount, guildFilter: opts.guildIds }, "[modstats:reset] validated reset parameters");
+
     // Transaction ensures atomicity: if any step fails, the whole reset rolls back.
     // This prevents half-dropped caches or inconsistent guild counts.
     const resetTransaction = db.transaction(() => {
@@ -105,21 +143,7 @@ export async function resetModstats(
       //   )
       // `).run();
 
-      // Count affected guilds for the result summary. This is informational only -
-      // we're not actually iterating guilds here (recomputation is lazy).
-      let guildsQuery = "SELECT COUNT(DISTINCT guild_id) as count FROM action_log";
-      const params: string[] = [];
-
-      if (opts.guildIds && opts.guildIds.length > 0) {
-        // Guild filtering: useful for testing reset on a single guild without
-        // nuking the whole cache. Production rarely needs this.
-        const placeholders = opts.guildIds.map(() => "?").join(",");
-        guildsQuery += ` WHERE guild_id IN (${placeholders})`;
-        params.push(...opts.guildIds);
-      }
-
-      const guildsRow = db.prepare(guildsQuery).get(...params) as { count: number } | undefined;
-      result.guildsAffected = guildsRow?.count ?? 0;
+      result.guildsAffected = guildsCount;
 
       log.info(
         { guildsAffected: result.guildsAffected, guildFilter: opts.guildIds },

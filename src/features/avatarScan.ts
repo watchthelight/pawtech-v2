@@ -122,7 +122,16 @@ export async function scanAvatar(
   try {
     // Use Google Cloud Vision API for NSFW detection
     const { detectNsfwVision, calculateVisionScore } = await import("./googleVision.js");
-    const visionResult = await detectNsfwVision(highResUrl);
+    const { withRetry } = await import("../lib/retry.js");
+
+    const visionResult = await withRetry(
+      () => detectNsfwVision(highResUrl),
+      {
+        maxAttempts: 3,
+        initialDelayMs: 1000,
+        label: "google_vision_api"
+      }
+    );
 
     if (!visionResult) {
       logger.warn(

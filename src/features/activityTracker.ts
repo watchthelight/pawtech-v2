@@ -15,6 +15,7 @@
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { getFlaggerConfig } from "../config/flaggerStore.js";
+import { getLoggingChannel } from "./logger.js";
 import type { Guild, Client, Message } from "discord.js";
 
 /**
@@ -229,6 +230,9 @@ async function evaluateAndFlag(
     ).run(firstMessageAt, guildId, userId);
 
     logger.info({ guildId, userId, silentDays }, "[flagger] flag alert posted successfully");
+
+    // Post log entry to logging channel (separate from flags channel)
+    await postFlagLogEntry(client, guildId, userId, silentDays, message);
   } catch (err) {
     logger.error({ err, guildId, userId }, "[flagger] failed to evaluate and flag");
   }
@@ -309,5 +313,79 @@ async function postFlagAlert(
     );
   } catch (err) {
     logger.error({ err, guildId, userId, channelId }, "[flagger] failed to post flag alert");
+  }
+}
+
+/**
+ * WHAT: Post log entry to logging channel when a user is auto-flagged.
+ * WHY: Provides audit trail in logging channel (separate from flags channel alerts).
+ *
+ * @param client - Discord.js Client instance
+ * @param guildId - Discord guild ID
+ * @param userId - Discord user ID
+ * @param silentDays - Calculated silent days
+ * @param message - Discord message object (for context)
+ */
+async function postFlagLogEntry(
+  client: Client,
+  guildId: string,
+  userId: string,
+  silentDays: number,
+  message: Message
+): Promise<void> {
+  try {
+    const guild = await client.guilds.fetch(guildId);
+    const loggingChannel = await getLoggingChannel(guild);
+
+    if (!loggingChannel) {
+      // No logging channel configured, skip (this is not an error)
+      logger.debug(
+        { guildId, userId },
+        "[flagger] no logging channel configured, skipping log entry"
+      );
+      return;
+    }
+
+    // Build a simple log embed for the logging channel
+    const { EmbedBuilder } = await import("discord.js");
+
+    const embed = new EmbedBuilder()
+      .setColor(0xfee75c) // Yellow (informational)
+      .setTitle("🚩 Auto-Flag: Silent Since Join")
+      .setDescription(
+        `User <@${userId}> (\`${userId}\`) was automatically flagged by the Silent Since Join flagger.`
+      )
+      .addFields(
+        {
+          name: "Silent Days",
+          value: `${silentDays} days`,
+          inline: true,
+        },
+        {
+          name: "First Message Channel",
+          value: `<#${message.channelId}>`,
+          inline: true,
+        },
+        {
+          name: "Message Link",
+          value: `[Jump to message](https://discord.com/channels/${guildId}/${message.channelId}/${message.id})`,
+          inline: false,
+        }
+      )
+      .setFooter({ text: "Silent Since Join Flagger (PR8)" })
+      .setTimestamp();
+
+    await loggingChannel.send({ embeds: [embed] });
+
+    logger.debug(
+      { guildId, userId, loggingChannelId: loggingChannel.id },
+      "[flagger] log entry posted to logging channel"
+    );
+  } catch (err) {
+    // Log entry is non-critical - don't fail the whole flag operation
+    logger.warn(
+      { err, guildId, userId },
+      "[flagger] failed to post log entry to logging channel"
+    );
   }
 }

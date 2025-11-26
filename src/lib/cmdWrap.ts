@@ -290,6 +290,7 @@ export function wrapCommand<I extends InstrumentedInteraction>(
           interaction: interactionMeta,
           ...errorContext(classified),
           err: errPayload,
+          cause: classified.cause,
         },
         `command error: ${classified.message}`
       );
@@ -306,6 +307,7 @@ export function wrapCommand<I extends InstrumentedInteraction>(
           traceId,
           lastSql,
           errorKind: classified.kind,
+          errorContext: errorContext(classified),
         });
       }
 

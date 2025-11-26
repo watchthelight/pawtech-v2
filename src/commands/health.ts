@@ -62,23 +62,43 @@ function formatUptime(seconds: number): string {
  */
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
   const { interaction } = ctx;
-  const metrics = await withStep(ctx, "collect_metrics", async () => ({
-    uptimeSec: Math.floor(process.uptime()),
-    ping: Math.round(interaction.client.ws.ping),
-  }));
 
-  await withStep(ctx, "reply", async () => {
-    const embed = new EmbedBuilder()
-      .setTitle("Health Check")
-      .setColor(0x57f287)
-      .addFields(
-        { name: "Status", value: "Healthy", inline: true },
-        { name: "Uptime", value: formatUptime(metrics.uptimeSec), inline: true },
-        { name: "WS Ping", value: `${metrics.ping}ms`, inline: true }
-      )
-      .setTimestamp();
+  const healthCheckPromise = (async () => {
+    const metrics = await withStep(ctx, "collect_metrics", async () => ({
+      uptimeSec: Math.floor(process.uptime()),
+      ping: Math.round(interaction.client.ws.ping),
+    }));
 
-    // Single message path; no need to defer. Keep within 3s SLA.
-    await interaction.reply({ embeds: [embed] });
+    await withStep(ctx, "reply", async () => {
+      const embed = new EmbedBuilder()
+        .setTitle("Health Check")
+        .setColor(0x57f287)
+        .addFields(
+          { name: "Status", value: "Healthy", inline: true },
+          { name: "Uptime", value: formatUptime(metrics.uptimeSec), inline: true },
+          { name: "WS Ping", value: `${metrics.ping}ms`, inline: true }
+        )
+        .setTimestamp();
+
+      // Single message path; no need to defer. Keep within 3s SLA.
+      await interaction.reply({ embeds: [embed] });
+    });
+  })();
+
+  const timeoutPromise = new Promise<never>((_, reject) => {
+    setTimeout(() => reject(new Error('Health check timeout')), 5000);
   });
+
+  try {
+    await Promise.race([healthCheckPromise, timeoutPromise]);
+  } catch (error) {
+    if (error instanceof Error && error.message === 'Health check timeout') {
+      await interaction.reply({
+        content: '⚠️ Health check timed out after 5 seconds.',
+        ephemeral: true,
+      }).catch(() => {});
+    } else {
+      throw error;
+    }
+  }
 }

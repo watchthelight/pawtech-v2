@@ -113,6 +113,18 @@ export type ClassifiedError =
   | ConfigError
   | UnknownError;
 
+export type ErrorKind = ClassifiedError['kind'];
+
+export const ERROR_KINDS = [
+  'db_error',
+  'discord_api',
+  'validation',
+  'permission',
+  'network',
+  'config',
+  'unknown',
+] as const satisfies readonly ErrorKind[];
+
 // ===== Error Classification =====
 
 /**

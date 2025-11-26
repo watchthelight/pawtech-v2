@@ -101,6 +101,9 @@ export async function withRetry<T>(
         throw err;
       }
 
+      // Add jitter to prevent thundering herd (0.5x to 1.5x of base delay)
+      const jitteredDelayMs = Math.floor(delayMs * (0.5 + Math.random()));
+
       // Log retry attempt
       logger.debug(
         {
@@ -108,16 +111,14 @@ export async function withRetry<T>(
           label,
           attempt,
           maxAttempts,
-          delayMs,
+          delayMs: jitteredDelayMs,
           errorKind: classified.kind,
         },
-        `[retry] ${label} attempt ${attempt} failed, retrying in ${delayMs}ms`
+        `[retry] ${label} attempt ${attempt} failed, retrying in ${jitteredDelayMs}ms`
       );
 
-      // Wait before retrying. Note: no jitter here. If you're seeing
-      // thundering herd issues (many clients retrying simultaneously),
-      // add random jitter: delayMs * (0.5 + Math.random())
-      await sleep(delayMs);
+      // Wait before retrying with jitter to prevent thundering herd
+      await sleep(jitteredDelayMs);
 
       // Exponential backoff with cap. The cap prevents absurdly long waits
       // if someone misconfigures the multiplier or maxAttempts.

@@ -64,6 +64,27 @@ export function upsertQuestion(
     throw new Error(`Question index must be between 0 and 4, got ${qIndex}`);
   }
 
+  if (!prompt || typeof prompt !== 'string') {
+    throw new Error('Question prompt must be a non-empty string');
+  }
+
+  const trimmedPrompt = prompt.trim();
+  if (trimmedPrompt.length === 0) {
+    throw new Error('Question prompt cannot be empty or whitespace only');
+  }
+
+  if (trimmedPrompt.length > 45) {
+    throw new Error('Question prompt must be 45 characters or less (Discord modal label limit)');
+  }
+
+  if (required !== 0 && required !== 1) {
+    throw new Error(`Question required flag must be 0 or 1, got ${required}`);
+  }
+
+  if (!guildId || typeof guildId !== 'string' || guildId.trim().length === 0) {
+    throw new Error('Guild ID must be a non-empty string');
+  }
+
   const sql = `
     INSERT INTO guild_question (guild_id, q_index, prompt, required)
     VALUES (?, ?, ?, ?)
@@ -72,7 +93,7 @@ export function upsertQuestion(
       required = excluded.required
   `;
 
-  const run = () => db.prepare(sql).run(guildId, qIndex, prompt, required);
+  const run = () => db.prepare(sql).run(guildId, qIndex, trimmedPrompt, required);
 
   if (ctx) {
     withSql(ctx, sql, run);
@@ -93,6 +114,10 @@ export function seedDefaultQuestionsIfEmpty(
   guildId: string,
   ctx?: SqlTrackingCtx
 ): { inserted: number; total: number } {
+  if (!guildId || typeof guildId !== 'string' || guildId.trim().length === 0) {
+    throw new Error('Guild ID must be a non-empty string');
+  }
+
   const count = getQuestionCount(guildId);
   if (count > 0) return { inserted: 0, total: count };
 

@@ -208,13 +208,13 @@ export function getLeadTimeStats(opts: QueryOptions): LeadTimeStats {
     const leadTimes = rows.map((r) => r.lead_time_sec);
     const n = leadTimes.length;
     const sum = leadTimes.reduce((acc, val) => acc + val, 0);
-    const mean = Math.round(sum / n);
+    const mean = n > 0 ? Math.round(sum / n) : 0;
 
     // Percentiles (using nearest-rank method)
     // This is simpler than interpolation and good enough for our analytics purposes.
     // At small n, the difference between methods is negligible anyway.
-    const p50Index = Math.ceil(0.5 * n) - 1;
-    const p90Index = Math.ceil(0.9 * n) - 1;
+    const p50Index = Math.max(0, Math.min(Math.ceil(0.5 * n) - 1, n - 1));
+    const p90Index = Math.max(0, Math.min(Math.ceil(0.9 * n) - 1, n - 1));
     const p50 = leadTimes[p50Index];
     const p90 = leadTimes[p90Index];
 
@@ -309,8 +309,8 @@ export function getTopReasons(opts: QueryOptions & { limit?: number }): ReasonCo
 
     // Map to output format
     const results = rows.map((r) => ({
-      reason: r.normalized_reason,
-      count: r.count,
+      reason: r.normalized_reason || '',
+      count: typeof r.count === 'number' ? r.count : 0,
     }));
 
     const elapsed = Date.now() - start;
@@ -467,10 +467,10 @@ export function getOpenQueueAge(guildId: string): QueueAgeStats {
 
     const ages = rows.map((r) => r.age_sec);
     const count = ages.length;
-    const max_age_sec = ages[ages.length - 1]; // Already sorted ASC
+    const max_age_sec = ages[Math.min(ages.length - 1, 0)];
 
     // p50 (median)
-    const p50Index = Math.ceil(0.5 * count) - 1;
+    const p50Index = Math.max(0, Math.min(Math.ceil(0.5 * count) - 1, count - 1));
     const p50_age_sec = ages[p50Index];
 
     const elapsed = Date.now() - start;

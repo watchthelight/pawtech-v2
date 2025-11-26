@@ -67,6 +67,26 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   const weeks = interaction.options.getInteger('weeks', false) || 8;
   const dryRun = interaction.options.getBoolean('dry-run', false) || false;
 
+  if (weeks < 1 || weeks > 8) {
+    await interaction.reply({
+      content: '❌ Invalid weeks value. Must be between 1 and 8.',
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const currentDate = new Date();
+  const oldestDate = new Date();
+  oldestDate.setDate(currentDate.getDate() - (weeks * 7));
+
+  if (oldestDate > currentDate) {
+    await interaction.reply({
+      content: '❌ Invalid date range: calculated start date is in the future.',
+      ephemeral: true,
+    });
+    return;
+  }
+
   // Acknowledge command
   await interaction.reply({
     content: `🔄 Starting backfill for ${weeks} weeks${dryRun ? ' (DRY RUN)' : ''}...\n\nThis will take 15-20 minutes. You'll be pinged when complete.`,

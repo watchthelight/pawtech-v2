@@ -15,6 +15,8 @@ import { logger } from "../lib/logger.js";
 import { findCandidateById, validateCandidate, restoreCandidate } from "./dbRecovery.js";
 import { buildValidationEmbed, buildRestoreSummaryEmbed } from "../ui/dbRecoveryCard.js";
 import { logActionPretty } from "../logging/pretty.js";
+import { hasManageGuild } from "../lib/config.js";
+import { isOwner } from "../utils/owner.js";
 
 /**
  * Handle database recovery button interactions
@@ -56,6 +58,33 @@ export async function handleDbRecoveryButton(interaction: ButtonInteraction): Pr
   await interaction.deferReply({ ephemeral: true });
 
   try {
+    const member = interaction.member ?
+      (typeof interaction.member.permissions === 'undefined' ? null : interaction.member) : null;
+    const isOwnerUser = isOwner(user.id);
+    const hasManagePerms = member && 'permissions' in member ? hasManageGuild(member as any) : false;
+
+    if (!isOwnerUser && !hasManagePerms) {
+      await interaction.editReply({
+        content: "❌ You don't have permission to perform database recovery operations. This requires either bot ownership or Manage Server permission.",
+      });
+      logger.warn(
+        { userId: user.id, guildId: guild?.id, action },
+        "[dbRecovery] Unauthorized button interaction attempt"
+      );
+      return;
+    }
+
+    if (action === 'restore-confirm' && !isOwnerUser) {
+      await interaction.editReply({
+        content: "❌ Live database restore can only be performed by bot owners. This is a destructive operation that affects all guilds.\n\nIf you need to perform a restore, please contact a bot administrator.",
+      });
+      logger.warn(
+        { userId: user.id, guildId: guild?.id },
+        "[dbRecovery] Non-owner attempted live restore"
+      );
+      return;
+    }
+
     // Find candidate
     const candidate = await findCandidateById(candidateId);
     if (!candidate) {

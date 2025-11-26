@@ -62,6 +62,7 @@ import {
   BTN_MODMAIL_RE,
   MODAL_REJECT_RE,
   MODAL_PERM_REJECT_RE,
+  MODAL_ACCEPT_RE,
 } from "../lib/modalPatterns.js";
 import { postWelcomeCard } from "./welcome.js";
 import { closeModmailForApplication } from "./modmail.js";
@@ -69,6 +70,17 @@ import { nowUtc, formatUtc, formatRelative } from "../lib/time.js";
 import { toDiscordAbs, toDiscordRel } from "../lib/timefmt.js";
 import { autoDelete } from "../utils/autoDelete.js";
 import { findAppByShortCode } from "./appLookup.js";
+
+const FLOW_TIMEOUT_MS = 30000;
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, operationName: string): Promise<T> {
+  return Promise.race([
+    promise,
+    new Promise<T>((_, reject) =>
+      setTimeout(() => reject(new Error(`${operationName} timed out after ${timeoutMs}ms`)), timeoutMs)
+    ),
+  ]);
+}
 
 // In-memory set to track warned users for missing account age
 // Design: Prevents log spam when the same user's account age is unavailable across multiple card renders.
@@ -229,6 +241,7 @@ export function claimGuard(claim: ReviewClaimRow | null, userId: string): string
 
 const BUTTON_RE = BTN_DECIDE_RE;
 const MODAL_RE = MODAL_REJECT_RE;
+const ACCEPT_MODAL_RE = MODAL_ACCEPT_RE;
 type ReviewStaffInteraction =
   | ButtonInteraction
   | ModalSubmitInteraction
@@ -353,7 +366,7 @@ export function clearClaim(appId: string) {
 // Idempotent on purpose; double-clickers exist.
 // State machine: submitted | needs_info -> approved (terminal)
 // Rejected/kicked apps cannot be approved - those are separate terminal states.
-export function approveTx(appId: string, moderatorId: string): TxResult {
+export function approveTx(appId: string, moderatorId: string, reason?: string | null): TxResult {
   return db.transaction(() => {
     const row = db.prepare(`SELECT status FROM application WHERE id = ?`).get(appId) as
       | { status: ApplicationRow["status"] }
@@ -370,10 +383,10 @@ export function approveTx(appId: string, moderatorId: string): TxResult {
       .prepare(
         `
         INSERT INTO review_action (app_id, moderator_id, action, created_at, reason, meta)
-        VALUES (?, ?, 'approve', ?, NULL, NULL)
+        VALUES (?, ?, 'approve', ?, ?, NULL)
       `
       )
-      .run(appId, moderatorId, nowUtc());
+      .run(appId, moderatorId, nowUtc(), reason ?? null);
     db.prepare(
       `
       UPDATE application
@@ -381,10 +394,10 @@ export function approveTx(appId: string, moderatorId: string): TxResult {
           updated_at = datetime('now'),
           resolved_at = datetime('now'),
           resolver_id = ?,
-          resolution_reason = NULL
+          resolution_reason = ?
       WHERE id = ?
     `
-    ).run(moderatorId, appId);
+    ).run(moderatorId, reason ?? null, appId);
     return { kind: "changed" as const, reviewActionId: Number(insert.lastInsertRowid) };
   })();
 }
@@ -498,7 +511,11 @@ export async function approveFlow(
     roleError: null,
   };
   try {
-    result.member = await guild.members.fetch(memberId);
+    result.member = await withTimeout(
+      guild.members.fetch(memberId),
+      FLOW_TIMEOUT_MS,
+      "approveFlow:fetchMember"
+    );
   } catch (err) {
     logger.warn({ err, guildId: guild.id, memberId }, "Failed to fetch member for approval");
     captureException(err, { area: "approveFlow:fetchMember", guildId: guild.id, userId: memberId });
@@ -508,13 +525,21 @@ export async function approveFlow(
   const roleId = cfg.accepted_role_id;
   if (roleId && result.member) {
     const role =
-      guild.roles.cache.get(roleId) ?? (await guild.roles.fetch(roleId).catch(() => null));
+      guild.roles.cache.get(roleId) ?? (await withTimeout(
+        guild.roles.fetch(roleId),
+        FLOW_TIMEOUT_MS,
+        "approveFlow:fetchRole"
+      ).catch(() => null));
     if (role) {
       if (!result.member.roles.cache.has(role.id)) {
         try {
           // Bot must be above the target role; otherwise 50013 Missing Permissions.
           // Permissions model: https://discord.com/developers/docs/topics/permissions
-          await result.member.roles.add(role, "Gate approval");
+          await withTimeout(
+            result.member.roles.add(role, "Gate approval"),
+            FLOW_TIMEOUT_MS,
+            "approveFlow:addRole"
+          );
           result.roleApplied = true;
         } catch (err) {
           const code = (err as { code?: number }).code;
@@ -544,12 +569,19 @@ export async function approveFlow(
 
 // DM delivery is best-effort. Discord users can disable DMs from server members,
 // so failure here should never block the approval workflow. Returns boolean for audit metadata.
-export async function deliverApprovalDm(member: GuildMember, guildName: string): Promise<boolean> {
+export async function deliverApprovalDm(
+  member: GuildMember,
+  guildName: string,
+  reason?: string | null
+): Promise<boolean> {
   try {
+    let content = `Hi, welcome to ${guildName}! Your application has been approved.`;
+    if (reason) {
+      content += `\n\n**Note from reviewer:** ${reason}`;
+    }
+    content += `\n\nEnjoy your stay!`;
     // DM may fail if recipient has privacy settings enabled; we fail-soft and do not block approval.
-    await member.send({
-      content: `Hi, welcome to ${guildName}! Your application has been approved. Enjoy your stay.`,
-    });
+    await withTimeout(member.send({ content }), FLOW_TIMEOUT_MS, "deliverApprovalDm");
     return true;
   } catch (err) {
     logger.warn({ err, userId: member.id }, "Failed to DM applicant after approval");
@@ -573,7 +605,11 @@ export async function rejectFlow(
       ];
   try {
     // DM can fail; we record dmDelivered=false and continue moderation flow.
-    await user.send({ content: lines.join("\n") });
+    await withTimeout(
+      user.send({ content: lines.join("\n") }),
+      FLOW_TIMEOUT_MS,
+      "rejectFlow:sendDm"
+    );
     result.dmDelivered = true;
   } catch (err) {
     logger.warn({ err, userId: user.id }, "Failed to DM applicant about rejection");
@@ -602,7 +638,11 @@ export async function kickFlow(guild: Guild, memberId: string, reason?: string |
 
   // Fetch member from guild
   try {
-    member = await guild.members.fetch(memberId);
+    member = await withTimeout(
+      guild.members.fetch(memberId),
+      FLOW_TIMEOUT_MS,
+      "kickFlow:fetchMember"
+    );
   } catch (err) {
     result.error = "Member not found in guild (may have already left)";
     logger.warn({ err, guildId: guild.id, memberId }, "[review] kick failed: member not found");
@@ -635,7 +675,11 @@ export async function kickFlow(guild: Guild, memberId: string, reason?: string |
   // Attempt to DM user before kicking (best-effort)
   // WHY: Provides context to user; failure should not block the kick
   try {
-    await member.send({ content: dmLines.join("\n") });
+    await withTimeout(
+      member.send({ content: dmLines.join("\n") }),
+      FLOW_TIMEOUT_MS,
+      "kickFlow:sendDm"
+    );
     result.dmDelivered = true;
     logger.debug({ userId: memberId }, "[review] kick DM delivered");
   } catch (err) {
@@ -648,7 +692,11 @@ export async function kickFlow(guild: Guild, memberId: string, reason?: string |
   // Execute kick
   // DOCS: https://discord.js.org/#/docs/discord.js/main/class/GuildMember?scrollTo=kick
   try {
-    await member.kick(reason ?? undefined);
+    await withTimeout(
+      member.kick(reason ?? undefined),
+      FLOW_TIMEOUT_MS,
+      "kickFlow:kick"
+    );
     result.kickSucceeded = true;
     logger.info(
       { guildId: guild.id, memberId, reason, dmDelivered: result.dmDelivered },
@@ -683,7 +731,11 @@ export async function kickFlow(guild: Guild, memberId: string, reason?: string |
 // Orchestrates the full approval flow: claim guard -> DB transaction -> role assignment -> DM -> welcome card.
 // Order matters: We want the DB to reflect approved status even if downstream Discord API calls fail.
 // Each step is logged and errors are captured to Sentry without blocking subsequent steps.
-async function runApproveAction(interaction: ReviewActionInteraction, app: ApplicationRow) {
+async function runApproveAction(
+  interaction: ReviewActionInteraction,
+  app: ApplicationRow,
+  reason?: string | null
+) {
   const guild = interaction.guild as Guild | null;
   if (!guild) {
     await replyOrEdit(interaction, { content: "Guild not found." }).catch(() => undefined);
@@ -695,7 +747,7 @@ async function runApproveAction(interaction: ReviewActionInteraction, app: Appli
     await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
     return;
   }
-  const result = approveTx(app.id, interaction.user.id);
+  const result = approveTx(app.id, interaction.user.id, reason);
   if (result.kind === "already") {
     await replyOrEdit(interaction, { content: "Already approved." }).catch(() => undefined);
     return;
@@ -749,7 +801,7 @@ async function runApproveAction(interaction: ReviewActionInteraction, app: Appli
 
   let dmDelivered = false;
   if (approvedMember) {
-    dmDelivered = await deliverApprovalDm(approvedMember, guild.name);
+    dmDelivered = await deliverApprovalDm(approvedMember, guild.name, reason);
   }
 
   let welcomeNote: string | null = null;
@@ -865,6 +917,40 @@ async function openRejectModal(interaction: ButtonInteraction, app: ApplicationR
 
   await interaction.showModal(modal).catch((err) => {
     logger.warn({ err, appId: app.id }, "Failed to show reject modal");
+  });
+}
+
+// Opens accept modal with optional reason field. Acts as confirmation + allows funny comments.
+async function openAcceptModal(interaction: ButtonInteraction, app: ApplicationRow) {
+  if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch(
+      () => undefined
+    );
+    return;
+  }
+
+  const claim = getClaim(app.id);
+  const claimError = claimGuard(claim, interaction.user.id);
+  if (claimError) {
+    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    return;
+  }
+
+  const modal = new ModalBuilder()
+    .setCustomId(`v1:modal:accept:code${shortCode(app.id)}`)
+    .setTitle("Approve Application");
+  const reasonInput = new TextInputBuilder()
+    .setCustomId("v1:modal:accept:reason")
+    .setLabel("Note/comment (optional, shown to user)")
+    .setPlaceholder("Add a personal touch to the approval message...")
+    .setRequired(false)
+    .setMaxLength(500)
+    .setStyle(TextInputStyle.Paragraph);
+  const row = new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput);
+  modal.addComponents(row);
+
+  await interaction.showModal(modal).catch((err) => {
+    logger.warn({ err, appId: app.id }, "Failed to show accept modal");
   });
 }
 
@@ -1422,8 +1508,8 @@ async function runUnclaimAction(interaction: ReviewActionInteraction, app: Appli
 }
 
 // Main router for review card button interactions. Pattern: v1:decide:<action>:code<HEXCODE>
-// Design decision: reject action opens a modal (needs reason text), so we don't defer it.
-// All other actions defer immediately to prevent Discord's 3-second timeout from expiring.
+// Design decision: reject and accept open modals (optional reason text), so we don't defer them.
+// Kick/claim/unclaim defer immediately to prevent Discord's 3-second timeout from expiring.
 export async function handleReviewButton(interaction: ButtonInteraction) {
   const match = BUTTON_RE.exec(interaction.customId);
   if (!match) return;
@@ -1440,7 +1526,15 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
       return;
     }
 
-    // Acknowledge button without visible bubble for approve/kick/claim
+    // accept/approve opens modal for optional reason (acts as confirmation too)
+    if (action === "approve" || action === "accept") {
+      const app = await resolveApplication(interaction, code);
+      if (!app) return;
+      await openAcceptModal(interaction, app);
+      return;
+    }
+
+    // Acknowledge button without visible bubble for kick/claim/unclaim
     // https://discord.js.org/#/docs/discord.js/main/class/Interaction?scrollTo=deferUpdate
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferUpdate().catch(() => undefined);
@@ -1449,9 +1543,7 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
     const app = await resolveApplication(interaction, code);
     if (!app) return;
 
-    if (action === "approve" || action === "accept") {
-      await runApproveAction(interaction, app);
-    } else if (action === "kick") {
+    if (action === "kick") {
       await runKickAction(interaction, app, null);
     } else if (action === "claim") {
       await handleClaimToggle(interaction, app);
@@ -1462,7 +1554,7 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
     const traceId = interaction.id.slice(-8).toUpperCase();
     logger.error({ err, action, code, traceId }, "Review button handling failed");
     captureException(err, { area: "handleReviewButton", action, code, traceId });
-    if (!interaction.deferred && !interaction.replied && action !== "reject") {
+    if (!interaction.deferred && !interaction.replied && action !== "reject" && action !== "approve" && action !== "accept") {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => undefined);
     }
     await replyOrEdit(interaction, {
@@ -1498,6 +1590,35 @@ export async function handleRejectModal(interaction: ModalSubmitInteraction) {
     captureException(err, { area: "handleRejectModal", code, traceId });
     await replyOrEdit(interaction, {
       content: `Failed to process rejection (trace: ${traceId}).`,
+    }).catch(() => undefined);
+  }
+}
+
+export async function handleAcceptModal(interaction: ModalSubmitInteraction) {
+  const match = ACCEPT_MODAL_RE.exec(interaction.customId);
+  if (!match) return;
+  if (!requireInteractionStaff(interaction)) return;
+
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferUpdate().catch(() => undefined);
+  }
+
+  const code = match[1];
+
+  try {
+    const app = await resolveApplication(interaction, code);
+    if (!app) return;
+
+    const reasonRaw = interaction.fields.getTextInputValue("v1:modal:accept:reason") ?? "";
+    const reason = reasonRaw.trim().slice(0, 500) || null;
+
+    await runApproveAction(interaction, app, reason);
+  } catch (err) {
+    const traceId = interaction.id.slice(-8).toUpperCase();
+    logger.error({ err, code, traceId }, "Accept modal handling failed");
+    captureException(err, { area: "handleAcceptModal", code, traceId });
+    await replyOrEdit(interaction, {
+      content: `Failed to process approval (trace: ${traceId}).`,
     }).catch(() => undefined);
   }
 }

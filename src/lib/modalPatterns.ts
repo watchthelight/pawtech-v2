@@ -51,6 +51,7 @@ export const BTN_DBRECOVER_RE = /^dbrecover:(validate|restore-dry|restore-confir
 // Modal IDs for forms that need to capture text input
 export const MODAL_REJECT_RE = /^v1:modal:reject:code([0-9A-F]{6})$/;
 export const MODAL_PERM_REJECT_RE = /^v1:modal:permreject:code([0-9A-F]{6})$/;
+export const MODAL_ACCEPT_RE = /^v1:modal:accept:code([0-9A-F]{6})$/;
 
 // Age verification modal - requires explicit confirmation before showing NSFW avatar source
 export const MODAL_18_RE = /^v1:avatar:confirm18:code([0-9A-F]{6})$/;
@@ -63,6 +64,7 @@ export type ModalRoute =
   | { type: "gate_submit_page"; sessionId: string; pageIndex: number }
   | { type: "review_reject"; code: string }
   | { type: "review_perm_reject"; code: string }
+  | { type: "review_accept"; code: string }
   | { type: "avatar_confirm18"; code: string };
 
 /**
@@ -87,6 +89,11 @@ export function identifyModalRoute(id: string): ModalRoute | null {
   const permReject = id.match(MODAL_PERM_REJECT_RE);
   if (permReject) {
     return { type: "review_perm_reject", code: permReject[1] };
+  }
+
+  const accept = id.match(MODAL_ACCEPT_RE);
+  if (accept) {
+    return { type: "review_accept", code: accept[1] };
   }
 
   const confirm18 = id.match(MODAL_18_RE);
