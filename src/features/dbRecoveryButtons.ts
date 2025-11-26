@@ -22,12 +22,17 @@ import { logActionPretty } from "../logging/pretty.js";
  *   - action: validate | restore-dry | restore-confirm
  *   - candidateId: unique candidate ID
  *   - nonce: random hex string for security
+ *
+ * Design: The nonce exists to prevent replay attacks on recovery buttons and ensures
+ * each button click is tied to a specific recovery card generation. Without it,
+ * someone could craft a malicious button ID pointing to an arbitrary candidate.
  */
 export async function handleDbRecoveryButton(interaction: ButtonInteraction): Promise<void> {
   const { customId, user, guild } = interaction;
 
-  // Parse custom ID
-  // Expected format: dbrecover:<action>:<candidateId>:<nonce>
+  // Parse custom ID with strict regex to prevent injection.
+  // The nonce is 8 hex chars - short enough for Discord's customId limit,
+  // long enough to be impractical to brute force within button expiry.
   const match = customId.match(/^dbrecover:([a-zA-Z\-]+):([a-zA-Z0-9\-]+):([a-f0-9]{8})$/);
   if (!match) {
     logger.warn({ customId }, "[dbRecovery] Invalid button custom ID format");
@@ -45,7 +50,9 @@ export async function handleDbRecoveryButton(interaction: ButtonInteraction): Pr
     "[dbRecovery] Button interaction received"
   );
 
-  // Defer reply (operations may take time)
+  // Defer immediately - validation and restore ops can take 5-30s depending on
+  // DB size and whether PM2 coordination is involved. Discord kills interactions
+  // after 3s without acknowledgment.
   await interaction.deferReply({ ephemeral: true });
 
   try {
@@ -136,6 +143,9 @@ export async function handleDbRecoveryButton(interaction: ButtonInteraction): Pr
       }
 
       case "restore-confirm": {
+        // CRITICAL PATH: This is the only code path that actually replaces the live DB.
+        // We log at warn level because this is a high-risk operation that warrants attention
+        // in log aggregation dashboards even during normal operation.
         logger.warn(
           { candidateId, userId: user.id, guildId: guild?.id },
           "[dbRecovery] LIVE RESTORE INITIATED"
@@ -145,9 +155,11 @@ export async function handleDbRecoveryButton(interaction: ButtonInteraction): Pr
           content: `⚠️ **LIVE RESTORE IN PROGRESS** ⚠️\n\nRestoring database from \`${candidate.filename}\`...\n\n**DO NOT INTERRUPT THIS PROCESS**\n\nThe bot may become unavailable during this operation.`,
         });
 
+        // pm2Coord: true ensures the bot gracefully stops, performs the restore, then restarts.
+        // Without this, SQLite connections could hold locks and corrupt the restore.
         const result = await restoreCandidate(candidateId, {
           dryRun: false,
-          pm2Coord: true, // Always coordinate with PM2 for confirm restores
+          pm2Coord: true,
           confirm: true,
           actorId: user.id,
           notes: `Live restore by ${user.tag} (${user.id}) at ${new Date().toISOString()}`,
@@ -162,7 +174,9 @@ export async function handleDbRecoveryButton(interaction: ButtonInteraction): Pr
           embeds: [embed],
         });
 
-        // Log action (critical - always log even if guild is null)
+        // Log action to audit trail. The "if (guild)" check is unfortunate - means
+        // DM-initiated restores (if ever supported) won't have audit logs. Consider
+        // storing guild ID in the button's customId for future-proofing.
         if (guild) {
           await logActionPretty(guild, {
             actorId: user.id,

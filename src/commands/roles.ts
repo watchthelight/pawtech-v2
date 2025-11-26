@@ -24,6 +24,9 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { getRoleTiers, type RoleTier, type LevelReward } from "../features/roleAutomation.js";
 
+// Note: No default permission set here because we do manual ManageRoles check in execute().
+// This allows the command to appear for everyone but gate functionality at runtime.
+// Trade-off: Users might see the command but get rejected. Worth it for cleaner permission logic.
 export const data = new SlashCommandBuilder()
   .setName("roles")
   .setDescription("Configure role automation settings")
@@ -118,7 +121,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  // Check ManageRoles permission
+  // Manual permission check instead of setDefaultMemberPermissions because:
+  // 1. We need to handle the case where member.permissions is a string (API permissions)
+  // 2. Guild-level command permissions can be overridden; this is our source of truth
   const member = interaction.member;
   if (!member || typeof member.permissions === "string" || !member.permissions.has("ManageRoles")) {
     await interaction.reply({
@@ -166,6 +171,9 @@ async function handleAddLevelTier(interaction: ChatInputCommandInteraction): Pro
   const role = interaction.options.getRole("role", true);
 
   try {
+    // INSERT OR REPLACE ensures idempotent updates - running the same command twice
+    // doesn't create duplicates. The unique constraint is on (guild_id, tier_type, threshold).
+    // We store role.name for display purposes but role.id is the actual reference.
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO role_tiers (guild_id, tier_type, tier_name, role_id, threshold)
       VALUES (?, 'level', ?, ?, ?)
@@ -267,6 +275,8 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
   const guild = interaction.guild!;
   const filterType = interaction.options.getString("type");
 
+  // Defer because we're making multiple DB queries. Discord gives us 3 seconds
+  // to respond, and these queries could take longer on large configs.
   await interaction.deferReply({ ephemeral: true });
 
   const embed = new EmbedBuilder()
@@ -274,7 +284,8 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
     .setColor(0x5865F2)
     .setTimestamp();
 
-  // Level tiers
+  // Level tiers - these map Amaribot level numbers to the roles our bot should assign.
+  // The <@&roleId> syntax makes Discord render the role mention with proper formatting.
   if (!filterType || filterType === "level") {
     const levelTiers = getRoleTiers(guild.id, "level");
     if (levelTiers.length > 0) {

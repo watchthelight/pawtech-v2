@@ -62,10 +62,13 @@ export async function getPM2Status(processNames: string[]): Promise<PM2ProcessSt
   }
 
   try {
-    // Use pm2 jlist to get JSON output of all processes
+    // Shell out to pm2 rather than using the programmatic API because:
+    // 1. pm2 programmatic API requires connecting to the daemon, which is flaky
+    // 2. jlist output is stable and well-documented
+    // 3. Easier to test/mock shell commands than a daemon connection
     const { stdout, stderr } = await execAsync("pm2 jlist", {
-      timeout: 5000, // 5s timeout
-      maxBuffer: 1024 * 1024, // 1MB buffer
+      timeout: 5000, // 5s should be plenty - if PM2 is slower, something's wrong
+      maxBuffer: 1024 * 1024, // 1MB handles ~500 processes with verbose monit data
     });
 
     if (stderr) {
@@ -76,6 +79,9 @@ export async function getPM2Status(processNames: string[]): Promise<PM2ProcessSt
     const processes: PM2Process[] = JSON.parse(stdout.trim() || "[]");
 
     // Map requested process names to statuses
+    // O(n*m) where n=requested names, m=all PM2 processes. Fine for typical use
+    // (handful of names, tens of processes). If this becomes a bottleneck, build
+    // a Map<name, process> first.
     const statuses: PM2ProcessStatus[] = processNames.map((name) => {
       const proc = processes.find((p) => p.name === name);
 
@@ -88,6 +94,8 @@ export async function getPM2Status(processNames: string[]): Promise<PM2ProcessSt
       }
 
       // Map PM2 status to our simplified status
+      // PM2 has more states (launching, stopping, etc.) but we collapse to 4
+      // since the health dashboard only cares about "is it running or not"
       let status: PM2ProcessStatus["status"] = "unknown";
       const pm2Status = proc.pm2_env.status?.toLowerCase();
       if (pm2Status === "online") status = "online";
@@ -113,7 +121,8 @@ export async function getPM2Status(processNames: string[]): Promise<PM2ProcessSt
     logger.debug({ statuses }, "[pm2] fetched process statuses");
     return statuses;
   } catch (err: any) {
-    // PM2 not installed or not running
+    // Graceful degradation: return unknown status rather than throwing.
+    // Health checks should be resilient to PM2 being unavailable.
     if (err.code === "ENOENT" || err.message?.includes("command not found")) {
       logger.warn("[pm2] pm2 command not found - PM2 may not be installed");
       return processNames.map((name) => ({
@@ -138,6 +147,8 @@ export async function getPM2Status(processNames: string[]): Promise<PM2ProcessSt
  * @returns True if PM2 is installed and accessible
  */
 export async function isPM2Available(): Promise<boolean> {
+  // Quick check that pm2 binary exists and responds. Does NOT verify daemon is
+  // running - that's intentional since pm2 jlist will start it if needed.
   try {
     await execAsync("pm2 --version", { timeout: 2000 });
     return true;

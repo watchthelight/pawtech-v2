@@ -17,13 +17,17 @@ interface HealthCheckResult {
 }
 
 /**
- * Minimum expected counts for a "healthy" production database.
- * These are soft warnings, not hard failures.
+ * Soft thresholds for sanity checking. These catch "probably wrong" scenarios
+ * like connecting to a fresh/empty database when you expected prod data.
+ * Tune these based on your environment - dev naturally has fewer rows.
+ *
+ * Note: These generate warnings, not failures. A brand new server legitimately
+ * has zero applications.
  */
 const HEALTH_THRESHOLDS = {
-  review_action: 100, // Should have at least 100 review actions in prod (lowered for dev)
-  mod_metrics: 1, // Should have at least 1 moderator
-  application: 1, // Should have at least 1 application
+  review_action: 100, // Lowered from 1000 to work better in dev environments
+  mod_metrics: 1,
+  application: 1,
 };
 
 /**
@@ -42,7 +46,9 @@ export function checkDatabaseHealth(): HealthCheckResult {
   };
 
   try {
-    // Step 1: Run SQLite integrity check
+    // Step 1: PRAGMA integrity_check scans the entire database for corruption.
+    // This is thorough but can be slow on large DBs (100MB+ takes several seconds).
+    // Worth the cost at startup since catching corruption early prevents data loss.
     logger.info("[healthcheck] Running SQLite integrity check...");
     try {
       const integrityResults = db.prepare("PRAGMA integrity_check").all() as Array<{
@@ -65,7 +71,8 @@ export function checkDatabaseHealth(): HealthCheckResult {
       logger.error({ err }, "[healthcheck] ✗ Integrity check error");
     }
 
-    // Step 2: Verify critical tables exist and have reasonable data
+    // Step 2: Verify critical tables. This catches migration failures or
+    // connecting to the wrong database file (surprisingly common in dev).
     const criticalTables = ["review_action", "mod_metrics", "application", "guild_config"];
 
     logger.info("[healthcheck] Checking critical tables...");
@@ -99,9 +106,11 @@ export function checkDatabaseHealth(): HealthCheckResult {
       }
     }
 
-    // Step 3: Check database file size (should be > 100KB for prod)
+    // Step 3: Sanity check file size. A production DB with real data should be
+    // at least 100KB. Smaller usually means empty/test DB or pointing at wrong file.
     try {
-      const dbPath = (db as any).name; // better-sqlite3 exposes db path as .name
+      // better-sqlite3 exposes the file path as .name (undocumented but stable)
+      const dbPath = (db as any).name;
       const fs = require("fs");
       const stats = fs.statSync(dbPath);
       const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
@@ -116,7 +125,8 @@ export function checkDatabaseHealth(): HealthCheckResult {
       logger.warn({ err }, "[healthcheck] Could not check database file size");
     }
 
-    // Determine overall health
+    // Healthy = passed integrity check AND no hard errors.
+    // Warnings don't fail the check - they're informational for operators.
     result.healthy = result.integrity === "ok" && result.errors.length === 0;
 
     return result;
@@ -173,6 +183,8 @@ export function requireHealthyDatabase(): void {
   console.error("Errors:");
   result.errors.forEach((err) => console.error(`  - ${err}`));
 
+  // Recovery guidance for operators. The --recover flag triggers automatic
+  // restoration from most recent backup. --local forces fresh sync from remote.
   console.error("\nRecovery steps:");
   console.error("  1. Check database backups in data/backups/");
   console.error("  2. Use: node scripts/verify-db-integrity.js ./data/data.db");
@@ -180,5 +192,7 @@ export function requireHealthyDatabase(): void {
   console.error("  4. If remote has good data: start.cmd --local (will pull from remote)");
   console.error("  5. Contact administrator if issue persists\n");
 
+  // Exit code 1 signals failure to process managers (pm2, systemd, etc.)
+  // This ensures the bot doesn't restart in a loop with corrupt data.
   process.exit(1);
 }

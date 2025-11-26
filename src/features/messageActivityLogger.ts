@@ -27,16 +27,20 @@ import type { Message } from 'discord.js';
  * });
  */
 export function logMessage(message: Message): void {
-  if (!message.guildId) return; // DMs don't count
-  if (message.author.bot) return; // Ignore bots
-  if (message.webhookId) return; // Ignore webhooks
+  // Filter out non-human messages. Bots and webhooks would skew activity metrics
+  // and potentially create feedback loops (bot posts trigger more bot posts).
+  if (!message.guildId) return;
+  if (message.author.bot) return;
+  if (message.webhookId) return;
 
   const guildId = message.guildId;
   const channelId = message.channelId;
   const userId = message.author.id;
   const created_at_s = Math.floor(message.createdTimestamp / 1000);
 
-  // Round to hour bucket for efficient aggregation
+  // Hour buckets enable O(1) aggregation for heatmaps without GROUP BY on raw timestamps.
+  // Storing both precise time and bucket lets us do detailed queries when needed
+  // while keeping heatmap rendering fast.
   const hour_bucket = Math.floor(created_at_s / 3600) * 3600;
 
   try {
@@ -50,7 +54,9 @@ export function logMessage(message: Message): void {
       '[message_activity] message logged'
     );
   } catch (err: any) {
-    // Gracefully handle missing table (pre-migration databases)
+    // Gracefully handle missing table - this happens when running against a
+    // database that predates migration 020. We don't want to crash the bot
+    // just because activity tracking isn't available yet.
     if (err?.message?.includes('no such table: message_activity')) {
       logger.debug(
         { err, guildId },
@@ -58,14 +64,21 @@ export function logMessage(message: Message): void {
       );
       return;
     }
-    // Log other errors but don't throw (activity logging is non-critical)
+    // Swallow errors silently after logging. Activity tracking is nice-to-have,
+    // not critical path. A DB hiccup shouldn't disrupt normal bot operation.
     logger.warn({ err, guildId, channelId, userId }, '[message_activity] failed to log message');
   }
 }
 
 /**
- * WHAT: Prune old message activity data to prevent database bloat
- * WHY: Heatmap only shows last 8 weeks, older data can be purged
+ * Prune old message activity data to prevent unbounded table growth.
+ *
+ * The heatmap only shows 8 weeks, but we keep 90 days by default to allow
+ * for some historical queries and buffer. At ~1000 messages/day for an active
+ * server, 90 days is about 90K rows - manageable for SQLite.
+ *
+ * Call this periodically (e.g., daily via cron job or scheduled task).
+ * It's safe to call frequently - DELETE with no matching rows is cheap.
  *
  * @param guildId - Discord guild ID
  * @param daysToKeep - Number of days of history to keep (default: 90)

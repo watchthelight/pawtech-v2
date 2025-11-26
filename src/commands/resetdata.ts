@@ -36,8 +36,9 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
 
 /**
- * WHAT: Constant-time string comparison to prevent timing attacks.
- * WHY: Password validation must not leak information via timing.
+ * Constant-time string comparison to prevent timing attacks.
+ * Duplicated from purge.ts - consider extracting to a shared util if
+ * more commands need password protection.
  */
 function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) {
@@ -94,13 +95,17 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Check admin role if not using ManageGuild
+  // Two-layer auth: Discord's setDefaultMemberPermissions handles UI visibility,
+  // but we double-check at runtime because permissions can change between
+  // command registration and execution.
   const member = interaction.member as GuildMember | null;
   const adminRoleIds = (process.env.ADMIN_ROLE_ID || "")
     .split(",")
     .map((id) => id.trim())
     .filter(Boolean);
 
+  // The "permissions" can be a string in DMs or uncached scenarios - we need
+  // the full Permissions object to call .has()
   const hasManageGuild =
     member && typeof member.permissions !== "string" && member.permissions.has(PermissionFlagsBits.ManageGuild);
   const hasAdminRole =
@@ -121,30 +126,36 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Set metrics epoch
+  // The epoch is the "start from here" timestamp for all metrics calculations.
+  // Historical data is preserved in logs but metrics queries will filter by this date.
   const epoch = new Date();
 
   await withStep(ctx, "set_epoch", async () => {
     setMetricsEpoch(guildId, epoch);
   });
 
-  // Clear mod metrics cache
+  // Clear in-memory cache - this forces fresh calculations on next request.
+  // Without this, stale aggregated metrics would persist until TTL expires.
   await withStep(ctx, "clear_cache", async () => {
     clearModMetricsCache();
   });
 
-  // Delete cached mod_metrics rows (optional, harmless)
+  // Nuke any pre-computed metrics rows. This is technically optional since
+  // queries respect the epoch, but it keeps the DB clean and avoids confusion
+  // when debugging.
   await withStep(ctx, "clear_db_cache", async () => {
     db.prepare(`DELETE FROM mod_metrics WHERE guild_id = ?`).run(guildId);
   });
 
-  // Log action to audit trail
+  // Log to audit trail. Using "modmail_close" as action type is a hack -
+  // ideally we'd add "metrics_reset" to the ActionType enum, but this works
+  // for now since the meta field clarifies what actually happened.
   await withStep(ctx, "log_action", async () => {
     if (!interaction.guild) return;
 
     await logActionPretty(interaction.guild, {
       actorId: interaction.user.id,
-      action: "modmail_close", // Repurpose for audit (or add metrics_reset to ActionType)
+      action: "modmail_close",
       meta: { action_type: "metrics_reset", epoch: epoch.toISOString() },
     });
   });

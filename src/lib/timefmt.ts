@@ -21,6 +21,9 @@ export function formatAbsolute(
   epochSec: number,
   options?: { locale?: string; timeZone?: string; hour12?: boolean }
 ): string {
+  // Two separate Intl.DateTimeFormat calls because combining date and time
+  // options in a single formatter produces locale-specific ordering we can't
+  // control. This way we always get "DATE at TIME" regardless of locale.
   const { locale = "en-US", timeZone, hour12 = false } = options || {};
   const d = new Date(epochSec * 1000);
   const date = new Intl.DateTimeFormat(locale, {
@@ -44,6 +47,9 @@ export function formatAbsolute(
  * FORMAT: "2025-10-30 06:41 UTC"
  */
 export function formatAbsoluteUtc(epochSec: number): string {
+  // Duplicates logic from time.ts formatUtc - intentional to keep this module
+  // self-contained. If you're tempted to DRY this up, consider that timefmt
+  // is the "one true source" for formatting and time.ts might be deprecated.
   const d = new Date(epochSec * 1000);
   return d
     .toISOString()
@@ -58,6 +64,8 @@ export function formatAbsoluteUtc(epochSec: number): string {
  * DOCS: https://discord.com/developers/docs/reference#message-formatting-timestamp-styles
  */
 export function toDiscordAbs(epochSec: number): string {
+  // :F = "Full" format in user's local timezone. Discord renders this client-side.
+  // Warning: doesn't render in embed footers or author fields - use formatAbsoluteUtc there.
   return `<t:${epochSec}:F>`;
 }
 
@@ -68,6 +76,8 @@ export function toDiscordAbs(epochSec: number): string {
  * DOCS: https://discord.com/developers/docs/reference#message-formatting-timestamp-styles
  */
 export function toDiscordRel(epochSec: number): string {
+  // :R = Relative format ("2 minutes ago"). Updates automatically in Discord client.
+  // Same footer/author caveat as toDiscordAbs - use fmtAgeShort for plain text fallback.
   return `<t:${epochSec}:R>`;
 }
 
@@ -100,7 +110,8 @@ export function toIso(epochSec: number): string {
 export function fmtAgeShort(epochSec: number, now = nowUtc()): string {
   const delta = now - epochSec;
 
-  // Negative delta (future) - show as present
+  // Negative delta = future timestamp. Could be clock skew or a bug.
+  // Return "0m" rather than negative values which would look broken.
   if (delta <= 0) return "0m";
 
   const minute = 60;
@@ -108,7 +119,8 @@ export function fmtAgeShort(epochSec: number, now = nowUtc()): string {
   const day = 24 * hour;
   const week = 7 * day;
 
-  // Weeks (cap at weeks, no months/years)
+  // Weeks - capped here intentionally. Showing "3mo" or "2y" in a tight UI
+  // slot looks weird and isn't useful for review age tracking.
   if (delta >= week) {
     return `${Math.ceil(delta / week)}w`;
   }
@@ -123,6 +135,7 @@ export function fmtAgeShort(epochSec: number, now = nowUtc()): string {
     return `${Math.ceil(delta / hour)}h`;
   }
 
-  // Minutes (always at least 1m for anything > 0s)
+  // Minutes - always rounds up, so 1 second shows as "1m". This is intentional:
+  // sub-minute precision isn't useful for review tracking and "0m" looks like no time.
   return `${Math.ceil(delta / minute)}m`;
 }

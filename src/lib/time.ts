@@ -23,6 +23,8 @@
  * const now = nowUtc(); // e.g., 1729468800
  * db.prepare(`INSERT INTO review_action (created_at, ...) VALUES (?, ...)`).run(now, ...);
  */
+// Floor, not round, because we want "X seconds ago" to never show negative time
+// due to rounding up a sub-second timestamp.
 export const nowUtc = (): number => Math.floor(Date.now() / 1000);
 
 /**
@@ -34,6 +36,8 @@ export const nowUtc = (): number => Math.floor(Date.now() / 1000);
  * @example
  * tsToIso(1729468800) // "2024-10-20T20:00:00.000Z"
  */
+// Multiply by 1000 to convert to ms - Date constructor expects milliseconds.
+// If you accidentally pass ms to this function, you'll get dates in the year 50000+.
 export const tsToIso = (seconds: number): string => new Date(seconds * 1000).toISOString();
 
 /**
@@ -49,6 +53,8 @@ export const tsToIso = (seconds: number): string => new Date(seconds * 1000).toI
 export function formatUtc(tsSec: number): string {
   const d = new Date(tsSec * 1000);
   // ISO-ish but concise: YYYY-MM-DD HH:MM UTC (no seconds, no milliseconds)
+  // Why not Intl.DateTimeFormat? This is faster and we control the exact format.
+  // The regex strips ":SS.mmmZ" and replaces with " UTC".
   return d
     .toISOString()
     .replace("T", " ")
@@ -69,9 +75,13 @@ export function formatUtc(tsSec: number): string {
  * formatRelative(nowUtc())       // "just now"
  */
 export function formatRelative(tsSec: number, nowSec = Math.floor(Date.now() / 1000)): string {
+  // Clamp negative to zero - future timestamps show as "just now" rather than
+  // negative time, which would confuse users. This can happen with clock skew.
   let diff = Math.max(0, nowSec - tsSec);
 
   // Unit conversion factors and labels
+  // Each tuple: [threshold to advance to next unit, label for current unit]
+  // 4.348 weeks/month is the average, not exact, but close enough for display.
   const units: [number, string][] = [
     [60, "s"], // seconds
     [60, "m"], // minutes
@@ -85,7 +95,7 @@ export function formatRelative(tsSec: number, nowSec = Math.floor(Date.now() / 1
   const labels = ["s", "m", "h", "d", "wk", "mo", "y"];
   let i = 0;
 
-  // Find the appropriate unit
+  // Cascade through units until we find one that fits
   for (; i < units.length - 1 && diff >= units[i][0]; i++) {
     diff = diff / units[i][0];
   }

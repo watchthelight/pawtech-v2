@@ -19,13 +19,20 @@ import { logger } from "../lib/logger.js";
 
 /**
  * Syncs slash commands to a specific guild using bulk overwrite.
- * @param guildId The ID of the guild to sync commands to.
- * @returns Promise<void>
+ *
+ * Uses PUT (bulk overwrite) instead of POST (create) or PATCH (update) because:
+ * 1. It's atomic - all commands update in one API call
+ * 2. It handles additions, updates, AND removals automatically
+ * 3. Avoids the "stale command" problem where old commands stick around
+ *
+ * Guild-scoped commands update instantly. Global commands take up to an hour.
  */
 export async function syncCommandsToGuild(guildId: string): Promise<void> {
   try {
     const commands = getAllSlashCommands();
-    const serialized = commands.map((cmd: any) => (cmd.toJSON ? cmd.toJSON() : cmd)); // Ensure serialization
+    // Some commands might be raw objects (from JSON), others are builders.
+    // toJSON() serializes builders; raw objects pass through unchanged.
+    const serialized = commands.map((cmd: any) => (cmd.toJSON ? cmd.toJSON() : cmd));
 
     const rest = new REST({ version: "10" }).setToken(env.DISCORD_TOKEN);
     await rest.put(Routes.applicationGuildCommands(env.CLIENT_ID, guildId), {
@@ -42,13 +49,18 @@ export async function syncCommandsToGuild(guildId: string): Promise<void> {
 
 /**
  * Syncs slash commands to all provided guilds.
- * @param guildIds Array of guild IDs to sync commands to.
- * @returns Promise<void>
+ *
+ * Sequential with delays to avoid rate limits. Discord's rate limit for
+ * guild command updates is ~2 requests/second per route. The 650ms delay
+ * keeps us safely under that.
+ *
+ * For large bot deployments (100+ guilds), consider batching or using
+ * global commands instead.
  */
 export async function syncCommandsToAllGuilds(guildIds: string[]): Promise<void> {
   for (const guildId of guildIds) {
     await syncCommandsToGuild(guildId);
-    // Rate limit protection: wait 650ms between requests
+    // 650ms > 500ms (2/sec limit) gives us headroom for clock skew and jitter
     await new Promise((resolve) => setTimeout(resolve, 650));
   }
 }

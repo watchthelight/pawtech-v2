@@ -22,6 +22,15 @@ import { isOwner } from "../../utils/owner.js";
 import { hasStaffPermissions, getConfig } from "../../lib/config.js";
 import { db } from "../../db/db.js";
 
+/**
+ * Command builder for /review-set-notify-config.
+ *
+ * Two notification modes exist:
+ * - "post": Pings role directly in the new forum thread (lower noise, but mods must visit thread)
+ * - "channel": Posts to a dedicated channel (more visible, good for high-traffic forums)
+ *
+ * Rate limiting is built in because forum spam + role pings = very annoyed moderators.
+ */
 export const data = new SlashCommandBuilder()
   .setName("review-set-notify-config")
   .setDescription("Configure forum post notification settings (admin only)")
@@ -53,6 +62,7 @@ export const data = new SlashCommandBuilder()
       .setDescription("Channel to send notifications (only for mode=channel)")
       .setRequired(false)
   )
+  // Cooldown prevents ping spam when multiple posts arrive in quick succession
   .addIntegerOption((option) =>
     option
       .setName("cooldown")
@@ -61,6 +71,7 @@ export const data = new SlashCommandBuilder()
       .setMinValue(1)
       .setMaxValue(300)
   )
+  // Hourly cap is a safety net against sustained spam or bot attacks
   .addIntegerOption((option) =>
     option
       .setName("max_per_hour")
@@ -85,11 +96,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Authorization check
+  // Same auth logic as getNotifyConfig - ideally this would be extracted to a
+  // shared decorator/wrapper, but the copy-paste is fine for now.
   if (isOwner(userId)) {
-    // Owner always allowed
+    // Bot owner bypass
   } else if (interaction.guild?.ownerId === userId) {
-    // Guild owner allowed
+    // Server owner
   } else {
     const member = interaction.member;
     if (!member || typeof member.permissions === "string") {
@@ -127,7 +139,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     const cooldown = interaction.options.getInteger("cooldown");
     const maxPerHour = interaction.options.getInteger("max_per_hour");
 
-    // Build update config
+    // Build partial update - only include fields that were explicitly provided.
+    // This allows users to update just one setting without touching others.
+    // Using `any` here because the config type is a union of all possible fields.
     const updateConfig: any = {};
 
     if (mode !== null) {
@@ -149,7 +163,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       updateConfig.notify_max_per_hour = maxPerHour;
     }
 
-    // Validation
+    // Validation: channel mode requires a destination channel. Check both the
+    // new value and the existing config to handle partial updates correctly.
     if (mode === "channel" && !channel && !oldConfig.notification_channel_id) {
       await interaction.editReply({
         content: "❌ When using mode=channel, you must specify a notification channel.",
@@ -157,7 +172,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       return;
     }
 
-    // Check if at least one option provided
+    // Require at least one option - prevents accidental no-op commands
     if (Object.keys(updateConfig).length === 0) {
       await interaction.editReply({
         content: "❌ Please provide at least one configuration option to update.",

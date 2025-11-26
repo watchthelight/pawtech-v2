@@ -51,11 +51,15 @@ import { currentTraceId, ensureDeferred, replyOrEdit, withSql } from "../lib/cmd
 import { logActionPretty } from "../logging/pretty.js";
 import { getQuestions as getQuestionsShared } from "./gate/questions.js";
 
+// Discord modal limits - these are API-enforced, not arbitrary.
+// See: https://discord.com/developers/docs/interactions/message-components#text-inputs
 const ANSWER_MAX_LENGTH = 1000;
 const INPUT_MAX_LENGTH = 1000;
-const LABEL_MAX_LENGTH = 45;
+const LABEL_MAX_LENGTH = 45;    // Discord enforces 45 chars max for labels
 const PLACEHOLDER_MAX_LENGTH = 100;
-const BRAND_COLOR = 0x22ccaa;
+const BRAND_COLOR = 0x22ccaa;   // Teal - matches server branding
+// Footer text doubles as a sentinel for identifying our gate messages when searching.
+// Keep both legacy and current values so we can still find old gate entries after updates.
 const GATE_ENTRY_FOOTER = "If you're having issues DM an online moderator.";
 const GATE_ENTRY_FOOTER_MATCHES = new Set([GATE_ENTRY_FOOTER, "GateEntry v1"]);
 
@@ -101,6 +105,11 @@ function getQuestions(guildId: string): GateQuestion[] {
   }));
 }
 
+/**
+ * Discord modals allow max 5 inputs per modal. When we have more than 5 questions,
+ * we need to split them across multiple "pages". Each page becomes its own modal.
+ * pageSize defaults to 5 (the Discord max) but is parameterized for testing.
+ */
 function paginate(questions: GateQuestion[], pageSize = 5): QuestionPage[] {
   if (pageSize <= 0) throw new Error("pageSize must be positive");
   const pages: QuestionPage[] = [];
@@ -151,8 +160,20 @@ function buildModalForPage(
   return modal;
 }
 
+/**
+ * Idempotent draft retrieval - either finds existing draft or creates a new one.
+ * Throws on: permanent rejection, already-submitted application.
+ *
+ * Order of checks matters:
+ * 1. Permanent rejection - user is banned, hard stop
+ * 2. Existing draft - reuse it (don't create duplicates)
+ * 3. Active submission - prevent duplicate applications in review queue
+ * 4. Create new draft
+ *
+ * Edge case: User with 'needs_info' status trying to start fresh. We block this
+ * because 'needs_info' implies staff is waiting for a response on their existing app.
+ */
 function getOrCreateDraft(db: BetterSqliteDatabase, guildId: string, userId: string) {
-  // Check if user is permanently rejected
   const permReject = db
     .prepare(
       `SELECT permanently_rejected FROM application WHERE guild_id = ? AND user_id = ? AND permanently_rejected = 1 LIMIT 1`
@@ -271,6 +292,14 @@ function submitApplication(db: BetterSqliteDatabase, appId: string, ctx?: CmdCtx
   }
 }
 
+/**
+ * Persist avatar scan results. Uses UPSERT so re-scans (e.g., after avatar change)
+ * update rather than duplicate. The application_id uniqueness constraint handles this.
+ *
+ * Evidence arrays are JSON-serialized - they contain label tags from the ML model
+ * (e.g., ["explicit", "nsfw_cartoon"]) and need structured storage for later display.
+ * We null-coalesce empty arrays to NULL to save DB space on clean avatars.
+ */
 function upsertScan(
   applicationId: string,
   data: {
@@ -288,9 +317,6 @@ function upsertScan(
   const evidenceSoft = data.evidence.soft.length ? JSON.stringify(data.evidence.soft) : null;
   const evidenceSafe = data.evidence.safe.length ? JSON.stringify(data.evidence.safe) : null;
 
-  // upsert avatar_scan keyed by application_id (UNIQUE index ux_avatar_scan_application):
-  // ON CONFLICT updates scores + timestamps; synchronous better-sqlite3 call.
-  // sqlite docs: https://sqlite.org/lang_UPSERT.html
   db.prepare(
     `
     INSERT INTO avatar_scan (application_id, avatar_url, nsfw_score, edge_score, final_pct, furry_score, scalie_score, reason, evidence_hard, evidence_soft, evidence_safe, scanned_at, updated_at)
@@ -324,6 +350,18 @@ function upsertScan(
   );
 }
 
+/**
+ * Polls for review card creation. This exists because avatar scan runs async
+ * (via setImmediate) and needs to wait for the review card to exist before
+ * it can refresh it with scan results.
+ *
+ * Why polling instead of event-driven: The review card is created by a different
+ * code path (ensureReviewMessage) that may or may not have finished by the time
+ * the avatar scan completes. Polling is simpler than adding cross-module eventing.
+ *
+ * 5s timeout is generous - review card creation typically takes <500ms. If we
+ * timeout, we still try to refresh (it might exist by then anyway).
+ */
 async function waitForReviewCardMapping(
   appId: string,
   timeoutMs = 5000,
@@ -350,6 +388,18 @@ async function waitForReviewCardMapping(
   return false;
 }
 
+/**
+ * Fire-and-forget avatar scan. Uses setImmediate to yield back to the event loop
+ * immediately so the user gets their "application submitted" confirmation without
+ * waiting for ML inference (which can take 2-5s with cold model load).
+ *
+ * Why not a job queue? For single-instance bots, setImmediate is sufficient.
+ * If we ever scale to multiple instances, this should move to a proper job queue
+ * (BullMQ, etc.) to prevent duplicate scans.
+ *
+ * The scan result updates the review card asynchronously - staff see the avatar
+ * score appear after initial card creation.
+ */
 function queueAvatarScan(params: {
   appId: string;
   user: User;
@@ -358,6 +408,7 @@ function queueAvatarScan(params: {
   parentTraceId?: string | null;
 }) {
   const { appId, user, cfg, client, parentTraceId } = params;
+  // Pre-resolve avatar URL in case user changes avatar before scan runs
   const fallbackAvatarUrl = user.displayAvatarURL({
     extension: "png",
     forceStatic: true,
@@ -468,6 +519,14 @@ function toAnswerMap(responses: Array<{ q_index: number; answer: string }>) {
   return new Map(responses.map((row) => [row.q_index, row.answer] as const));
 }
 
+/**
+ * Build navigation buttons for multi-page forms. Shows Back/Next as appropriate.
+ * The "Retry" button appears only on single-page forms or the last page when
+ * something goes wrong - gives users a way to try again without starting over.
+ *
+ * Button customIds encode the target page (v1:start:p0, v1:start:p1, etc.)
+ * so the button handler knows which modal to show next.
+ */
 function buildNavRow(pageIndex: number, pageCount: number) {
   const buttons: ButtonBuilder[] = [];
   if (pageCount > 1 && pageIndex > 0) {
@@ -603,6 +662,16 @@ function isGateEntryCandidate(message: Message, botId: string | null) {
   return messageHasStartButton(message) && messageHasGateFooter(message);
 }
 
+/**
+ * Find existing gate entry message to edit rather than create duplicates.
+ * Search order: pinned messages first (preferred location), then recent 50 messages.
+ *
+ * Why 50? It's a reasonable balance between finding orphaned gate entries and
+ * API efficiency. If someone unpins the gate message but doesn't delete it,
+ * we'll still find it in recent history.
+ *
+ * Returns null if no gate entry found - caller will create a new one.
+ */
 async function findExistingGateEntry(channel: GuildTextBasedChannel, botId: string | null) {
   const pinned = await channel.messages.fetchPinned().catch(() => null);
   if (pinned) {
@@ -801,6 +870,7 @@ export async function ensureGateEntry(
   }
 
   if (!message) {
+    // Fresh send - this happens on first setup or if the old message was deleted
     const createPayload = buildGateEntryPayload({ guild: channel.guild, config: cfg ?? null });
     const sent = await channel.send(createPayload);
     message = sent;
@@ -866,6 +936,13 @@ export async function ensureGateEntry(
   }
 }
 
+/**
+ * Entry point for gate verification flow. Triggered when user clicks "Verify" button.
+ * This is HOT PATH - runs on every application start, needs to be fast.
+ *
+ * Key constraint: Must show modal within 3 seconds or Discord kills the interaction.
+ * We do minimal validation before showModal, deferring heavy work to modal submit.
+ */
 export async function handleStartButton(interaction: ButtonInteraction) {
   try {
     if (!interaction.inGuild() || !interaction.guildId) {

@@ -736,3 +736,78 @@ export function ensureActionLogFreeText() {
     throw err;
   }
 }
+
+/**
+ * ensureActionLogAnalyticsIndex
+ * WHAT: Creates composite index for modstats queries filtering by guild + action + time.
+ * WHY: /modstats queries filter by action IN (...) - without this index, full table scan occurs.
+ * DOCS:
+ *  - CREATE INDEX: https://sqlite.org/lang_createindex.html
+ */
+export function ensureActionLogAnalyticsIndex() {
+  try {
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='action_log'`)
+      .get();
+
+    if (!tableExists) {
+      logger.warn("[ensure] action_log table does not exist, skipping analytics index");
+      return;
+    }
+
+    // Composite index for queries like:
+    // SELECT ... FROM action_log WHERE guild_id = ? AND action IN (...) AND created_at_s >= ?
+    db.prepare(
+      `CREATE INDEX IF NOT EXISTS idx_action_log_guild_action_created
+       ON action_log(guild_id, action, created_at_s)`
+    ).run();
+
+    logger.info("[ensure] action_log analytics index ensured");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure action_log analytics index");
+    throw err;
+  }
+}
+
+/**
+ * ensurePanicModeColumn
+ * WHAT: Adds panic_mode and panic_enabled_at columns to guild_config table.
+ * WHY: Persists panic mode state across bot restarts (was in-memory only before).
+ * DOCS:
+ *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
+ */
+export function ensurePanicModeColumn() {
+  try {
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
+      .get();
+
+    if (!tableExists) {
+      logger.warn("[ensure] guild_config table does not exist, skipping panic_mode column");
+      return;
+    }
+
+    if (!hasColumn("guild_config", "panic_mode")) {
+      logger.info("[ensure] adding panic_mode column to guild_config");
+      // INTEGER 0/1 for boolean; default 0 (panic mode off)
+      db.exec(`ALTER TABLE guild_config ADD COLUMN panic_mode INTEGER NOT NULL DEFAULT 0`);
+    }
+
+    if (!hasColumn("guild_config", "panic_enabled_at")) {
+      logger.info("[ensure] adding panic_enabled_at column to guild_config");
+      // Unix timestamp when panic mode was enabled; nullable
+      db.exec(`ALTER TABLE guild_config ADD COLUMN panic_enabled_at INTEGER`);
+    }
+
+    if (!hasColumn("guild_config", "panic_enabled_by")) {
+      logger.info("[ensure] adding panic_enabled_by column to guild_config");
+      // User ID who enabled panic mode; nullable
+      db.exec(`ALTER TABLE guild_config ADD COLUMN panic_enabled_by TEXT`);
+    }
+
+    logger.info("[ensure] guild_config panic_mode columns ensured");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure panic_mode column");
+    throw err;
+  }
+}

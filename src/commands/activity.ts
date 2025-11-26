@@ -19,6 +19,9 @@ import { withStep, type CommandContext } from '../lib/cmdWrap.js';
 import { fetchActivityData, generateHeatmap } from '../lib/activityHeatmap.js';
 import { requireStaff } from '../lib/config.js';
 
+// Discord enforces min/max on their side, but we still default to 1 if not provided.
+// The 8-week cap exists because image generation time grows linearly and Discord
+// has a 3-second window before interactions expire (we defer, but still).
 export const data = new SlashCommandBuilder()
   .setName('activity')
   .setDescription('View server activity heatmap with trends analysis')
@@ -55,7 +58,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   // Get weeks parameter (default: 1)
   const weeks = interaction.options.getInteger('weeks', false) || 1;
 
-  // Defer reply since image generation takes time
+  // Defer immediately - heatmap generation can take 2-10 seconds depending on data volume.
+  // Discord kills unacknowledged interactions after 3 seconds. ephemeral: false so
+  // the whole team can see the heatmap without someone re-running the command.
   await interaction.deferReply({ ephemeral: false });
 
   try {
@@ -78,7 +83,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       const totalMessages = data.trends.totalMessages;
       const weekText = weeks === 1 ? '7 days' : `${weeks} weeks`;
 
-      // Build embed with trends analysis
+      // The attachment:// protocol is Discord's way of referencing files in the same message.
+      // This only works if the file is attached in the same API call - you can't reference
+      // attachments from previous messages or other channels.
       const embed = new EmbedBuilder()
         .setTitle('Server Activity Report')
         .setDescription(`Activity heatmap for the past ${weekText} (UTC)`)
@@ -86,11 +93,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         .setColor(0x2ecc71)
         .setTimestamp();
 
-      // Add trends as embed fields
+      // Discord renders inline fields in rows of 3. The \u200b (zero-width space) fields
+      // act as invisible spacers to force proper column alignment. Without them, fields
+      // wrap unpredictably on mobile vs desktop.
       embed.addFields(
         { name: 'Total Messages', value: totalMessages.toLocaleString(), inline: true },
         { name: 'Avg Messages per Hour', value: data.trends.avgMessagesPerHour.toFixed(1), inline: true },
-        { name: '\u200b', value: '\u200b', inline: true }, // Spacer for 3-column layout
+        { name: '\u200b', value: '\u200b', inline: true },
         { name: 'Busiest Hours', value: data.trends.busiestHours, inline: true },
         { name: 'Least Active Hours', value: data.trends.leastActiveHours, inline: true },
         { name: '\u200b', value: '\u200b', inline: true },

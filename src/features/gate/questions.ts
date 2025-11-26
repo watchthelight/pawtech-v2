@@ -14,6 +14,10 @@ import { withSql, type SqlTrackingCtx } from "../../lib/cmdWrap.js";
 
 export type QuestionRow = { q_index: number; prompt: string; required: 0 | 1 };
 
+// Default questions seeded for new guilds. These are intentionally simple
+// to verify the applicant is human, 18+, and has read the rules.
+// Question 4 (password) is the "read the rules" check - must match whatever
+// is in the server's rules channel.
 export const DEFAULT_QUESTIONS: ReadonlyArray<QuestionRow> = [
   { q_index: 0, prompt: "What is your age?", required: 1 },
   { q_index: 1, prompt: "How did you find this server?", required: 1 },
@@ -44,6 +48,11 @@ export function getQuestionCount(guildId: string) {
   return row?.n ?? 0;
 }
 
+/**
+ * Create or update a question. The 0-4 index limit is enforced because Discord
+ * modals only support 5 text inputs max, and we map questions 1:1 to modal inputs.
+ * Changing this would require multi-page modal logic changes in gate.ts.
+ */
 export function upsertQuestion(
   guildId: string,
   qIndex: number,
@@ -51,7 +60,6 @@ export function upsertQuestion(
   required: 0 | 1,
   ctx?: SqlTrackingCtx
 ): void {
-  // Validate q_index is in range 0-4
   if (qIndex < 0 || qIndex > 4) {
     throw new Error(`Question index must be between 0 and 4, got ${qIndex}`);
   }
@@ -73,6 +81,14 @@ export function upsertQuestion(
   }
 }
 
+/**
+ * Idempotent seeding - only inserts if guild has zero questions.
+ * Wrapped in a transaction so we don't end up with partial question sets
+ * if something fails mid-insert (e.g., disk full, connection drop).
+ *
+ * Returns { inserted, total } so callers know if seeding actually happened.
+ * Common pattern: call on bot join or /setup command.
+ */
 export function seedDefaultQuestionsIfEmpty(
   guildId: string,
   ctx?: SqlTrackingCtx

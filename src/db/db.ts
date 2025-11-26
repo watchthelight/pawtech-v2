@@ -239,6 +239,17 @@ addColumnIfMissing("modmail_ticket", "thread_channel_id", "TEXT");
 addColumnIfMissing("modmail_ticket", "log_channel_id", "TEXT");
 addColumnIfMissing("modmail_ticket", "log_message_id", "TEXT");
 
+// Analytics index: optimize /modstats queries that filter by guild + action + time
+// Query pattern: WHERE guild_id = ? AND action IN (...) AND created_at_s >= ?
+try {
+  db.prepare(
+    `CREATE INDEX IF NOT EXISTS idx_action_log_guild_action_created
+     ON action_log(guild_id, action, created_at_s)`
+  ).run();
+} catch {
+  // Table may not exist yet if action_log schema hasn't been created
+}
+
 async function closeDatabase() {
   // Philosophy: never crash on shutdown; prefer logs over throws here.
   logger.info("Closing database connection...");

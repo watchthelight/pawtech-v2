@@ -1,4 +1,15 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
+
+// This file aggregates all slash command definitions for bulk registration with Discord.
+// The buildCommands() function returns JSON payloads that get PUT to Discord's API.
+//
+// GOTCHA: Discord caches slash commands aggressively. After adding/removing commands here,
+// you need to re-register them. Global commands can take up to 1 hour to propagate.
+// Guild commands update instantly - prefer guild-scoped commands during development.
+//
+// Each import pulls in a SlashCommandBuilder instance. We call .toJSON() to serialize
+// them into the format Discord's REST API expects.
+
 import { data as gateData, acceptData, rejectData, kickData, unclaimData } from "./gate.js";
 import { data as healthData } from "./health.js";
 import { data as updateData } from "./update.js";
@@ -26,17 +37,25 @@ import { data as movieData } from "./movie.js";
 import { data as rolesData } from "./roles.js";
 import { data as panicData } from "./panic.js";
 
+// Returns an array of command JSON objects for Discord's bulk command registration.
+// Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
+// If you hit that limit, consider using subcommands to consolidate related commands.
 export function buildCommands() {
   return [
+    // Gate workflow commands - these are the core moderation actions
     gateData.toJSON(),
     acceptData.toJSON(),
     rejectData.toJSON(),
     kickData.toJSON(),
     unclaimData.toJSON(),
+
+    // System/admin commands
     healthData.toJSON(),
     updateData.toJSON(),
     configData.toJSON(),
     databaseData.toJSON(),
+
+    // Feature commands
     modmailCommand.toJSON(),
     analyticsData.toJSON(),
     analyticsExportData.toJSON(),
@@ -59,7 +78,9 @@ export function buildCommands() {
     movieData.toJSON(),
     rolesData.toJSON(),
     panicData.toJSON(),
-    // Note: Context menu commands would be registered separately via a different API endpoint
+
+    // Context menu commands use a different registration endpoint (ApplicationCommandType.User/Message)
+    // and aren't included here. See Discord docs on context menus if you need to add them.
     // modmailContextMenu.toJSON(),
   ];
 }

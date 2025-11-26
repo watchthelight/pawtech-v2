@@ -31,13 +31,18 @@ import path from "node:path";
 let sentryEnabled = false;
 
 function hasValidDsn(dsn: string | undefined): dsn is string {
+  // Sentry DSN format: https://{key}@{org}.ingest.sentry.io/{project}
+  // We validate structure rather than content because:
+  // 1. Avoids making network requests to validate
+  // 2. Catches typos/misconfigurations early
+  // 3. The 403 handler below catches invalid keys at runtime
   if (!dsn) return false;
   try {
     const parsed = new URL(dsn);
     return (
       (parsed.protocol === "https:" || parsed.protocol === "http:") &&
-      parsed.username.length > 0 &&
-      parsed.pathname.length > 1
+      parsed.username.length > 0 && // This is the Sentry key
+      parsed.pathname.length > 1 // Project ID in path
     );
   } catch {
     return false;
@@ -78,7 +83,9 @@ export function initializeSentry() {
       environment: env.SENTRY_ENVIRONMENT || env.NODE_ENV,
       release: `pawtropolis-tech@${getVersion()}`,
 
-      // Performance monitoring
+      // Performance monitoring - using same rate for traces and profiles means
+      // every traced transaction also gets profiled. Tune these independently
+      // if profiling overhead becomes noticeable or you need different sampling.
       tracesSampleRate: env.SENTRY_TRACES_SAMPLE_RATE,
       profilesSampleRate: env.SENTRY_TRACES_SAMPLE_RATE,
 
@@ -109,9 +116,11 @@ export function initializeSentry() {
         }),
       ],
 
-      // Filter out sensitive data
+      // Filter out sensitive data before it leaves the server
       beforeSend(event) {
-        // Remove token from any error messages or data
+        // Discord bot token regex: {bot_id}.{timestamp}.{hmac}
+        // This pattern matches the standard Discord token format.
+        // Critical: tokens in error messages would be a security nightmare.
         if (event.message) {
           event.message = event.message.replace(
             /[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}/g,
@@ -129,7 +138,9 @@ export function initializeSentry() {
         return event;
       },
 
-      // Ignore certain errors
+      // Ignore transient network errors that aren't actionable.
+      // Discord API errors are logged separately with more context.
+      // These would just create noise in Sentry without helping debug anything.
       ignoreErrors: ["DiscordAPIError", "AbortError", "ECONNRESET", "ETIMEDOUT", "ENOTFOUND"],
 
       // Better debugging in development
@@ -139,6 +150,8 @@ export function initializeSentry() {
     sentryEnabled = true;
     logger.info({ environment: env.SENTRY_ENVIRONMENT || env.NODE_ENV }, "Sentry initialized");
 
+    // Runtime DSN validation: if Sentry rejects our events with 403, disable
+    // further capture. This handles stale/revoked DSNs gracefully.
     const client = Sentry.getClient();
     client?.on?.("afterSendEvent", (_event, response) => {
       const statusCode =
@@ -146,10 +159,11 @@ export function initializeSentry() {
           ? (response as { statusCode?: number } | undefined)?.statusCode
           : undefined;
       if (statusCode === 403) {
-        // 403 here usually means DSN invalid/unauthorized — silence capture and fall back to local logs only.
-        // Sentry config options: https://docs.sentry.io/platforms/javascript/guides/node/configuration/options/
+        // 403 = unauthorized. Don't spam Sentry with requests they'll reject.
         logger.warn({ statusCode }, "Sentry unauthorized (403); disabling capture");
         sentryEnabled = false;
+        // Close with timeout=0 to avoid blocking. Swallow rejection since we're
+        // already in error recovery mode.
         const closeResult = client.close?.(0);
         if (closeResult && typeof (closeResult as PromiseLike<unknown>).then === "function") {
           (closeResult as PromiseLike<unknown>).then(undefined, () => undefined);
@@ -259,16 +273,18 @@ export async function flushSentry(timeout = 2000): Promise<boolean> {
  * USAGE: await inSpan("operation.name", async () => { ... })
  */
 export async function inSpan<T>(name: string, fn: () => Promise<T> | T): Promise<T> {
+  // Defensive wrapper: telemetry failures should never break user-facing features.
+  // If Sentry is misconfigured or unavailable, just run the function normally.
   if (!sentryEnabled || !Sentry.startSpan) {
-    // Sentry not available or tracing disabled - run function directly
     return Promise.resolve(fn());
   }
 
   try {
-    // Use Sentry v8+ startSpan API
+    // Sentry v8+ startSpan API handles span lifecycle automatically
     return await Sentry.startSpan({ name }, fn);
   } catch (err) {
-    // Span creation failed - log and run function anyway
+    // Span creation failed - this shouldn't happen, but if it does, log once
+    // at debug level (not error) to avoid log spam, then continue.
     logger.debug({ err, spanName: name }, "Sentry span failed, continuing without tracing");
     return Promise.resolve(fn());
   }

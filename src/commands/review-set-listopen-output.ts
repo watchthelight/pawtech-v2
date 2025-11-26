@@ -19,6 +19,13 @@ import type { CommandContext } from "../lib/cmdWrap.js";
 import { hasManageGuild } from "../lib/config.js";
 import { isOwner } from "../utils/owner.js";
 
+/**
+ * Command registration for /review-set-listopen-output.
+ *
+ * Visibility control is important for mod workflow - some servers want the
+ * "here's what I'm reviewing" list public for accountability, others want it
+ * ephemeral to reduce channel noise.
+ */
 export const data = new SlashCommandBuilder()
   .setName("review-set-listopen-output")
   .setDescription("Set whether /listopen outputs are public or ephemeral (admin-only)")
@@ -29,8 +36,10 @@ export const data = new SlashCommandBuilder()
       .setRequired(true)
       .addChoices({ name: "public", value: "public" }, { name: "ephemeral", value: "ephemeral" })
   )
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild) // Admin-only via Discord permissions
-  .setDMPermission(false); // Guild-only command
+  // setDefaultMemberPermissions controls who sees the command in Discord's UI.
+  // We still verify at runtime because permissions can be stale.
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  .setDMPermission(false);
 
 /**
  * WHAT: Main command executor for /review-set-listopen-output.
@@ -49,9 +58,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   const guildId = interaction.guildId;
+  // Type guard: interaction.member can be APIInteractionGuildMember (string permissions)
+  // or GuildMember (proper Permission object). We need the latter for permission checks.
   const member = (interaction.member && "permissions" in interaction.member ? interaction.member : null) as GuildMember | null;
 
-  // Runtime permission check: ManageGuild permission OR owner override
+  // Owner bypass is useful for debugging and emergency fixes without
+  // needing to grant yourself server permissions.
   const hasManageGuildPerm = hasManageGuild(member);
   const isOwnerUser = isOwner(interaction.user.id);
 
@@ -69,11 +81,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   const mode = interaction.options.getString("mode", true);
+  // SQLite doesn't have booleans, so we store 1/0. Public (1) is the default
+  // because transparency tends to be the safer default for mod actions.
   const newValue = mode === "public" ? 1 : 0;
 
-  // Get old value for logging
+  // Capture old value for before/after logging - helpful for audit trails
   const oldConfig = getConfig(guildId);
-  const oldValue = oldConfig?.listopen_public_output ?? 1; // Default is public
+  const oldValue = oldConfig?.listopen_public_output ?? 1;
 
   try {
     // Update config

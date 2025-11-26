@@ -21,8 +21,17 @@ import { isPanicMode } from "./panicStore.js";
 import { logActionPretty } from "../logging/pretty.js";
 
 /**
- * Handle when a user receives a level role from Amaribot
- * This is triggered by guildMemberUpdate when new roles are detected
+ * Handle when a user receives a level role from Amaribot.
+ *
+ * This is event-driven: guildMemberUpdate fires when Amaribot assigns a level role,
+ * we detect the new role and grant any configured rewards (tickets, tokens, etc).
+ *
+ * Why separate from Amaribot? We can't modify Amaribot's behavior, but we can react
+ * to its role assignments. This decoupling also means our reward logic survives
+ * Amaribot outages or config changes.
+ *
+ * Edge case: If user is assigned multiple level roles simultaneously (rare, but
+ * possible if roles are bulk-assigned), each triggers a separate call here.
  */
 export async function handleLevelRoleAdded(
   guild: Guild,
@@ -31,7 +40,9 @@ export async function handleLevelRoleAdded(
 ): Promise<RoleAssignmentResult[]> {
   const results: RoleAssignmentResult[] = [];
 
-  // Check panic mode - emergency shutoff
+  // Panic mode is the emergency brake - if something goes wrong with role
+  // automation (wrong roles, infinite loops, etc), admins can /panic to halt
+  // all automated role changes immediately.
   if (isPanicMode(guild.id)) {
     logger.warn({
       evt: "level_reward_blocked_panic",
@@ -48,13 +59,17 @@ export async function handleLevelRoleAdded(
       action: "role_grant_blocked",
       reason: "Panic mode active",
       meta: { roleId: levelRoleId },
-    }).catch(() => {}); // Don't fail if logging fails
+    }).catch((err) => {
+      logger.warn({ err, guildId: guild.id, userId: member.id, action: "role_grant_blocked" },
+        "[levelRewards] Failed to log action - audit trail incomplete");
+    });
 
     return results;
   }
 
   try {
-    // Get the level tier for this role
+    // Look up role in our tier config. Most roles won't be level tiers -
+    // we get called for ALL role changes, so null here is the common case.
     const tier = getRoleTierByRoleId(guild.id, levelRoleId);
     if (!tier) {
       logger.debug({
@@ -66,6 +81,8 @@ export async function handleLevelRoleAdded(
       return results;
     }
 
+    // Safety check: tier_type can be 'level', 'boost', 'custom', etc.
+    // We only handle level tiers here. Other types have their own handlers.
     if (tier.tier_type !== "level") {
       logger.warn({
         evt: "unexpected_tier_type",
@@ -106,10 +123,13 @@ export async function handleLevelRoleAdded(
       rewardCount: rewards.length,
     }, `Granting ${rewards.length} rewards for level ${level}`);
 
-    // Get bot ID for logging
+    // Bot ID for audit trail - "system" fallback should never happen in practice
+    // but makes logs parseable if guild.client.user is somehow null
     const botId = guild.client.user?.id ?? "system";
 
-    // Grant each reward
+    // Grant rewards sequentially, not in parallel.
+    // Why? Discord rate limits role changes per guild. Parallel requests
+    // can hit 429s and cause partial failures that are hard to recover from.
     for (const reward of rewards) {
       const result = await assignRole(
         guild,
@@ -142,8 +162,13 @@ export async function handleLevelRoleAdded(
             rewardRoleName: reward.role_name,
             rewardRoleId: reward.role_id,
           },
-        }).catch(() => {});
+        }).catch((err) => {
+          logger.warn({ err, guildId: guild.id, userId: member.id },
+            "[levelRewards] Failed to log action - audit trail incomplete");
+        });
       } else if (result.action === "skipped") {
+        // "skipped" usually means user already has the role. This is normal
+        // for users who re-join or when Amaribot re-syncs levels after downtime.
         logger.info({
           evt: "reward_skipped",
           guildId: guild.id,
@@ -166,7 +191,10 @@ export async function handleLevelRoleAdded(
             rewardRoleName: reward.role_name,
             rewardRoleId: reward.role_id,
           },
-        }).catch(() => {});
+        }).catch((err) => {
+          logger.warn({ err, guildId: guild.id, userId: member.id },
+            "[levelRewards] Failed to log action - audit trail incomplete");
+        });
       } else if (!result.success) {
         logger.error({
           evt: "reward_error",
@@ -190,7 +218,10 @@ export async function handleLevelRoleAdded(
             rewardRoleName: reward.role_name,
             rewardRoleId: reward.role_id,
           },
-        }).catch(() => {});
+        }).catch((err) => {
+          logger.warn({ err, guildId: guild.id, userId: member.id },
+            "[levelRewards] Failed to log action - audit trail incomplete");
+        });
       }
     }
 

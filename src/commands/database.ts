@@ -43,6 +43,13 @@ interface BackupInfo {
   files: Array<{ name: string; size: number; date: Date }>;
 }
 
+/**
+ * Scans a directory for .db backup files and collects metadata.
+ * Used for both local and remote backup analysis in the health report.
+ *
+ * The function is intentionally synchronous because it's reading local fs
+ * and we want the whole health check to be a single atomic snapshot.
+ */
 function analyzeBackups(backupDir: string): BackupInfo {
   const result: BackupInfo = {
     count: 0,
@@ -56,6 +63,7 @@ function analyzeBackups(backupDir: string): BackupInfo {
     return result;
   }
 
+  // Only count .db files. WAL/SHM files are SQLite internals, not backups.
   const files = fs.readdirSync(backupDir).filter((f) => f.endsWith(".db"));
 
   for (const file of files) {
@@ -102,8 +110,15 @@ function calculateBackupFrequency(backups: BackupInfo): string {
   }
 }
 
+/**
+ * Detects if we're running on the production server vs a dev machine.
+ * This matters because we skip SSH-to-remote checks when already on remote
+ * (no point SSH'ing to yourself, and it would probably fail anyway).
+ *
+ * The heuristics are fragile - they assume the prod server is Ubuntu on AWS.
+ * If the deployment changes, update these checks.
+ */
 function isRunningOnRemote(): boolean {
-  // Heuristic: if hostname includes ubuntu or if we're in the remote path
   const hostname = os.hostname().toLowerCase();
   const cwd = process.cwd();
 
@@ -203,7 +218,12 @@ async function executeCheck(ctx: CommandContext<ChatInputCommandInteraction>) {
       throw new Error("Running on remote");
     }
 
-    // Try to run health check on remote with more robust SSH options
+    // SSH options explained:
+    // - ConnectTimeout=10: Don't hang forever if server is unreachable
+    // - ServerAliveInterval=5: Detect dead connections faster
+    // - StrictHostKeyChecking=no: Don't fail on first connect (risky in prod, fine here)
+    // - BatchMode=yes: Never prompt for password (fail instead)
+    // The inner timeout is a belt-and-suspenders with execAsync timeout.
     const remoteCmd = `ssh -o ConnectTimeout=10 -o ServerAliveInterval=5 -o StrictHostKeyChecking=no -o BatchMode=yes ${remoteAlias} "bash -c 'cd ${remotePath} && timeout 10 node scripts/verify-db-integrity.js data/data.db --verbose 2>&1'"`;
 
     const { stdout, stderr } = await execAsync(remoteCmd, { timeout: 20000 });
@@ -445,21 +465,30 @@ async function executeCheck(ctx: CommandContext<ChatInputCommandInteraction>) {
   );
 }
 
+/**
+ * Database recovery is a dangerous operation - it replaces the live database with a backup.
+ * We require a password (RESET_PASSWORD env var) as an extra gate beyond Discord permissions.
+ * This prevents accidental recovery and provides an audit trail.
+ *
+ * The password is passed as a command option rather than DM because we want
+ * the whole flow to happen in Discord where it's visible to other staff.
+ */
 async function executeRecover(ctx: CommandContext<ChatInputCommandInteraction>) {
   const { interaction } = ctx;
 
-  // Password validation (like /gate reset)
   ctx.step("validate_password");
   const password = interaction.options.getString("password", true).trim();
 
   if (!env.RESET_PASSWORD) {
     await interaction.reply({
-      content: "❌ RESET_PASSWORD not configured in environment.",
+      content: "RESET_PASSWORD not configured in environment.",
       ephemeral: true,
     });
     return;
   }
 
+  // Use constant-time comparison to prevent timing attacks. Probably overkill
+  // for a Discord bot, but it's the right habit.
   if (!secureCompare(password, env.RESET_PASSWORD)) {
     logger.warn(
       {
@@ -470,7 +499,7 @@ async function executeRecover(ctx: CommandContext<ChatInputCommandInteraction>) 
       "[database] Recovery denied: invalid password"
     );
     await interaction.reply({
-      content: "❌ Password incorrect.",
+      content: "Password incorrect.",
       ephemeral: true,
     });
     return;
@@ -486,7 +515,8 @@ async function executeRecover(ctx: CommandContext<ChatInputCommandInteraction>) 
     "[database] Recovery authorized"
   );
 
-  // Defer reply as ephemeral (sensitive paths/operations)
+  // Ephemeral because the response contains file paths and system info
+  // that shouldn't be visible to the whole server.
   if (!interaction.deferred && !interaction.replied) {
     await interaction.deferReply({ ephemeral: true });
   }
@@ -502,7 +532,10 @@ async function executeRecover(ctx: CommandContext<ChatInputCommandInteraction>) 
     // Build embed with candidate list
     const embed = buildCandidateListEmbed(candidates, interaction.guild?.name);
 
-    // Build action rows (one per candidate, up to 5 rows = 5 candidates)
+    // Discord limits messages to 5 action rows. Each candidate gets its own row
+    // with Validate/Restore buttons. The nonce is a CSRF-ish token that ensures
+    // button clicks came from this specific invocation (prevents replay attacks
+    // if someone saves button customIds and tries to use them later).
     const actionRows = candidates.slice(0, 5).map((c) => {
       const nonce = randomBytes(4).toString("hex");
       return buildCandidateActionRow(c.id, nonce);

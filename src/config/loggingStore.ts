@@ -40,7 +40,7 @@ export function getLoggingChannelId(guildId: string): string | null {
   } catch (err) {
     // Gracefully handle missing table/column (pre-migration databases)
     // This prevents crashes during startup before ensureActionLogSchema runs
-    logger.debug({ err, guildId }, "[config] Failed to query guild_config, falling back to env");
+    logger.warn({ err, guildId }, "[config] Failed to query guild_config, falling back to env");
   }
 
   // Fallback to env variable (applies to all guilds without override)

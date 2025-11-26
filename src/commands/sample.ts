@@ -1,5 +1,9 @@
 /**
  * /sample command - Preview review cards and other UI components
+ *
+ * This exists so mods can see what review cards look like without needing
+ * a real application. Useful for training new reviewers or debugging UI issues.
+ * All buttons are intentionally non-functional to prevent accidental actions.
  */
 
 import {
@@ -72,8 +76,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 }
 
 async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
-  // Use same permission gating as other commands
-  // Checks: OWNER_IDS, mod_role_ids from config, ManageGuild, or reviewer role/channel perms
+  // Multi-layered permission check. We cast to GuildMember because the interaction.member
+  // type is APIInteractionGuildMember | GuildMember, and we need the roles property.
+  // The "roles" in check guards against API members which don't have the full object.
   const member = (interaction.member && "roles" in interaction.member ? interaction.member : null) as GuildMember | null;
   const hasPermission =
     canRunAllCommands(member, interaction.guildId!) ||
@@ -101,9 +106,10 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
     answers = SAMPLE_ANSWERS_LONG;
   }
 
-  // Build the sample application
+  // Build the sample application. The ID format matches real applications but with
+  // SAMPLE01 prefix so it's obvious this isn't real data if it ends up in logs.
   const sampleApp: ReviewCardApplication = {
-    id: "SAMPLE01" + ulid().slice(-6), // SAMPLE01 + random suffix
+    id: "SAMPLE01" + ulid().slice(-6),
     guild_id: interaction.guildId!,
     user_id: applicantOverride?.id ?? "123456789012345678",
     status: status === "pending" ? "submitted" : status,
@@ -117,15 +123,16 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
     avatarUrl: applicantOverride?.displayAvatarURL() ?? "https://cdn.discordapp.com/embed/avatars/0.png",
   };
 
-  // Build claim data
+  // Build claim data. We always show a claimed state because that's the more
+  // interesting UI to preview (shows the reviewer name, claim duration, etc.)
   const sampleClaim: ReviewClaimRow | null = claimedByOverride
     ? {
         reviewer_id: claimedByOverride.id,
-        claimed_at: Math.floor(Date.now() / 1000) - 60, // 1m ago
+        claimed_at: Math.floor(Date.now() / 1000) - 60,
       }
     : {
         reviewer_id: interaction.user.id,
-        claimed_at: Math.floor(Date.now() / 1000) - 60, // 1m ago
+        claimed_at: Math.floor(Date.now() / 1000) - 60,
       };
 
   // Build avatar scan data
@@ -141,7 +148,8 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
     },
   };
 
-  // Account created: 5 years 7 months ago
+  // Account age affects the "account age" indicator on the review card.
+  // 5+ years is considered a "safe" age, so this shows the green indicator.
   const accountCreatedAt = Date.now() - (5 * 365 + 7 * 30) * 24 * 60 * 60 * 1000;
 
   // Build history with actual user IDs
@@ -183,7 +191,8 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
   // Build action rows
   const components = buildActionRows(sampleApp, sampleClaim);
 
-  // Reply with the sample
+  // Ephemeral so it doesn't clutter the channel. The warning about non-functional
+  // buttons is important - we've had mods try to click them expecting real actions.
   await interaction.reply({
     content: "**Sample Review Card** (buttons are non-functional for preview only)",
     embeds: [embed],

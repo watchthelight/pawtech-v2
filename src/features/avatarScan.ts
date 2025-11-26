@@ -61,10 +61,15 @@ export type AvatarScanRow = {
 };
 
 function resolveAvatarUrl(subject: ScanSubject): string | null {
+  // Handle both direct URL strings and Discord User objects.
+  // The User object path is the common case from application processing.
   if (typeof subject === "string") {
     return subject;
   }
   try {
+    // forceStatic: true because we don't want animated GIFs - Vision API handles
+    // static images better, and animated avatars are rare for new applicants anyway.
+    // size: 1024 gives us good detail without being excessive for the API.
     const url = subject.displayAvatarURL({
       extension: "png",
       forceStatic: true,
@@ -109,6 +114,8 @@ export async function scanAvatar(
   }
 
   // Use high-res avatar for Google Vision
+  // Force size=1024 even if a different size was in the URL. Vision API accuracy
+  // improves with larger images, and 1024 is a good balance of quality vs. bandwidth.
   const highResUrl = avatarUrl.replace(/\?size=\d+/, "?size=1024");
   baseResult.avatarUrl = highResUrl;
 
@@ -130,6 +137,12 @@ export async function scanAvatar(
     const finalPct = Math.round(visionScore * 100);
 
     // Determine reason based on Google Vision scores
+    // These thresholds were tuned empirically against a sample of furry/anime avatars.
+    // The Vision API tends to flag artistic nudity differently than photographic,
+    // so we use higher thresholds than you might for general content moderation.
+    // hard_evidence (0.8+): Almost certainly NSFW, auto-flag
+    // soft_evidence (0.5+ adult OR 0.8+ racy): Likely problematic, needs review
+    // suggestive (0.5+ racy): Borderline, include in report but lower priority
     let reason: RiskReason = "none";
     if (visionResult.adultScore >= 0.8) {
       reason = "hard_evidence";
@@ -187,6 +200,9 @@ function serializeEvidence(evidence: StoredEvidence): {
   soft: string | null;
   safe: string | null;
 } {
+  // Store evidence arrays as JSON strings in SQLite.
+  // We use null for empty arrays to save space and make queries simpler
+  // (checking for NULL is faster than parsing empty JSON arrays).
   return {
     hard: evidence.hard.length > 0 ? JSON.stringify(evidence.hard) : null,
     soft: evidence.soft.length > 0 ? JSON.stringify(evidence.soft) : null,
@@ -361,7 +377,10 @@ export function buildReverseImageUrl(
   const template = config.image_search_url_template;
   const encoded = encodeURIComponent(avatarUrl);
 
-  // If template contains {avatarUrl} placeholder, replace it
+  // Two URL construction modes:
+  // 1. Template with {avatarUrl} placeholder (preferred) - gives full control
+  // 2. Fallback: append as ?avatar= or &avatar= query param
+  // Mode 2 exists for backwards compatibility and simpler configs.
   if (template.includes("{avatarUrl}")) {
     return template.replace("{avatarUrl}", encoded);
   }

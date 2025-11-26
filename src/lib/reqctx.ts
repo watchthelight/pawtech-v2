@@ -19,20 +19,26 @@ export type ReqContext = {
   channelId?: string | null;
 };
 
-// thread-local vibes, but without the drama
+// AsyncLocalStorage propagates context through the async call chain automatically.
+// Zero overhead when not in a context, near-zero when active.
 const storage = new AsyncLocalStorage<ReqContext>();
 
 const BASE62 = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 export function newTraceId(): string {
   /**
-   * newTraceId
-   * WHAT: Generates a short base62 trace id for logs.
-   * RETURNS: 11-char base62 string.
+   * Generates an 11-char base62 trace ID. This gives ~65 bits of entropy -
+   * plenty to avoid collisions at our scale. Short enough to not clutter logs,
+   * long enough to be effectively unique.
+   *
+   * Not using UUID/ULID here because we want minimal log noise and don't need
+   * sortability (that's what timestamps are for).
    */
   const length = 11;
   const bytes = randomBytes(length);
   let out = "";
+  // Note: modulo bias exists here (256 % 62 != 0) but for trace IDs we don't
+  // care about cryptographic uniformity - just uniqueness.
   for (let i = 0; i < length; i += 1) {
     out += BASE62[bytes[i] % BASE62.length];
   }
@@ -41,9 +47,12 @@ export function newTraceId(): string {
 
 export function runWithCtx<T>(meta: Partial<ReqContext>, fn: () => T): T {
   /**
-   * runWithCtx
-   * WHAT: Binds a merged ReqContext for the duration of a function.
-   * WHY: Cheap and sufficient for our single-process bot.
+   * Binds a merged ReqContext for the duration of fn and all async calls it makes.
+   * Supports nesting - child contexts inherit from parent but can override fields.
+   *
+   * Important: The context is NOT inherited across event emitters unless you
+   * explicitly propagate it. Discord.js callbacks (on('messageCreate'), etc.)
+   * won't automatically see the context - you need to wrap handlers with runWithCtx.
    */
   const parent = storage.getStore();
   const next: ReqContext = {
@@ -59,8 +68,9 @@ export function runWithCtx<T>(meta: Partial<ReqContext>, fn: () => T): T {
 
 export function ctx(): Partial<ReqContext> {
   /**
-   * ctx
-   * WHAT: Returns the current context or {} when outside a runWithCtx scope.
+   * Returns the current context or empty object if none is set.
+   * The empty object fallback means callers can safely destructure without
+   * null checks: const { traceId } = ctx();
    */
   return storage.getStore() ?? {};
 }

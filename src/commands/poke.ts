@@ -26,7 +26,14 @@ export const data = new SlashCommandBuilder()
     option.setName("user").setDescription("The user to poke").setRequired(true)
   );
 
-// Category IDs to include (all channels in these categories will receive pokes)
+/**
+ * Category IDs where pokes are sent. Hardcoded because these represent
+ * specific organizational categories (staff areas, mod channels, etc.).
+ * If you need to add/remove categories, update this array manually.
+ *
+ * Gotcha: If a category is deleted on Discord, it just silently won't
+ * match any channels - no error thrown.
+ */
 const POKE_CATEGORY_IDS = [
   "896070891539169316",
   "1393461646718140436",
@@ -40,7 +47,10 @@ const POKE_CATEGORY_IDS = [
   "1438539749668425836",
 ];
 
-// Channel ID to exclude from pokes
+/**
+ * Excluded channel - typically a rules or announcements channel where
+ * poke spam would be inappropriate.
+ */
 const EXCLUDED_CHANNEL_ID = "896958848009637929";
 
 /**
@@ -74,7 +84,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       throw new Error("This command can only be used in a guild");
     }
 
-    const channels = await guild.channels.fetch();
+    // Fetch all channels - this returns a cached Collection, but we want
+    // fresh data to avoid stale channel references. Discord.js caches
+    // aggressively, so this is usually fast.
     const targetChannels = channels.filter((channel) => {
       if (!channel) return false;
       if (channel.id === EXCLUDED_CHANNEL_ID) return false;
@@ -86,6 +98,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     const successfulPokes: string[] = [];
     const failedPokes: Array<{ channelId: string; error: string }> = [];
 
+    // Sequential iteration rather than Promise.all to avoid rate limit
+    // hammering. Discord's global rate limit is 50 req/sec, but channel-specific
+    // limits are lower. Sequential is slower but safer.
     for (const [channelId, channel] of targetChannels) {
       try {
         if (channel && channel.isTextBased()) {

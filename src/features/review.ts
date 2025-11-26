@@ -68,8 +68,11 @@ import { closeModmailForApplication } from "./modmail.js";
 import { nowUtc, formatUtc, formatRelative } from "../lib/time.js";
 import { toDiscordAbs, toDiscordRel } from "../lib/timefmt.js";
 import { autoDelete } from "../utils/autoDelete.js";
+import { findAppByShortCode } from "./appLookup.js";
 
 // In-memory set to track warned users for missing account age
+// Design: Prevents log spam when the same user's account age is unavailable across multiple card renders.
+// Memory grows unbounded during bot runtime but resets on restart. Acceptable tradeoff for a Discord bot.
 const missingAccountAgeWarned = new Set<string>();
 
 // Add this helper (or move it to your db layer if you prefer)
@@ -227,67 +230,6 @@ function loadApplication(appId: string): ApplicationRow | undefined {
     .get(appId) as ApplicationRow | undefined;
 }
 
-/**
- * WHAT: Find an application row by its HEX6 short code.
- * WHY: Commands like /reject need to reliably resolve short codes to applications.
- *
- * BEHAVIOR:
- * - Normalizes input (trim, uppercase, strips non-hex characters)
- * - Scans ALL applications in the guild (not just recent 200)
- * - Returns first exact match or null
- *
- * PERFORMANCE NOTE:
- * - This is O(N) in number of apps for the guild
- * - For large guilds (>10k apps), consider adding app_short_codes mapping table
- * - Current implementation prioritizes correctness over speed
- *
- * @param guildId - Guild ID to search within
- * @param code - HEX6 short code (accepts any casing, spacing, or non-hex chars which get stripped)
- * @returns ApplicationRow if found, null otherwise
- */
-export function findAppByShortCode(guildId: string, code: string): ApplicationRow | null {
-  if (!guildId) return null;
-
-  // Normalize: strip non-hex, uppercase
-  const cleaned = String(code || "").toUpperCase().replace(/[^0-9A-F]/g, "");
-
-  // Validate: must be exactly 6 hex characters
-  if (!/^[0-9A-F]{6}$/.test(cleaned)) {
-    return null;
-  }
-
-  try {
-    // Query ALL app ids for the guild and compute shortCode in JS
-    // This fixes the "No application with code X" bug where apps existed but were outside the LIMIT 200 window
-    const rows = db
-      .prepare(
-        `
-        SELECT id, guild_id, user_id, status, submitted_at, updated_at, created_at
-        FROM application
-        WHERE guild_id = ?
-      `
-      )
-      .all(guildId) as ApplicationRow[];
-
-    // Scan for exact match
-    for (const row of rows) {
-      try {
-        if (shortCode(row.id) === cleaned) {
-          return row;
-        }
-      } catch (err) {
-        // Skip rows with malformed IDs
-        continue;
-      }
-    }
-
-    return null;
-  } catch (err) {
-    logger.warn({ err, guildId, code: cleaned }, "[findAppByShortCode] DB scan failed");
-    return null;
-  }
-}
-
 export function findPendingAppByUserId(guildId: string, userId: string): ApplicationRow | null {
   /**
    * findPendingAppByUserId
@@ -370,7 +312,9 @@ export function getClaim(appId: string): ReviewClaimRow | null {
 }
 
 export function upsertClaim(appId: string, reviewerId: string) {
-  // claim it before someone else does (Battle Royale mode)
+  // UPSERT pattern: claim it before someone else does (Battle Royale mode)
+  // Race condition note: Two moderators hitting claim simultaneously will result in one overwriting.
+  // For atomic claim semantics, use claimTx() from reviewActions.ts instead.
   db.prepare(
     `
     INSERT INTO review_claim (app_id, reviewer_id, claimed_at)
@@ -386,7 +330,9 @@ export function clearClaim(appId: string) {
   db.prepare(`DELETE FROM review_claim WHERE app_id = ?`).run(appId);
 }
 
-// idempotent on purpose; double-clickers exist
+// Idempotent on purpose; double-clickers exist.
+// State machine: submitted | needs_info -> approved (terminal)
+// Rejected/kicked apps cannot be approved - those are separate terminal states.
 export function approveTx(appId: string, moderatorId: string): TxResult {
   return db.transaction(() => {
     const row = db.prepare(`SELECT status FROM application WHERE id = ?`).get(appId) as
@@ -423,6 +369,9 @@ export function approveTx(appId: string, moderatorId: string): TxResult {
   })();
 }
 
+// Reject transaction with optional permanent flag.
+// permanent=true sets `permanently_rejected=1` which blocks future applications from this user.
+// This is a moderation tool for ban-evasion or repeat bad actors.
 export function rejectTx(
   appId: string,
   moderatorId: string,
@@ -573,6 +522,8 @@ export async function approveFlow(
   return result;
 }
 
+// DM delivery is best-effort. Discord users can disable DMs from server members,
+// so failure here should never block the approval workflow. Returns boolean for audit metadata.
 export async function deliverApprovalDm(member: GuildMember, guildName: string): Promise<boolean> {
   try {
     // DM may fail if recipient has privacy settings enabled; we fail-soft and do not block approval.
@@ -709,6 +660,9 @@ export async function kickFlow(guild: Guild, memberId: string, reason?: string |
   return result;
 }
 
+// Orchestrates the full approval flow: claim guard -> DB transaction -> role assignment -> DM -> welcome card.
+// Order matters: We want the DB to reflect approved status even if downstream Discord API calls fail.
+// Each step is logged and errors are captured to Sentry without blocking subsequent steps.
 async function runApproveAction(interaction: ReviewActionInteraction, app: ApplicationRow) {
   const guild = interaction.guild as Guild | null;
   if (!guild) {
@@ -894,6 +848,9 @@ async function openRejectModal(interaction: ButtonInteraction, app: ApplicationR
   });
 }
 
+// Handles claim button: uses atomic claimTx() to prevent race conditions.
+// Dynamic import keeps reviewActions.ts out of the main bundle for lighter cold starts.
+// Why atomic? Two mods clicking "Claim" at the same instant should result in exactly one claim, not undefined behavior.
 async function handleClaimToggle(interaction: ButtonInteraction, app: ApplicationRow) {
   // Import atomic claim function
   const { claimTx, ClaimError: ClaimTxError } = await import("./reviewActions.js");
@@ -957,14 +914,7 @@ async function handleClaimToggle(interaction: ButtonInteraction, app: Applicatio
     return;
   }
 
-  // Insert review_action for audit trail (legacy table)
-  try {
-    db.prepare(
-      `INSERT INTO review_action (app_id, moderator_id, action, created_at) VALUES (?, ?, 'claim', ?)`
-    ).run(app.id, interaction.user.id, Math.floor(Date.now() / 1000));
-  } catch (err) {
-    logger.warn({ err, appId: app.id }, "[review] failed to insert review_action (non-fatal)");
-  }
+  // Note: review_action INSERT is now inside claimTx() for atomicity
 
   logger.info(
     {
@@ -1457,6 +1407,9 @@ async function runUnclaimAction(interaction: ReviewActionInteraction, app: Appli
   await replyOrEdit(interaction, { content: "Claim removed." }).catch(() => undefined);
 }
 
+// Main router for review card button interactions. Pattern: v1:decide:<action>:code<HEXCODE>
+// Design decision: reject action opens a modal (needs reason text), so we don't defer it.
+// All other actions defer immediately to prevent Discord's 3-second timeout from expiring.
 export async function handleReviewButton(interaction: ButtonInteraction) {
   const match = BUTTON_RE.exec(interaction.customId);
   if (!match) return;
@@ -1887,6 +1840,9 @@ export type RenderWelcomeTemplateOptions = {
   };
 };
 
+// Token regex for welcome message templates. Supported tokens:
+// {applicant.mention} - Discord mention, {applicant.tag} - username#0000, {applicant.display} - nickname
+// {guild.name} - server name. Unknown tokens are left as-is (not replaced with empty string).
 const WELCOME_TEMPLATE_TOKEN_RE = /\{(applicant\.(?:mention|tag|display)|guild\.name)\}/g;
 
 export function renderWelcomeTemplate(options: RenderWelcomeTemplateOptions): string {
@@ -2097,6 +2053,9 @@ export function logWelcomeFailure(
  * Robustly convert various timestamp formats into Unix seconds (integer) or null.
  * Handles Date objects, milliseconds, seconds, numeric strings, and ISO strings.
  * Returns null for invalid/unparseable inputs.
+ *
+ * Heuristic for ms vs s: values > 1e12 are treated as milliseconds (that's year 33658+ in seconds).
+ * Edge case: SQLite datetime strings ("YYYY-MM-DD HH:MM:SS") are normalized to ISO 8601 before parsing.
  */
 function toUnixSeconds(value: string | number | Date | null | undefined): number | null {
   if (value === null || value === undefined) return null;
@@ -2466,7 +2425,9 @@ export function renderReviewEmbed(
   return embed;
 }
 
-// show the scary buttons after someone owns it
+// Button layout: unclaimed apps get "Claim" only. Claimed apps get full action row (Approve/Reject/Kick/etc).
+// Terminal states (approved/rejected/kicked) get no buttons - the card becomes read-only.
+// Design rationale: force claim-first workflow prevents accidental actions and provides audit trail.
 export function buildDecisionComponents(
   status: ApplicationStatus,
   appId: string,
@@ -2537,6 +2498,8 @@ function parseMeta(raw: string | null | undefined): ReviewActionMeta {
   }
 }
 
+// Discord's discriminator migration (2023): new users have discriminator "0".
+// Legacy users may still have 4-digit discriminators. This formats correctly for both.
 function formatUserTag(username: string, discriminator?: string | null) {
   if (discriminator && discriminator !== "0") {
     return `${username}#${discriminator}`;
@@ -2563,6 +2526,10 @@ async function pingGatekeeperOnNewCard(channel: TextChannel, appId: string) {
   }
 }
 
+// Central function for review card lifecycle management.
+// Creates card if missing, edits if exists. Handles all the data fetching (user, answers, scan, modmail, history).
+// Returns empty object on error - callers should handle gracefully.
+// Performance note: This function makes multiple Discord API calls and DB queries. Consider caching for high-traffic servers.
 export async function ensureReviewMessage(
   client: Client,
   appId: string
@@ -2828,8 +2795,8 @@ export async function ensureReviewMessage(
     // Components built after message/channel resolution
     let components: ActionRowBuilder<ButtonBuilder>[] = [];
 
-    // Build components
-    components = buildActionRows(app, claim);
+    // Build components - disable actions if member has left server
+    components = buildActionRows(app, claim, { memberHasLeft: member === null });
 
     const nowIso = new Date().toISOString();
     let message: Message | null = null;

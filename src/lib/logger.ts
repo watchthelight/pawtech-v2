@@ -17,10 +17,25 @@
  */
 import pino from "pino";
 
+/**
+ * Redaction patterns for common secrets that might leak into logs.
+ *
+ * Token pattern: Discord bot tokens are 3 base64-ish segments separated by dots.
+ * DSN pattern: Sentry DSNs embed auth tokens in URLs. We keep the host, redact the secret.
+ * Mention pattern: @everyone/@here shouldn't appear in logs - usually means something
+ *                  user-controlled leaked through and could cause accidents if logged raw.
+ */
 const tokenRe = /[A-Za-z0-9_-]{24}\.[A-Za-z0-9_-]{6}\.[A-Za-z0-9_-]{27}/g;
 const dsnRe = /(https?:\/\/)([^:@]+):[^@]+@/gi;
 const mentionRe = /@(everyone|here)/gi;
 
+// Sentry import warning flag - only warn once per process, not on every error
+let sentryImportWarned = false;
+
+/**
+ * Sanitizes strings before logging. Use on any user-controlled or external data.
+ * Truncates at 300 chars to prevent log flooding from malicious payloads.
+ */
 export function redact(value: string): string {
   if (!value) return "";
   let sanitized = value.replace(/\s+/g, " ").trim();
@@ -33,6 +48,13 @@ export function redact(value: string): string {
   return sanitized;
 }
 
+/**
+ * Log level defaults to "info" but can be overridden via LOG_LEVEL env var.
+ * Set to "debug" for verbose output, "warn" for quieter production logs.
+ *
+ * Pretty printing enabled for: test runs (always) and TTY dev environments
+ * (when LOG_PRETTY=true). Production should use JSON format for log aggregators.
+ */
 const logLevel = process.env.LOG_LEVEL ?? "info";
 const isVitest = !!process.env.VITEST_WORKER_ID;
 const wantPretty =
@@ -40,6 +62,8 @@ const wantPretty =
 
 export const logger = pino({
   level: logLevel,
+  // Conditional pretty-printing. When disabled, outputs newline-delimited JSON
+  // which is what log aggregators (Datadog, Loki, etc.) expect.
   ...(wantPretty
     ? {
         transport: {
@@ -47,13 +71,15 @@ export const logger = pino({
           options: {
             colorize: true,
             translateTime: "HH:MM:ss.l",
-            ignore: "pid,hostname", // drop noisy fields
+            ignore: "pid,hostname", // Drop noise - PID and hostname rarely useful in Discord bot logs
             singleLine: false,
           },
         },
       }
     : {}),
-  base: undefined,
+  base: undefined, // Omit pid/hostname from JSON output too
+  // Custom error serializer extracts only the useful fields, avoiding
+  // circular refs or huge stack traces from discord.js errors
   serializers: {
     err: (e: any) => ({
       name: e?.name,
@@ -62,7 +88,11 @@ export const logger = pino({
       stack: e?.stack,
     }),
   },
-  // Pino hooks to send errors to Sentry
+  /**
+   * Pino hook that intercepts error-level logs and forwards to Sentry.
+   * This keeps Sentry reporting automatic - just use logger.error() and
+   * errors show up in Sentry without explicit captureException calls everywhere.
+   */
   hooks: {
     logMethod(args, method, level) {
       const levelValue =
@@ -85,13 +115,22 @@ export const logger = pino({
               ? level
               : (pino.levels.labels[levelValue as keyof typeof pino.levels.labels] ?? "error");
 
+          // Dynamic import to avoid circular deps and keep Sentry optional.
+          // If Sentry isn't configured (no DSN), this is essentially a no-op.
           import("./sentry.js")
             .then(({ captureException, isSentryEnabled }) => {
               if (isSentryEnabled()) {
                 captureException(errorCandidate, { message, level: label });
               }
             })
-            .catch(() => undefined);
+            .catch((importErr) => {
+              // Sentry module failed to load - warn once, then silence.
+              // This can happen if Sentry deps aren't installed.
+              if (!sentryImportWarned) {
+                sentryImportWarned = true;
+                console.warn("[logger] Failed to import Sentry module:", importErr?.message);
+              }
+            });
         }
       }
 
@@ -100,6 +139,8 @@ export const logger = pino({
   },
 });
 
+// Startup log showing which debug flags are active. Helps diagnose
+// "why isn't X logging" questions without checking .env directly.
 logger.info(
   {
     dbTraceEnabled: process.env.DB_TRACE === "1",

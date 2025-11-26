@@ -47,7 +47,9 @@ export function getNotifyConfig(guildId: string): NotifyConfig {
       )
       .get(guildId) as NotifyConfig | undefined;
 
-    // Hardcoded defaults for main guild (896070888594759740)
+    // TECH DEBT: Hardcoded defaults for main guild. This exists because the
+    // main guild was set up before we had proper config commands. New guilds
+    // should configure via /notify-config, not by editing this file.
     const MAIN_GUILD_ID = "896070888594759740";
     const isMainGuild = guildId === MAIN_GUILD_ID;
 
@@ -69,12 +71,15 @@ export function getNotifyConfig(guildId: string): NotifyConfig {
           };
     }
 
-    // Apply hardcoded defaults for main guild if values are NULL
+    // Merge DB values with defaults. Nullish coalescing (??) preserves explicit
+    // nulls from DB (disabled feature) vs undefined (use default).
     return {
       forum_channel_id: row.forum_channel_id ?? (isMainGuild ? "1193455312326377592" : null),
       notify_role_id: row.notify_role_id ?? (isMainGuild ? "1397856960862486598" : null),
       notify_mode: (row.notify_mode as "post" | "channel") || "post",
       notification_channel_id: row.notification_channel_id ?? (isMainGuild ? "1425945053192257566" : null),
+      // Rate limiting defaults: 5s cooldown, max 10/hour. Conservative to avoid
+      // Discord rate limits and notification fatigue.
       notify_cooldown_seconds: row.notify_cooldown_seconds || 5,
       notify_max_per_hour: row.notify_max_per_hour || 10,
     };
@@ -108,10 +113,12 @@ export function getNotifyConfig(guildId: string): NotifyConfig {
  * @returns Previous config for audit logging
  */
 export function setNotifyConfig(guildId: string, config: Partial<NotifyConfig>): NotifyConfig {
+  // Capture old config BEFORE update for audit logging by caller
   const oldConfig = getNotifyConfig(guildId);
 
   try {
-    // Ensure guild_config row exists
+    // Ensure guild_config row exists. This INSERT-ignore pattern lets us
+    // UPDATE without checking existence first (two queries -> one atomic op).
     db.prepare(
       `
       INSERT INTO guild_config (guild_id)
@@ -120,7 +127,8 @@ export function setNotifyConfig(guildId: string, config: Partial<NotifyConfig>):
     `
     ).run(guildId);
 
-    // Build UPDATE statement dynamically based on provided fields
+    // Dynamic UPDATE: only set fields that were explicitly passed. This lets
+    // callers update one field without touching others. Verbose but safe.
     const updates: string[] = [];
     const values: any[] = [];
 
@@ -177,6 +185,8 @@ export function setNotifyConfig(guildId: string, config: Partial<NotifyConfig>):
  */
 export function getConfiguredGuilds(): string[] {
   try {
+    // Only guilds with notify_role_id set are "configured". Guilds with just
+    // a forum channel but no role are effectively not using notifications.
     const rows = db
       .prepare(
         `
@@ -189,6 +199,8 @@ export function getConfiguredGuilds(): string[] {
 
     return rows.map((r) => r.guild_id);
   } catch (err) {
+    // Return empty rather than throw - this is a diagnostic function,
+    // failure shouldn't break calling code.
     logger.error({ err }, "[notifyConfig] failed to get configured guilds");
     return [];
   }

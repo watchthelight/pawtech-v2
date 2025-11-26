@@ -72,14 +72,18 @@ export async function resetModstats(
   };
 
   try {
-    // Wrap in transaction for atomicity
+    // Transaction ensures atomicity: if any step fails, the whole reset rolls back.
+    // This prevents half-dropped caches or inconsistent guild counts.
     const resetTransaction = db.transaction(() => {
-      // 1. Drop cache table if it exists
+      // Drop is idempotent thanks to IF EXISTS. We drop rather than TRUNCATE
+      // because it also clears any indexes and resets autoincrement counters.
       try {
         db.prepare("DROP TABLE IF EXISTS modstats_cache").run();
         result.cacheDropped = true;
         log.info("[modstats:reset] modstats_cache table dropped");
       } catch (err) {
+        // Non-fatal: we log but continue. The table might not exist yet if
+        // this is a fresh install, or schema might have drifted.
         const error = `Failed to drop modstats_cache: ${(err as Error).message}`;
         result.errors?.push(error);
         log.error({ err }, "[modstats:reset] error dropping table");
@@ -101,11 +105,14 @@ export async function resetModstats(
       //   )
       // `).run();
 
-      // 3. Count affected guilds
+      // Count affected guilds for the result summary. This is informational only -
+      // we're not actually iterating guilds here (recomputation is lazy).
       let guildsQuery = "SELECT COUNT(DISTINCT guild_id) as count FROM action_log";
       const params: string[] = [];
 
       if (opts.guildIds && opts.guildIds.length > 0) {
+        // Guild filtering: useful for testing reset on a single guild without
+        // nuking the whole cache. Production rarely needs this.
         const placeholders = opts.guildIds.map(() => "?").join(",");
         guildsQuery += ` WHERE guild_id IN (${placeholders})`;
         params.push(...opts.guildIds);
@@ -120,12 +127,12 @@ export async function resetModstats(
       );
     });
 
-    // Execute transaction
     resetTransaction();
 
-    // NOTE: Actual recomputation happens lazily on next /modstats call.
-    // If you want synchronous recomputation, iterate guilds here and call
-    // a metrics.recalculate(guildId) function for each one.
+    // Design decision: recomputation is LAZY. We don't eagerly rebuild stats
+    // because (a) it can be slow for large guilds, (b) not all guilds need
+    // immediate fresh data, and (c) it distributes the CPU load over time.
+    // Tradeoff: first /modstats call after reset will be slower.
 
     return result;
   } catch (err) {

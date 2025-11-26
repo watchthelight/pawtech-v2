@@ -27,7 +27,7 @@ export interface FlaggerConfig {
  * Resolution priority:
  *  1. Database (guild_config.flags_channel_id, guild_config.silent_first_msg_days)
  *  2. Environment variables (FLAGGED_REPORT_CHANNEL_ID, SILENT_FIRST_MSG_DAYS)
- *  3. Defaults (channelId: null, silentDays: 90)
+ *  3. Defaults (channelId: null, silentDays: 7)
  *
  * @param guildId - Discord guild ID
  * @returns FlaggerConfig with channelId (string | null) and silentDays (number)
@@ -40,7 +40,7 @@ export interface FlaggerConfig {
  */
 export function getFlaggerConfig(guildId: string): FlaggerConfig {
   let channelId: string | null = null;
-  let silentDays: number = 90; // Default threshold
+  let silentDays: number = 7; // Default threshold (7 days)
 
   try {
     // First, check for guild-specific override in guild_config table
@@ -67,7 +67,7 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
   } catch (err) {
     // Gracefully handle missing table/column (pre-migration databases)
     // This prevents crashes during startup before migration 005 runs
-    logger.debug({ err, guildId }, "[flagger] Failed to query guild_config, falling back to env");
+    logger.warn({ err, guildId }, "[flagger] Failed to query guild_config, falling back to env");
   }
 
   // Fallback to env variables (applies to all guilds without override)

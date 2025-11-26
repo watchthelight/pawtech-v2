@@ -56,6 +56,9 @@ export class ClaimError extends Error {
  *  - ClaimError('APP_NOT_FOUND') if app doesn't exist
  *  - ClaimError('INVALID_STATUS') if app is in terminal state
  */
+// Core atomic claim. Wrapped in db.transaction() for SQLite's serializable isolation.
+// The transaction ensures: check -> insert -> audit all happen atomically.
+// If two moderators call this simultaneously, one will win and the other gets ALREADY_CLAIMED.
 export function claimTx(appId: string, moderatorId: string, guildId: string): void {
   return db.transaction(() => {
     logger.debug({ appId, moderatorId, guildId }, "[reviewActions] claimTx started");
@@ -78,12 +81,15 @@ export function claimTx(appId: string, moderatorId: string, guildId: string): vo
     }
 
     // Check for existing claim (optimistic locking)
+    // Note: This is not SELECT FOR UPDATE - SQLite doesn't support row-level locks.
+    // The transaction isolation handles concurrent access instead.
     const existingClaim = db
       .prepare("SELECT reviewer_id FROM review_claim WHERE app_id = ?")
       .get(appId) as { reviewer_id: string } | undefined;
 
     if (existingClaim) {
       // Allow re-claim by same moderator (idempotent)
+      // This handles double-click scenarios gracefully.
       if (existingClaim.reviewer_id === moderatorId) {
         logger.debug({ appId, moderatorId }, "[reviewActions] claimTx: already claimed by same moderator (idempotent)");
         return;
@@ -98,10 +104,19 @@ export function claimTx(appId: string, moderatorId: string, guildId: string): vo
     }
 
     // Claim the application
+    // Using nowUtc() for consistency - returns ISO string compatible with SQLite datetime.
     const claimedAt = nowUtc();
     db.prepare(
       "INSERT INTO review_claim (app_id, reviewer_id, claimed_at) VALUES (?, ?, ?)"
     ).run(appId, moderatorId, claimedAt);
+
+    // Insert into review_action for audit trail (inside same transaction for atomicity)
+    // Uses epoch seconds for the action log - different from claimed_at which is ISO string.
+    // This inconsistency is legacy; new code should standardize on one format.
+    const createdAtEpoch = Math.floor(Date.now() / 1000);
+    db.prepare(
+      "INSERT INTO review_action (app_id, moderator_id, action, created_at) VALUES (?, ?, 'claim', ?)"
+    ).run(appId, moderatorId, createdAtEpoch);
 
     logger.info(
       { appId, moderatorId, guildId, claimedAt },
@@ -160,6 +175,12 @@ export function unclaimTx(appId: string, moderatorId: string, guildId: string): 
     // Remove claim
     db.prepare("DELETE FROM review_claim WHERE app_id = ?").run(appId);
 
+    // Insert into review_action for audit trail (inside same transaction for atomicity)
+    const createdAtEpoch = Math.floor(Date.now() / 1000);
+    db.prepare(
+      "INSERT INTO review_action (app_id, moderator_id, action, created_at) VALUES (?, ?, 'unclaim', ?)"
+    ).run(appId, moderatorId, createdAtEpoch);
+
     logger.info(
       { appId, moderatorId, guildId },
       "[reviewActions] unclaimTx: application unclaimed successfully"
@@ -216,6 +237,9 @@ export function clearClaim(appId: string): boolean {
  *  const errorMsg = claimGuard(claim, interaction.user.id);
  *  if (errorMsg) return interaction.reply({ content: errorMsg, ephemeral: true });
  */
+// Guard function for button handlers. Returns error message if user can't act, null if authorized.
+// Usage pattern: const err = claimGuard(claim, user.id); if (err) return reply(err);
+// Returns user-facing Discord markdown - the <@id> syntax renders as a clickable mention.
 export function claimGuard(claim: ReviewClaimRow | null, userId: string): string | null {
   if (!claim) {
     return "❌ This application is not claimed. Use the **Claim Application** button first.";

@@ -16,7 +16,10 @@ import { logger } from "../lib/logger.js";
 import { getEpochPredicate } from "./metricsEpoch.js";
 
 /**
- * Actions performed by moderators (never by applicants)
+ * Actions performed by moderators (never by applicants).
+ * This set is the source of truth for what counts as "mod activity."
+ * If you add new mod actions to action_log, remember to add them here too
+ * or they won't show up in performance metrics.
  */
 export const MOD_ACTIONS = new Set([
   "claim",
@@ -60,10 +63,13 @@ interface ActionPair {
 }
 
 /**
- * In-memory cache for metrics (guild_id → metrics[])
- * Cache TTL: 5 minutes (auto-refresh on access if stale)
+ * In-memory cache for metrics (guild_id -> metrics[]).
+ * TTL defaults to 5 minutes. This is a deliberate tradeoff: recalculating
+ * metrics is expensive (full action_log scan), so we accept slightly stale
+ * data for /modstats responses. For real-time needs, use forceRefresh=true.
  */
 const _metricsCache = new Map<string, { metrics: ModMetrics[]; timestamp: number }>();
+// Env var override for testing. In prod this stays at 5 minutes.
 const _getTTL = () => Number(process.env.MOD_METRICS_TTL_MS ?? 5 * 60 * 1000);
 
 /**
@@ -88,10 +94,13 @@ export function __test__clearModMetricsCache(): void {
 function calculatePercentile(values: number[], percentile: number): number | null {
   if (values.length === 0) return null;
 
-  // Copy array to avoid mutating input
+  // Copy array to avoid mutating input - important since we sort in place
   const sorted = [...values].sort((a, b) => a - b);
 
-  // Nearest-rank method: p ∈ (0, 100]
+  // Using nearest-rank method (not linear interpolation). This means:
+  // - Always returns an actual value from the dataset
+  // - p50 of [1,2,3,4] returns 2, not 2.5
+  // - Simpler to reason about for non-statisticians reading dashboards
   const rank = Math.ceil((percentile / 100) * sorted.length);
   const index = Math.min(sorted.length - 1, Math.max(0, rank - 1));
 
@@ -110,10 +119,12 @@ function calculatePercentile(values: number[], percentile: number): number | nul
  */
 function computeResponseTimes(guildId: string, moderatorId: string): number[] {
   try {
-    // Get epoch filtering predicate
     const epochFilter = getEpochPredicate(guildId, "created_at_s");
 
-    // Query ALL actions for this guild's applications (app_submitted + all mod actions)
+    // This query is the heaviest part of metrics recalculation. We pull ALL
+    // application-related actions for the guild, then group in memory.
+    // For guilds with 100k+ actions, consider adding a covering index on
+    // (guild_id, app_id, created_at_s) if this becomes a bottleneck.
     const modActionsPlaceholders = Array.from(MOD_ACTIONS)
       .map(() => "?")
       .join(",");
@@ -151,11 +162,14 @@ function computeResponseTimes(guildId: string, moderatorId: string): number[] {
       });
     }
 
-    // Calculate response times (app_submitted → first mod action)
+    // Calculate response times (app_submitted -> first mod action).
+    // Key insight: we attribute the response time to whoever acted FIRST,
+    // not necessarily who claimed. This rewards fast responders.
     const responseTimes: number[] = [];
 
     for (const [appId, events] of appGroups) {
-      // Find latest app_submitted (in case of resubmissions)
+      // Handle resubmissions: only measure from the LATEST submission.
+      // If user submits, gets rejected, resubmits - we measure from resubmit.
       const submissions = events.filter((e) => e.action === "app_submitted");
       if (submissions.length === 0) continue;
       const latestSubmission = submissions[submissions.length - 1];
@@ -168,8 +182,9 @@ function computeResponseTimes(guildId: string, moderatorId: string): number[] {
       // Only count if THIS moderator was the first responder
       if (firstModAction && firstModAction.actor_id === moderatorId) {
         const responseTime = firstModAction.time - latestSubmission.time;
+        // Sanity bounds: negative times are clock skew bugs, >7 days is
+        // probably orphaned data that would skew percentiles badly.
         if (responseTime > 0 && responseTime < 86400 * 7) {
-          // Sanity check: 0 < time < 7 days
           responseTimes.push(responseTime);
         }
       }
@@ -254,9 +269,11 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
           modmail_opens: number;
         };
 
-        // Compute response times
+        // Compute response times. Note: computeResponseTimes returns unsorted,
+        // we sort here for percentile calculation (though calculatePercentile
+        // also sorts internally - minor redundancy, but keeps code clear).
         const responseTimes = computeResponseTimes(guildId, moderatorId);
-        responseTimes.sort((a, b) => a - b); // Sort for percentile calculation
+        responseTimes.sort((a, b) => a - b);
 
         const avgResponseTime =
           responseTimes.length > 0
@@ -307,7 +324,9 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
       }
     }
 
-    // Invalidate cache
+    // Invalidate cache after DB writes complete. This ordering matters:
+    // if we cleared cache first, a concurrent read could re-populate with
+    // stale data before our writes finish.
     _metricsCache.delete(guildId);
 
     logger.info({ guildId, processed }, "[metrics] recalculation complete");
@@ -337,18 +356,20 @@ export async function getCachedMetrics(
   const now = Date.now();
   const ttl = _getTTL();
 
-  // Check cache validity
+  // Check cache validity. Note: no locking here, so two concurrent calls
+  // with a stale cache will both trigger recalc. That's fine - recalc is
+  // idempotent and the minor duplicate work beats adding lock complexity.
   if (!forceRefresh && cached && now - cached.timestamp < ttl) {
     logger.debug({ guildId, age: now - cached.timestamp }, "[metrics] cache hit");
     return cached.metrics;
   }
 
-  // Cache miss or stale - recalculate
   logger.debug({ guildId, reason: forceRefresh ? "forced" : "stale" }, "[metrics] cache miss");
 
+  // Recalc writes to DB, then we read back. This ensures we return exactly
+  // what's persisted, not some intermediate state.
   await recalcModMetrics(guildId);
 
-  // Read from database
   const metrics = db
     .prepare(
       `
@@ -357,7 +378,7 @@ export async function getCachedMetrics(
     )
     .all(guildId) as ModMetrics[];
 
-  // Update cache
+  // Update cache with fresh timestamp
   _metricsCache.set(guildId, { metrics, timestamp: now });
 
   return metrics;
@@ -395,7 +416,8 @@ export async function getTopModerators(
 ): Promise<ModMetrics[]> {
   const allMetrics = await getCachedMetrics(guildId);
 
-  // Sort based on criteria
+  // In-memory sort is fine here - typical guild has <100 mods.
+  // If you somehow have thousands of mods, push sort to SQL.
   const sorted = [...allMetrics].sort((a, b) => {
     switch (sortBy) {
       case "accepts":
@@ -403,7 +425,8 @@ export async function getTopModerators(
       case "claims":
         return b.total_claims - a.total_claims;
       case "response_time":
-        // Lower response time is better (sort ascending, but nulls last)
+        // Lower response time is better. Mods with no response data (null)
+        // go to the bottom - they either have no claims or data predates tracking.
         if (a.avg_response_time_s === null) return 1;
         if (b.avg_response_time_s === null) return -1;
         return a.avg_response_time_s - b.avg_response_time_s;

@@ -32,6 +32,11 @@ type AppRow = {
  * RETURNS: Uppercase, 6-char hex string or empty if invalid
  */
 export function normalizeCode(raw: string): string {
+  // Accept various input formats: "abc123", "ABC123", "abc-123", "#ABC123"
+  // Strip everything except hex chars and uppercase for consistent matching.
+  // We slice to 6 chars because that's our short code length. Longer inputs
+  // (like full UUIDs pasted by accident) get truncated - this is intentional
+  // since we fall back to full ID lookup anyway if short code fails.
   const cleaned = String(raw || "")
     .toUpperCase()
     .replace(/[^0-9A-F]/g, "");
@@ -55,6 +60,9 @@ export function findAppByShortCode(guildId: string, code: string) {
   }
 
   // Try mapping table first (O(1) lookup)
+  // We check for table existence each time rather than caching because:
+  // 1. The table might be created by a migration mid-session
+  // 2. This check is fast (sqlite_master is always indexed)
   const hasMapping = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_short_codes'")
     .get();
@@ -72,6 +80,9 @@ export function findAppByShortCode(guildId: string, code: string) {
   }
 
   // Fallback: Full-scan all applications in guild (expensive but safe)
+  // This O(n) scan happens when: mapping table doesn't exist, or code isn't in mapping table
+  // (e.g., app created before mapping sync ran). In production, this should be rare after
+  // initial migration, but we keep it for robustness.
   logger.debug({ code: normalized }, "[appLookup] mapping table miss, falling back to full scan");
 
   const rows = db
@@ -114,6 +125,11 @@ export function findAppByCodeOrMessage({
   code?: string;
   messageId?: string;
 }) {
+  // Resolution priority: messageId > short code > full app ID
+  // messageId is most reliable because it's a direct FK from review_card,
+  // while short codes can theoretically collide (6 hex chars = 16M values,
+  // but we scope by guild so collisions are extremely unlikely in practice).
+
   // Priority 1: Resolve by message ID (most reliable)
   if (messageId) {
     const rc = db
@@ -154,6 +170,10 @@ export function findAppByCodeOrMessage({
  * RETURNS: Number of mappings created
  */
 export function syncShortCodeMappings(guildId?: string): number {
+  // Backfill short code mappings for existing applications.
+  // Called on startup and can be triggered manually via CLI.
+  // Uses INSERT OR IGNORE so it's idempotent - safe to run multiple times.
+
   // Check if mapping table exists
   const hasMapping = db
     .prepare("SELECT name FROM sqlite_master WHERE type='table' AND name='app_short_codes'")
@@ -174,6 +194,8 @@ export function syncShortCodeMappings(guildId?: string): number {
 
   let created = 0;
 
+  // Using a prepared statement in a loop is fine here - better-sqlite3 caches
+  // the statement, and we need the per-row result to count new inserts.
   const insert = db.prepare(
     "INSERT OR IGNORE INTO app_short_codes (app_id, guild_id, code) VALUES (?, ?, ?)"
   );

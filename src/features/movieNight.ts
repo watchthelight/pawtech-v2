@@ -35,10 +35,13 @@ interface ActiveMovieEvent {
 // State Management
 // ============================================================================
 
-// In-memory session tracking (cleared when event ends)
+// In-memory session tracking. Intentionally NOT persisted to DB because:
+// 1. Sessions are ephemeral (only matter during active event)
+// 2. High-frequency updates (voice join/leave) would hammer the DB
+// 3. If bot crashes mid-movie, attendance is lost - acceptable tradeoff
 const movieSessions = new Map<string, MovieSession>();
 
-// Active movie events
+// One active event per guild at a time. Enforced by overwriting on startMovieEvent.
 const activeEvents = new Map<string, ActiveMovieEvent>();
 
 /**
@@ -49,7 +52,8 @@ function getSessionKey(guildId: string, userId: string): string {
 }
 
 /**
- * Get or create a session for a user
+ * Get or create a session for a user. Creates with zero values if new.
+ * Note: this is a hot path (called on every voice state change), keep it fast.
  */
 function getOrCreateSession(guildId: string, userId: string): MovieSession {
   const key = getSessionKey(guildId, userId);
@@ -70,7 +74,9 @@ function getOrCreateSession(guildId: string, userId: string): MovieSession {
 // ============================================================================
 
 /**
- * Start tracking a movie night event
+ * Start tracking a movie night event. If one is already active, it gets
+ * overwritten - this is intentional to allow "restarts" without explicit end.
+ * Callers should check isMovieEventActive() first if they want to warn.
  */
 export function startMovieEvent(guildId: string, channelId: string, eventDate: string): void {
   const event: ActiveMovieEvent = {
@@ -122,13 +128,16 @@ export function handleMovieVoiceJoin(guildId: string, userId: string): void {
 }
 
 /**
- * Handle user leaving movie night VC
+ * Handle user leaving movie night VC. Calculates session duration and updates
+ * totals. Note: we floor to minutes, so leaving after 59 seconds = 0 minutes.
+ * This is intentional to prevent gaming via rapid join/leave.
  */
 export function handleMovieVoiceLeave(guildId: string, userId: string): void {
   const session = getOrCreateSession(guildId, userId);
 
   if (session.currentSessionStart) {
     const sessionDurationMs = Date.now() - session.currentSessionStart;
+    // Floor division intentionally discards partial minutes
     const sessionMinutes = Math.floor(sessionDurationMs / 60000);
 
     session.totalMinutes += sessionMinutes;
@@ -151,7 +160,10 @@ export function handleMovieVoiceLeave(guildId: string, userId: string): void {
 // ============================================================================
 
 /**
- * Get guild's movie attendance mode
+ * Get guild's movie attendance mode. Two modes exist:
+ * - "cumulative": total time across all joins/leaves must hit threshold
+ * - "continuous": longest single session must hit threshold (stricter)
+ * Default is cumulative because it's more forgiving for bathroom breaks.
  */
 function getMovieAttendanceMode(guildId: string): "cumulative" | "continuous" {
   const stmt = db.prepare(`
@@ -202,7 +214,8 @@ export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
       session.currentSessionStart = null;
     }
 
-    // Determine if qualified based on mode
+    // 30-minute threshold is hardcoded. If this needs to be configurable per
+    // guild, add a threshold column to guild_movie_config.
     const qualified =
       mode === "continuous"
         ? session.longestSessionMinutes >= 30
@@ -230,7 +243,9 @@ export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
     }, `Attendance recorded: ${qualified ? "✅ Qualified" : "❌ Not qualified"}`);
   }
 
-  // Clear session data
+  // Clear ALL sessions, not just this guild's. This is a simplification since
+  // we typically only have one guild active. If multi-guild support is needed,
+  // iterate and delete only matching guild keys.
   movieSessions.clear();
   activeEvents.delete(guild.id);
 
@@ -272,14 +287,16 @@ export async function updateMovieTierRole(guild: Guild, userId: string): Promise
     qualifiedCount,
   }, `Updating movie tier for user with ${qualifiedCount} qualified movies`);
 
-  // Get all movie tier roles
+  // Tiers are configured via admin commands and stored in DB. If none exist,
+  // this feature is effectively disabled for this guild.
   const tiers = getRoleTiers(guild.id, "movie_night");
   if (tiers.length === 0) {
     logger.warn({ evt: "no_movie_tiers", guildId: guild.id }, "No movie tier roles configured");
     return results;
   }
 
-  // Sort by threshold descending to find highest qualifying tier
+  // Sort descending so we find the HIGHEST tier user qualifies for.
+  // User with 15 movies should get tier-3 (10 movies), not tier-1 (3 movies).
   const sortedTiers = [...tiers].sort((a, b) => b.threshold - a.threshold);
 
   // Find the tier user should have
@@ -295,9 +312,11 @@ export async function updateMovieTierRole(guild: Guild, userId: string): Promise
     return results;
   }
 
-  // Remove all lower tier roles
+  // Remove ALL other tier roles before adding the new one. This ensures users
+  // only have one tier role at a time. We remove even higher tiers in case of
+  // data corrections (e.g., admin removes a fraudulent attendance record).
   for (const tier of tiers) {
-    if (tier.id === targetTier.id) continue; // Skip the target tier
+    if (tier.id === targetTier.id) continue;
 
     const removeResult = await removeRole(
       guild,
@@ -309,7 +328,8 @@ export async function updateMovieTierRole(guild: Guild, userId: string): Promise
     results.push(removeResult);
   }
 
-  // Add the target tier role
+  // Add the target tier role. Discord's role add is idempotent - if they
+  // already have it, this is a no-op on Discord's side.
   const addResult = await assignRole(
     guild,
     userId,

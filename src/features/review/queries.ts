@@ -28,6 +28,10 @@ export type RecentAction = {
  * RETURNS: Array of recent actions, ordered newest first.
  * PERF: Uses idx_review_action_app_time (app_id, created_at DESC).
  */
+// Fetches last N actions for display on review card history section.
+// Index: idx_review_action_app_time (app_id, created_at DESC) makes this O(log n) + limit reads.
+// Default limit=4 keeps the card compact while showing recent activity.
+// Timing is logged for performance monitoring - if this gets slow, check index health.
 export function getRecentActionsForApp(appId: string, limit = 4): RecentAction[] {
   const start = Date.now();
 
@@ -42,6 +46,8 @@ export function getRecentActionsForApp(appId: string, limit = 4): RecentAction[]
   const rows = stmt.all(appId, limit) as RecentAction[];
 
   const ms = Date.now() - start;
+  // Info-level log for query observability. If this shows up taking >10ms consistently,
+  // the index may be missing or fragmented.
   logger.info(
     { query: "getRecentActionsForApp", appId, limit, n: rows.length, ms },
     "[review] history_fetch"

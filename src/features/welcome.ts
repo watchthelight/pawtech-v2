@@ -1,4 +1,6 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
+// Welcome card module: handles the rich embed posted when a new member is approved.
+// Separated from review.ts to keep welcome logic self-contained and testable.
 import {
   APIEmbed,
   ChannelType,
@@ -51,11 +53,14 @@ export async function postWelcomeCard(opts: {
   }
 
   // 3) Check bot permissions in target channel
+  // Pre-check all required permissions and provide a clear error message.
+  // Without this, Discord API returns a generic 50013 error that's hard to debug.
   const me = guild.members.me;
   if (me) {
     const perms = channel.permissionsFor(me);
     const missingPerms: string[] = [];
 
+    // EmbedLinks required for rich embed, AttachFiles for the banner.webp attachment
     if (!perms?.has(PermissionFlagsBits.ViewChannel)) missingPerms.push("ViewChannel");
     if (!perms?.has(PermissionFlagsBits.SendMessages)) missingPerms.push("SendMessages");
     if (!perms?.has(PermissionFlagsBits.EmbedLinks)) missingPerms.push("EmbedLinks");
@@ -110,9 +115,13 @@ export async function postWelcomeCard(opts: {
   };
 
   // 7) Attach banner file
+  // Path is relative to working directory (project root). If the bot runs from a different cwd,
+  // this will fail. Consider using __dirname or an absolute path for robustness.
   const files = [{ attachment: "./assets/banner.webp", name: "banner.webp" }];
 
   // 8) Send message with allowed mentions limited to the specific user and role
+  // allowedMentions is a security measure: even if content contains @everyone or other role mentions,
+  // Discord will only actually ping the IDs we explicitly whitelist here.
   try {
     const allowedMentions = {
       users: [user.id],

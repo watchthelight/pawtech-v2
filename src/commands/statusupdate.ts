@@ -18,6 +18,8 @@ import {
 import { requireStaff } from "../lib/config.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 
+// Note: This is a legacy command. Prefer /update status which persists across restarts.
+// Keeping this for backwards compatibility with existing mod workflows.
 export const data = new SlashCommandBuilder()
   .setName("statusupdate")
   .setDescription("Update the bot's presence text")
@@ -27,7 +29,7 @@ export const data = new SlashCommandBuilder()
       .setDescription("Status text")
       .setRequired(true)
       .setMinLength(1)
-      .setMaxLength(128)
+      .setMaxLength(128) // Discord's activity name limit
   );
 
 /**
@@ -59,6 +61,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   await withStep(ctx, "update_presence", async () => {
+    // Clear then set: Discord's presence system can be finicky. Setting to empty
+    // first ensures a clean state before applying the new activity.
+    // This is a workaround for occasional "stuck" presence issues.
     await user.setPresence({ activities: [], status: "online" });
     await user.setPresence({
       activities: [{ name: text, type: ActivityType.Playing }],

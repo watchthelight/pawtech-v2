@@ -33,6 +33,9 @@ export function trackJoin(guildId: string, userId: string, joinedAt: number): vo
   try {
     // UPSERT pattern: if user rejoins, update joined_at (preserves first_message_at if exists)
     // ON CONFLICT ensures idempotent behavior (safe to call multiple times)
+    // Design note: We intentionally reset joined_at on rejoin rather than preserving the original.
+    // This handles the case where someone leaves and rejoins to reset their "silent days" counter,
+    // which is actually the behavior we want since we care about their most recent join.
     db.prepare(
       `
       INSERT INTO user_activity (guild_id, user_id, joined_at)
@@ -89,6 +92,9 @@ export async function trackFirstMessage(client: Client, message: Message): Promi
     if (!row) {
       // User joined before migration 005 ran, or joined event wasn't tracked
       // Insert row with first_message_at (joined_at unknown, set to message timestamp as fallback)
+      // Edge case: Setting joined_at = message timestamp means silentDays = 0, so these users
+      // never trigger flags. This is intentional - we can't reliably flag users without knowing
+      // their actual join date. False positives here would be worse than missing some lurkers.
       logger.debug(
         { guildId, userId },
         "[activity] user not in user_activity table, inserting with first_message_at (joined_at unknown)"
@@ -174,6 +180,9 @@ async function evaluateAndFlag(
     }
 
     // Calculate silent days (delta between join and first message)
+    // Note: We floor to full days rather than rounding. A user who waited 6 days 23 hours
+    // counts as 6 silent days, not 7. This is slightly more lenient but avoids edge cases
+    // where someone joins at 11:59pm and messages at 12:01am getting flagged incorrectly.
     const silentSeconds = firstMessageAt - joinedAt;
     const silentDays = Math.floor(silentSeconds / 86400); // 86400 seconds = 1 day
 
@@ -261,6 +270,9 @@ async function postFlagAlert(
     }
 
     // Check channel permissions (SendMessages + EmbedLinks)
+    // Performance note: fetchMe() is cached by discord.js, so this doesn't hit the API every time.
+    // We check permissions here rather than at startup because channel permissions can change
+    // dynamically, and we'd rather fail gracefully per-flag than crash the whole feature.
     const botMember = await guild.members.fetchMe();
     const permissions = channel.permissionsFor(botMember);
 
@@ -277,6 +289,8 @@ async function postFlagAlert(
     const user = await client.users.fetch(userId);
 
     // Build embed
+    // Dynamic import to avoid circular dependency - embeds.js imports from other features
+    // that may depend on activityTracker. This lazy-loads the embed builder only when needed.
     const { buildFlagEmbedSilentFirstMsg } = await import("../logging/embeds.js");
     const embed = buildFlagEmbedSilentFirstMsg({
       user,

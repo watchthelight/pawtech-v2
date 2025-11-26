@@ -29,20 +29,45 @@ import {
 import { logger, redact } from "./logger.js";
 import { addBreadcrumb, captureException, setContext, setTag } from "./sentry.js";
 import { ctx as reqCtx, newTraceId } from "./reqctx.js";
+import { classifyError, errorContext, shouldReportToSentry } from "./errors.js";
 
+/**
+ * A "phase" is just a label for where we are in command execution.
+ * Useful for debugging: "it crashed in phase 'db_write'" is much more
+ * actionable than "it crashed somewhere in handleApprove".
+ */
 type Phase = string;
 
+/**
+ * Union of interaction types we support wrapping.
+ *
+ * Notably missing: SelectMenuInteraction, AutocompleteInteraction.
+ * Add them if/when needed, but keep the union tight - generic handlers
+ * are harder to type correctly.
+ */
 export type InstrumentedInteraction =
   | ChatInputCommandInteraction
   | ModalSubmitInteraction
   | ButtonInteraction;
 
+/**
+ * Context object passed to wrapped command handlers.
+ *
+ * This is the main interface between your command logic and the wrapper's
+ * instrumentation. Call step() to mark progress, setLastSql() before DB
+ * calls, and access traceId for any custom logging.
+ */
 export type CommandContext<I extends InstrumentedInteraction = ChatInputCommandInteraction> = {
   interaction: I;
+  /** Mark the current execution phase (e.g., "validate", "db_write", "reply") */
   step: (phase: Phase) => void;
+  /** Get the current phase name */
   currentPhase: () => Phase;
+  /** Track the last SQL query for error diagnostics - call before DB operations */
   setLastSql: (sql: string | null) => void;
+  /** Get the trace ID for this command invocation */
   getTraceId: () => string;
+  /** The trace ID (read-only alias for getTraceId()) */
   readonly traceId: string;
 };
 
@@ -51,8 +76,21 @@ export type SqlTrackingCtx = { setLastSql: (sql: string | null) => void };
 
 type CommandExecutor<I extends InstrumentedInteraction> = (ctx: CommandContext<I>) => Promise<void>;
 
+/**
+ * How long to wait before auto-deferring modals.
+ *
+ * Discord gives us 3000ms to respond. We set the watchdog at 2500ms to
+ * leave a 500ms buffer for network latency. If your modal handlers are
+ * consistently hitting this, they're too slow.
+ */
 const WATCHDOG_MS = 2500;
 
+/**
+ * Infer the interaction type for logging purposes.
+ *
+ * We use duck typing (check for commandName, fields) rather than instanceof
+ * because discord.js interaction types are complex and this is just for logs.
+ */
 function inferKind(
   interaction: Interaction | InstrumentedInteraction
 ): "slash" | "button" | "modal" {
@@ -61,6 +99,15 @@ function inferKind(
   return "button";
 }
 
+/**
+ * Extract REST API metadata from a DiscordAPIError for logging.
+ *
+ * Discord.js errors contain useful debugging info (HTTP method, path, request
+ * body) that we want in our logs. We redact the body to avoid logging tokens
+ * or user content, and truncate it because some payloads are huge.
+ *
+ * Returns null for non-Discord errors so callers can spread safely.
+ */
 function discordRestMeta(err: unknown) {
   if (!(err instanceof DiscordAPIError)) return null;
   let bodySnippet: string | undefined;
@@ -69,6 +116,7 @@ function discordRestMeta(err: unknown) {
     if (body?.json) {
       bodySnippet = redact(JSON.stringify(body.json));
     } else if (body?.files?.length) {
+      // Don't log file contents, just count
       bodySnippet = `[files:${body.files.length}]`;
     } else if ((body as { body?: unknown })?.body) {
       bodySnippet = redact(String((body as { body?: unknown }).body));
@@ -76,6 +124,7 @@ function discordRestMeta(err: unknown) {
   } catch {
     bodySnippet = "[unserializable]";
   }
+  // Truncate long bodies - we just want a hint, not the full payload
   if (bodySnippet && bodySnippet.length > 120) {
     bodySnippet = `${bodySnippet.slice(0, 120)}...`;
   }
@@ -136,6 +185,8 @@ export function armWatchdog(interaction: Interaction) {
       );
     }
   }, WATCHDOG_MS);
+  // unref() prevents this timer from keeping the Node.js process alive.
+  // Without it, a pending timer could block graceful shutdown.
   if (typeof timer.unref === "function") timer.unref();
   return () => clearTimeout(timer);
 }
@@ -216,10 +267,10 @@ export function wrapCommand<I extends InstrumentedInteraction>(
       logger.info({ evt: "cmd_ok", traceId, cmd: cmdName, ms: duration }, "command ok");
     } catch (error) {
       const err = error instanceof Error ? error : new Error(String(error));
-      const errCode = (error as { code?: unknown })?.code;
+      const classified = classifyError(error);
       const errPayload = {
         name: err.name,
-        code: errCode,
+        code: "code" in classified ? (classified as { code?: unknown }).code : undefined,
         message: err.message,
         stack: err.stack,
       };
@@ -237,14 +288,26 @@ export function wrapCommand<I extends InstrumentedInteraction>(
           phase,
           lastSql,
           interaction: interactionMeta,
+          ...errorContext(classified),
           err: errPayload,
         },
-        "command error"
+        `command error: ${classified.message}`
       );
       setTag("phase", phase);
       setTag("cmd", cmdName);
       setTag("traceId", traceId);
-      captureException(err, { cmd: cmdName, phase, traceId, lastSql });
+      setTag("errorKind", classified.kind);
+
+      // Only report to Sentry if it's worth tracking (filter noise)
+      if (shouldReportToSentry(classified)) {
+        captureException(err, {
+          cmd: cmdName,
+          phase,
+          traceId,
+          lastSql,
+          errorKind: classified.kind,
+        });
+      }
 
       try {
         const { postErrorCard } = await import("./errorCard.js");
@@ -285,15 +348,21 @@ export async function withStep<T>(
   return await fn();
 }
 
-// logging everything because past me didn't
+/**
+ * Wrap a synchronous database operation with SQL tracking.
+ *
+ * Call this around any DB query so that if it fails, the error card will
+ * show the failing SQL. This is invaluable for debugging production issues.
+ *
+ * NOTE: better-sqlite3 is synchronous, so there's no await here. If you're
+ * using an async DB driver, you'd need an async variant of this function.
+ */
 export function withSql<T>(ctx: SqlTrackingCtx, sql: string, run: () => T): T {
-  // DB trace: we stash the current SQL to surface in error cards on failure.
-  // better-sqlite3 is synchronous — no await here by design:
-  // https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md
   ctx.setLastSql(sql);
   try {
     return run();
   } finally {
+    // Always clear, even on success - we don't want stale SQL in the context
     ctx.setLastSql(null);
   }
 }
@@ -353,7 +422,17 @@ export async function ensureDeferred(
   }
 }
 
-// zero or once. never twice.
+/**
+ * Reply to an interaction, handling the deferred/replied state correctly.
+ *
+ * Discord interactions have complex state: you can reply once, or defer
+ * then edit, or follow up after replying. Getting this wrong causes 40060
+ * (already acknowledged) errors. This function handles all the cases.
+ *
+ * IMPORTANT: All replies default to ephemeral (only visible to the user who
+ * triggered the command). This is intentional - public responses should be
+ * explicit, not accidental.
+ */
 export async function replyOrEdit(
   interaction: ReplyableInteraction,
   payload: InteractionReplyOptions

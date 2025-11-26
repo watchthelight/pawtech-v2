@@ -22,11 +22,17 @@ import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import crypto from "node:crypto";
 
-// Discord limits: bulkDelete only works on messages < 14 days old, max 100 at a time
-// For older messages, we delete individually (slower but works)
+/**
+ * Discord API constraints that shape this entire implementation:
+ * - bulkDelete: max 100 messages per call, ONLY works for msgs < 14 days old
+ * - Individual delete: works on any message, but rate limited to ~5/sec
+ *
+ * The 14-day limit is a hard Discord constraint (error 50034) - no workaround
+ * exists except individual deletion.
+ */
 const BULK_DELETE_LIMIT = 100;
-const MAX_ITERATIONS = 100; // Safety limit: 100 * 100 = 10000 messages max
-const INDIVIDUAL_DELETE_BATCH = 5; // Delete old messages in small batches to avoid rate limits
+const MAX_ITERATIONS = 100; // Safety valve: prevents infinite loops, caps at ~10k messages
+const INDIVIDUAL_DELETE_BATCH = 5; // Batch size for old messages - tuned to avoid rate limits
 
 export const data = new SlashCommandBuilder()
   .setName("purge")
@@ -48,8 +54,12 @@ export const data = new SlashCommandBuilder()
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
 
 /**
- * WHAT: Constant-time string comparison to prevent timing attacks.
- * WHY: Password validation must not leak information via timing.
+ * Constant-time string comparison to prevent timing attacks.
+ *
+ * The early return on length mismatch technically leaks length info, but
+ * for this use case (admin password) it's acceptable - an attacker who
+ * knows the password length still can't brute-force without the actual value.
+ * crypto.timingSafeEqual requires same-length buffers anyway.
  */
 function constantTimeCompare(a: string, b: string): boolean {
   if (a.length !== b.length) {
@@ -107,7 +117,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Validate channel type
+  // Only text and announcement channels support bulkDelete.
+  // Voice, forum, and stage channels have different message semantics.
   if (!channel || (channel.type !== ChannelType.GuildText && channel.type !== ChannelType.GuildAnnouncement)) {
     await interaction.reply({
       content: "This command can only be used in text channels.",
@@ -116,6 +127,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
+  // Type assertion is safe after the channel type check above
   const textChannel = channel as TextChannel;
 
   // Defer reply - this will take time
@@ -134,15 +146,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
     let oldMessagesDeleted = 0;
 
-    // Phase 1: Bulk delete messages < 14 days old (fast)
+    // Main deletion loop - handles both bulk (fast) and individual (slow) deletion.
+    // We fetch, partition by age, then delete appropriately.
     while (totalDeleted < targetCount && iterations < MAX_ITERATIONS) {
       iterations++;
 
-      // Calculate how many to fetch this iteration
+      // Fetch exactly what we need, up to Discord's 100-message limit.
+      // Note: fetch() returns messages in newest-first order.
       const remaining = targetCount - totalDeleted;
       const fetchLimit = Math.min(remaining, BULK_DELETE_LIMIT);
 
-      // Fetch messages
       const messages = await textChannel.messages.fetch({ limit: fetchLimit });
 
       if (messages.size === 0) {
@@ -154,13 +167,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       const recentMessages = messages.filter((msg) => msg.createdTimestamp > twoWeeksAgo);
       const oldMessages = messages.filter((msg) => msg.createdTimestamp <= twoWeeksAgo);
 
-      // Bulk delete recent messages
+      // Bulk delete recent messages - the second param (true) filters out
+      // messages that became too old between fetch and delete (race condition protection)
       if (recentMessages.size > 0) {
         const deleted = await textChannel.bulkDelete(recentMessages, true);
         totalDeleted += deleted.size;
       }
 
-      // Delete old messages individually (slower but works)
+      // Old messages (>14 days) must be deleted one-by-one. This is painful but
+      // there's no API alternative. We batch with Promise.all for some parallelism,
+      // then sleep to respect rate limits.
       if (oldMessages.size > 0 && totalDeleted < targetCount) {
         const oldArray = Array.from(oldMessages.values());
         for (let i = 0; i < oldArray.length && totalDeleted < targetCount; i += INDIVIDUAL_DELETE_BATCH) {
@@ -172,11 +188,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
                 totalDeleted++;
                 oldMessagesDeleted++;
               } catch (err) {
+                // Common failures: message already deleted, missing permissions
+                // on specific message (e.g., system messages). Don't abort the whole op.
                 logger.warn({ err, messageId: msg.id }, "[purge] failed to delete old message");
               }
             })
           );
-          // Delay between batches of old messages
+          // 1.5s delay is conservative but safe. Discord's rate limits are
+          // per-route and can vary; this keeps us well under the threshold.
           if (i + INDIVIDUAL_DELETE_BATCH < oldArray.length) {
             await new Promise((resolve) => setTimeout(resolve, 1500));
           }

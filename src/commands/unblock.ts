@@ -20,6 +20,9 @@ import { db } from "../db/db.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
 import { postAuditEmbed } from "../features/logger.js";
 
+// Multiple input options because blocked users often leave the server.
+// Priority: target (mention) > user_id (string) > username (DB lookup, not implemented)
+// All options are optional because we validate at runtime - can't enforce "at least one" in schema.
 export const data = new SlashCommandBuilder()
   .setName("unblock")
   .setDescription("Remove permanent rejection from a user")
@@ -80,16 +83,18 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     targetUserId = mentionedUser.id;
   }
 
-  // Priority 2: User ID string
+  // Priority 2: User ID string - useful when user left the server
   if (!targetUserId) {
     const userIdStr = interaction.options.getString("user_id", false);
     if (userIdStr) {
       targetUserId = userIdStr.trim();
-      // Try to fetch user from Discord API
+      // Attempt to resolve user object for DM notifications and display name.
+      // This can fail if the user deleted their account or we've never seen them.
       try {
         targetUser = await interaction.client.users.fetch(targetUserId);
       } catch (err) {
         logger.debug({ err, userId: targetUserId }, "[unblock] Could not fetch user by ID");
+        // Continue anyway - we can still unblock by ID alone
       }
     }
   }
@@ -123,7 +128,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   const reason = interaction.options.getString("reason", false) || "none provided";
 
-  // Defer reply to allow time for database operations
+  // Public reply (ephemeral: false) because unblocking is a moderation action
+  // that should be visible to the team. Deferring because DB + API calls follow.
   await interaction.deferReply({ ephemeral: false });
 
   try {
@@ -144,7 +150,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       return;
     }
 
-    // Remove permanent rejection status
+    // Clear the permanent rejection flag. Note this updates ALL applications
+    // for this user in this guild, not just the most recent one.
+    // This is intentional - a permaban applies to the user, not an application.
     const updateResult = db
       .prepare(
         `UPDATE application
@@ -192,7 +200,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       content: `✅ **${userDisplay}** has been unblocked and can reapply or participate again.\n*Reason:* ${reason}`,
     });
 
-    // Try to DM the user
+    // Best-effort DM notification. Many users have DMs disabled or block bots,
+    // so failures here are common and non-fatal.
     if (targetUser) {
       try {
         await targetUser.send({
@@ -203,11 +212,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
           "[unblock] DM notification sent to user"
         );
       } catch (err) {
+        // Common failure modes: DMs disabled, bot blocked, user deleted account
         logger.warn(
           { err, guildId, userId: targetUserId },
           "[unblock] Failed to DM user (may have DMs disabled or blocked bot)"
         );
-        // Don't notify moderator of DM failure - this is non-critical
+        // Intentionally not notifying the mod - DM failures are expected
       }
     } else {
       logger.debug(

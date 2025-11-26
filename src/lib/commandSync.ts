@@ -24,6 +24,13 @@ type CmdOption = APIApplicationCommandOption;
 
 type CommandSpec = ReturnType<typeof buildCommands>;
 
+/**
+ * Build-time assertion that the command spec hasn't drifted from expected structure.
+ * This catches refactoring mistakes before they hit production - e.g., someone
+ * renames "welcome" to "greeting" but forgets to update dependent code.
+ *
+ * Throws hard errors because a malformed spec means the bot is fundamentally broken.
+ */
 function ensureWelcomeGroup(spec: CommandSpec) {
   const gate = spec.find((cmd) => cmd.name === "gate");
   if (!gate) throw new Error("[sync] outgoing spec missing /gate command");
@@ -66,6 +73,11 @@ function summarizeGate(commands: any[]) {
   return { options, welcomeSubs };
 }
 
+/**
+ * Check if error is the classic "bot was invited without slash command scope" problem.
+ * Discord returns 50001 (Missing Access) or 403 when the bot can't register commands.
+ * This is recoverable by reinviting - not worth crashing over.
+ */
 function handleMissingScope(err: any, guildId: string) {
   if (err?.code === 50001 || err?.status === 403) {
     logger.warn(
@@ -95,12 +107,17 @@ export async function syncGuildCommandsInProcess(client: Client) {
   const spec = buildCommands();
   ensureWelcomeGroup(spec);
 
+  // Using REST directly rather than client.application.commands because
+  // we need fine-grained control over per-guild registration and error handling.
   const rest = new REST({ version: "10" }).setToken(token);
   const guilds = await client.guilds.fetch();
   logger.info(`[sync] found ${guilds.size} guilds`);
 
   for (const [gid] of guilds) {
     try {
+      // PUT bulk overwrite replaces ALL commands for this guild atomically.
+      // This is safer than incremental add/remove which can leave stale commands.
+      // Downside: if spec is malformed, all commands vanish. ensureWelcomeGroup guards this.
       const updated = (await rest.put(Routes.applicationGuildCommands(appId, gid), {
         body: spec,
       })) as any[];
@@ -123,6 +140,10 @@ export async function syncGuildCommandsInProcess(client: Client) {
         "[sync] guild command sync failed"
       );
     }
+    // Rate limit buffer. Discord's rate limit for bulk command updates is
+    // relatively generous, but hammering 50 guilds in rapid succession will
+    // hit it. 650ms is conservative; could probably go lower with proper
+    // rate limit header parsing, but this is startup-only code so who cares.
     await new Promise((resolve) => setTimeout(resolve, 650));
   }
 }

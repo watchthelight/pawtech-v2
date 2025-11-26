@@ -20,6 +20,13 @@ import { logger, redact } from "./logger.js";
 import { replyOrEdit } from "./cmdWrap.js";
 import { ctx as reqCtx } from "./reqctx.js";
 
+/**
+ * Translates raw errors into user-friendly hints. Discord error codes are cryptic;
+ * users shouldn't need to google "10062" to understand what happened.
+ *
+ * Note: These hints appear in ephemeral embeds, so they can be slightly technical
+ * since only the affected user sees them. Keep them actionable where possible.
+ */
 export function hintFor(err: unknown): string {
   const error = err as { name?: string; message?: string; code?: unknown };
   const name = typeof error?.name === "string" ? error.name : undefined;
@@ -27,23 +34,29 @@ export function hintFor(err: unknown): string {
   const code =
     typeof error?.code === "number" || typeof error?.code === "string" ? error.code : undefined;
 
-  // don't resurrect __old. seriously
+  // Historical note: __old tables were a migration artifact that caused grief.
+  // If you see this error, someone probably restored from a bad backup.
   if (name === "SqliteError" && /no such table/i.test(message)) {
     return "Schema mismatch; avoid legacy __old; use truncate-only reset.";
   }
 
+  // 10062: "Unknown interaction" - the 3-second initial response window expired.
+  // Usually means handler is too slow or forgot to defer for long operations.
   if (code === 10062) {
-    return "Interaction expired; handler didn’t defer in time.";
+    return "Interaction expired; handler didn't defer in time.";
   }
 
+  // 40060: Already replied. Typically a bug where code tries to reply twice.
   if (code === 40060) {
     return "Already acknowledged; avoid double reply.";
   }
 
+  // 50013: Missing permissions. Bot can't do something in this channel/guild.
   if (code === 50013) {
     return "Missing Discord permission in this channel.";
   }
 
+  // Custom error from our modal router when no pattern matches the customId.
   if (/Unhandled modal/i.test(message)) {
     return "Form ID didn't match any handler. If your modal id includes a session segment (v1:modal:<uuid>:p0), make sure the router regex matches it.";
   }
@@ -51,6 +64,11 @@ export function hintFor(err: unknown): string {
   return "Unexpected error. Try again or contact staff.";
 }
 
+/**
+ * SQL gets collapsed to single-line and truncated. Discord embeds have
+ * field length limits (1024 chars), but 140 is enough to see the query
+ * shape without overwhelming the error card visually.
+ */
 function truncateSql(sql: string | null | undefined): string {
   if (!sql) return "n/a";
   const cleaned = sql.replace(/\s+/g, " ").trim();
@@ -58,6 +76,10 @@ function truncateSql(sql: string | null | undefined): string {
   return `${cleaned.slice(0, 140)}...`;
 }
 
+/**
+ * Error messages get redacted (tokens, DSNs) then truncated.
+ * 200 chars is enough context without risking embed field overflow.
+ */
 function truncateMessage(message: string | undefined): string {
   if (!message) return "No message provided";
   const safe = redact(message);
@@ -65,6 +87,10 @@ function truncateMessage(message: string | undefined): string {
   return `${safe.slice(0, 200)}...`;
 }
 
+/**
+ * Union of interaction types that can receive replies. We don't handle
+ * autocomplete interactions here since they can't show embeds anyway.
+ */
 type ReplyCapableInteraction =
   | ChatInputCommandInteraction
   | ModalSubmitInteraction
@@ -132,10 +158,13 @@ export async function postErrorCard(
     .setFooter({ text: new Date().toISOString() });
 
   try {
-    // Ephemeral so only the actor sees it; avoids channel spam.
+    // Ephemeral so only the actor sees it; avoids channel spam and doesn't
+    // expose internal details (trace IDs, SQL) to other users.
     await replyOrEdit(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
   } catch (err) {
     const code = (err as { code?: unknown })?.code;
+    // 10062 = interaction already expired. This is expected in race conditions
+    // where the error card arrives too late. Warn, don't error.
     if (code === 10062) {
       logger.warn(
         { err, traceId: details.traceId, evt: "error_card_expired" },
@@ -143,6 +172,8 @@ export async function postErrorCard(
       );
       return;
     }
+    // Any other failure to deliver is worth logging at error level since
+    // it means the user got no feedback at all.
     logger.error(
       { err, traceId: details.traceId, evt: "error_card_fail" },
       "failed to deliver error card"
@@ -151,8 +182,9 @@ export async function postErrorCard(
 }
 
 /**
- * safeReply
- * WHAT: Fire-and-forget replyOrEdit; logs any failure (expired, etc) without throwing.
+ * Fire-and-forget reply wrapper. Use when you need to send a message but
+ * can't afford to let a failure propagate (cleanup paths, finally blocks, etc).
+ * All failures get logged but won't throw.
  */
 export async function safeReply(
   interaction: ReplyCapableInteraction,

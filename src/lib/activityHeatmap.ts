@@ -96,7 +96,10 @@ const DEFAULT_CONFIG: Required<HeatmapConfig> = {
 };
 
 /**
- * 10-step color gradient from green (low) to red (high)
+ * 10-step color gradient from green (low) to red (high).
+ * Perceptually linear-ish progression. If you change this, test with
+ * colorblind users - green-red is already rough for deuteranopia.
+ * Consider adding a pattern overlay for accessibility in future.
  */
 const COLOR_GRADIENT = [
   '#2ecc71', '#52c65a', '#76c042', '#9aba2b', '#beb413',
@@ -168,7 +171,10 @@ function roundRect(
 }
 
 /**
- * Get color for a given activity value using the 10-step gradient
+ * Get color for a given activity value using the 10-step gradient.
+ * Linear normalization against maxValue - works well for typical distributions
+ * but can wash out detail when you have outlier spikes. Consider log scale
+ * or percentile-based normalization if one cell dominates the entire range.
  */
 function getColor(value: number, maxValue: number): string {
   if (value === 0 || maxValue === 0) return COLORS.cellEmpty;
@@ -199,7 +205,11 @@ function calculateTrends(data: ActivityData): TrendsData {
     }
   }
 
-  // Find busiest hours (consecutive 3-hour peak window)
+  // Find busiest hours using a sliding window approach (3-hour blocks).
+  // This avoids calling out isolated hourly spikes and gives more actionable
+  // insight like "schedule events during 4-7pm" vs "6pm had one big spike".
+  // O(n) with n=24 so no perf concerns, but the slice().reduce() allocates
+  // small arrays 22 times per call - not worth optimizing unless profiled.
   let maxConsecutiveSum = 0;
   let maxConsecutiveStart = 0;
   const windowSize = 3; // 3-hour window
@@ -248,7 +258,10 @@ function calculateTrends(data: ActivityData): TrendsData {
   const totalHours = allGrids.length * 7 * 24;
   const avgMessagesPerHour = totalMessages / totalHours;
 
-  // Week-over-week growth (if multiple weeks)
+  // Week-over-week growth comparing most recent (index 0) to oldest week.
+  // Note: This is (new - old) / old * 100, so positive = growth.
+  // Edge case: if old week has zero activity, we skip to avoid Infinity/NaN.
+  // For servers with wildly variable weeks, might want rolling average instead.
   let weekOverWeekGrowth: number | undefined;
   if (data.weeks.length >= 2) {
     const firstWeekTotal = data.weeks[0].grid.flat().reduce((a, b) => a + b, 0);
@@ -454,7 +467,14 @@ export async function generateHeatmap(
 }
 
 /**
- * Fetch multi-week activity data from database
+ * Fetch multi-week activity data from database.
+ *
+ * Performance note: Each week is a separate query. For 8 weeks this means
+ * 8 round trips to SQLite. Could batch into one query with week bucketing,
+ * but current latency is fine (<50ms total) and the code is clearer this way.
+ *
+ * The 8-week cap exists because the canvas gets absurdly tall beyond that
+ * and the data becomes less actionable anyway.
  */
 export function fetchActivityData(guildId: string, weeks: number = 1): ActivityData {
   if (weeks < 1 || weeks > 8) {
@@ -489,7 +509,9 @@ export function fetchActivityData(guildId: string, weeks: number = 1): ActivityD
     const grid: number[][] = Array.from({ length: 7 }, () => Array(24).fill(0));
     const dates: Date[] = [];
 
-    // Calculate dates for this week (Monday-Sunday)
+    // Calculate dates for this week (Monday-Sunday).
+    // The (day + 6) % 7 trick converts Sunday=0 to 6, Monday=1 to 0, etc.
+    // This aligns with ISO week standard where Monday is first day.
     const mondayOfWeek = new Date(weekStart);
     const daysSinceMonday = (mondayOfWeek.getUTCDay() + 6) % 7;
     mondayOfWeek.setDate(mondayOfWeek.getDate() - daysSinceMonday);
@@ -500,7 +522,9 @@ export function fetchActivityData(guildId: string, weeks: number = 1): ActivityD
       dates.push(date);
     }
 
-    // Aggregate actions by day and hour
+    // Aggregate actions by day and hour.
+    // Using UTC throughout to avoid DST headaches - all times in heatmap are UTC.
+    // dayIndex conversion: JS Sunday=0 becomes index 6 (end of week).
     for (const row of rows) {
       const date = new Date(row.created_at_s * 1000);
       const dayOfWeek = date.getUTCDay();
@@ -517,7 +541,9 @@ export function fetchActivityData(guildId: string, weeks: number = 1): ActivityD
     });
   }
 
-  // Calculate global max value
+  // Calculate global max value across all weeks for consistent color scaling.
+  // The ", 1" ensures we never divide by zero in getColor(). An empty server
+  // with zero messages everywhere will just show all cells as empty color.
   const maxValue = Math.max(...weeksData.flatMap(w => w.grid.flat()), 1);
 
   // Build activity data

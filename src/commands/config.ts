@@ -31,6 +31,9 @@ export const data = new SlashCommandBuilder()
     group
       .setName("set")
       .setDescription("Set configuration values")
+      // Discord doesn't support variadic role options (arbitrary number of roles).
+      // The workaround is role1-role5 slots. If you need more, add more options.
+      // Roles are stored as a comma-separated string in the DB for flexibility.
       .addSubcommand((sc) =>
         sc
           .setName("mod_roles")
@@ -207,11 +210,13 @@ async function executeSetModRoles(ctx: CommandContext<ChatInputCommandInteractio
     "[config] mod roles updated"
   );
 
-  // Retrofit modmail parent permissions after mod roles change
-  // WHAT: Updates parent channel permissions for existing modmail threads
-  // WHY: New mod roles need SendMessagesInThreads on parent channels to speak in threads
-  // HOW: Discovers all parents hosting modmail threads and grants permissions
-  // DOCS: See retrofitModmailParentsForGuild in src/features/modmail.ts
+  // IMPORTANT SIDE EFFECT: When mod roles change, we need to update permissions on
+  // channels that host modmail threads. Discord threads inherit *some* permissions
+  // from their parent channel, but SendMessagesInThreads specifically must be granted
+  // on the parent. If we skip this, newly-added mod roles can't reply to modmail.
+  //
+  // This is a best-effort operation - we don't fail the whole command if it errors.
+  // The mod can manually fix permissions if needed.
   ctx.step("retrofit_modmail_perms");
   try {
     await retrofitModmailParentsForGuild(interaction.guild!);
@@ -224,7 +229,6 @@ async function executeSetModRoles(ctx: CommandContext<ChatInputCommandInteractio
       { err, guildId: interaction.guildId },
       "[config] failed to retrofit modmail permissions"
     );
-    // Don't fail the command if retrofit fails; it's a nice-to-have
   }
 
   ctx.step("reply");
@@ -301,15 +305,10 @@ async function executeSetModmailLogChannel(ctx: CommandContext<ChatInputCommandI
 
 async function executeSetReviewRoles(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
-   * executeSetReviewRoles
-   * WHAT: Sets the role display mode for review cards.
-   * WHY: Controls clutter in review cards by hiding or filtering roles.
-   * MODES:
-   *  - none: Hide all roles (minimal card)
-   *  - level_only: Show only highest "level" role (e.g., "Level 2", "Level 3")
-   *  - all: Show all roles (current behavior, can be cluttered)
-   * PARAMS: ctx — command context; extracts mode option from interaction.
-   * RETURNS: Promise<void> after confirming update.
+   * Controls role display in review cards. Some servers have 50+ roles and the
+   * card becomes unreadable. "level_only" is a compromise - shows just the
+   * highest progression role (Level 1, Level 2, etc.) which is usually the
+   * most relevant for review decisions.
    */
   const { interaction } = ctx;
   await ensureDeferred(interaction);
@@ -317,7 +316,9 @@ async function executeSetReviewRoles(ctx: CommandContext<ChatInputCommandInterac
   ctx.step("get_mode");
   const mode = interaction.options.getString("mode", true);
 
-  // Validate mode
+  // This validation is technically redundant since Discord's addChoices() already
+  // constrains the input, but it guards against future refactors that might
+  // accidentally remove the choices constraint.
   if (!["none", "level_only", "all"].includes(mode)) {
     await replyOrEdit(interaction, { content: "Invalid mode. Choose: none, level_only, or all." });
     return;
@@ -376,11 +377,9 @@ async function executeSetLogging(ctx: CommandContext<ChatInputCommandInteraction
 
 async function executeGetLogging(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
-   * executeGetLogging
-   * WHAT: Shows current logging channel configuration with fallback info.
-   * WHY: Allows staff to verify where actions are being logged.
-   * PARAMS: ctx — command context.
-   * RETURNS: Promise<void> after displaying logging configuration.
+   * Shows current logging config with the full resolution chain. This is helpful
+   * for debugging "why isn't logging working?" - the answer is usually that no
+   * channel is configured and it's falling back to console JSON.
    */
   const { interaction } = ctx;
   await ensureDeferred(interaction);
@@ -509,11 +508,9 @@ async function executeSetFlagsThreshold(ctx: CommandContext<ChatInputCommandInte
 
 async function executeGetFlags(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
-   * executeGetFlags
-   * WHAT: Shows current flags configuration with fallback info.
-   * WHY: Allows staff to verify flags channel and threshold settings.
-   * PARAMS: ctx — command context.
-   * RETURNS: Promise<void> after displaying flags configuration.
+   * Shows flag config with health checks. We proactively verify the channel exists
+   * and the bot has permissions, because a misconfigured flag channel fails silently
+   * (the flagger just logs a warning and continues). Better to surface issues here.
    */
   const { interaction } = ctx;
   await ensureDeferred(interaction);
@@ -523,11 +520,12 @@ async function executeGetFlags(ctx: CommandContext<ChatInputCommandInteraction>)
 
   const lines = ["**Silent-Since-Join Flagger Configuration (PR8)**", ""];
 
-  // Channel configuration
   if (config.channelId) {
+    // Verify the channel still exists - it might have been deleted since config was set.
     const channel = await interaction.guild!.channels.fetch(config.channelId).catch(() => null);
     if (channel) {
-      // Channel exists, verify permissions
+      // fetchMe() gets the bot's own member object, which we need for permission checks.
+      // This is a common pattern when you need to check "can the bot do X in channel Y".
       const botMember = await interaction.guild!.members.fetchMe();
       const permissions = channel.permissionsFor(botMember);
       const hasPerms = permissions?.has("SendMessages") && permissions?.has("EmbedLinks");
@@ -671,14 +669,13 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
 
 async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
-   * executeSetDadMode
-   * WHAT: Toggle Dad Mode (playful "Hi <name>, I'm dad" responses).
-   * WHY: Provides lighthearted engagement; configurable per-guild with adjustable odds.
-   * PARAMS: ctx — command context; extracts state and optional chance.
-   * RETURNS: Promise<void> after confirming update.
-   * DOCS:
-   *  - Dad Mode responds to messages like "I'm tired" with "Hi tired, I'm dad"
-   *  - Odds default to 1 in 1000 (adjustable 2-100000)
+   * Dad Mode: responds to "I'm tired" with "Hi tired, I'm dad!" (or similar).
+   * The odds setting controls how often it triggers - 1 in N messages that match.
+   * Default is 1 in 1000, which is rare enough to be surprising but not annoying.
+   *
+   * The feature exists because community servers need some levity. It's entirely
+   * opt-in and the odds can be cranked up to 100000 (basically never) if a server
+   * wants it dormant but available.
    */
   const { interaction } = ctx;
   await ensureDeferred(interaction);
@@ -688,7 +685,6 @@ async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction
 
   ctx.step("update_config");
   const existingCfg = getConfig(interaction.guildId!);
-  // Use mutable local state for display logic
   let dadmodeEnabled = existingCfg?.dadmode_enabled ?? false;
   let dadmodeOdds = existingCfg?.dadmode_odds ?? 1000;
 
@@ -698,12 +694,12 @@ async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction
   } else {
     dadmodeEnabled = true;
     if (chance !== null) {
-      // Validate and clamp (redundant with Discord's validation, but safe)
+      // Clamp to valid range. Discord's min/max should catch this, but defense in depth.
       const validChance = Math.min(100000, Math.max(2, chance));
       dadmodeOdds = validChance;
       upsertConfig(interaction.guildId!, { dadmode_enabled: true, dadmode_odds: validChance });
     } else {
-      // Use existing or default to 1000
+      // Preserve existing odds if just toggling on, or default to 1000 for fresh configs.
       if (!dadmodeOdds) {
         dadmodeOdds = 1000;
       }

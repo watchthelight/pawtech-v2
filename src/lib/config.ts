@@ -59,9 +59,16 @@ export type GuildConfig = {
   };
 };
 
+// Simple in-memory cache with TTL. Map is fine here - we're not dealing with
+// thousands of guilds, and the cache naturally clears on bot restart.
+// If memory becomes an issue, switch to LRU with bounded size.
 const configCache = new Map<string, { config: GuildConfig; timestamp: number }>();
-const CACHE_TTL_MS = 5 * 60 * 1000;
+const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes - short enough to pick up config changes reasonably fast
 
+// These flags implement a poor man's migration system. Each ensure*Column function
+// runs ALTER TABLE on first call, then sets its flag to skip subsequent calls.
+// This approach is fragile (restart = re-check) but works for additive migrations.
+// A proper migration runner would be cleaner but this is fine for small schema drift.
 let welcomeTemplateEnsured = false;
 let welcomeChannelsEnsured = false;
 let unverifiedChannelEnsured = false;
@@ -261,7 +268,8 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
   ensureModRolesColumns();
   ensureDadModeColumns();
   ensureListopenPublicOutputColumn();
-  // Read presence of row to decide INSERT vs UPDATE
+  // Manual upsert pattern because SQLite's INSERT OR REPLACE would nuke columns
+  // we didn't specify. This way partial updates actually work as expected.
   const existing = db.prepare("SELECT * FROM guild_config WHERE guild_id = ?").get(guildId);
   if (!existing) {
     // INSERT with COALESCE defaults; schema columns documented near GuildConfig type
@@ -302,13 +310,14 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
   } else {
     const keys = Object.keys(partial) as Array<keyof typeof partial>;
     if (keys.length === 0) return;
+    // Dynamic SQL construction here. The column names come from our own code (Object.keys
+    // of a typed partial), not user input, so this is safe. Values are parameterized.
     const sets = keys.map((k) => `${k} = ?`).join(", ") + ", updated_at = datetime('now')";
-    // Convert boolean values to integers for SQLite (true -> 1, false -> 0)
+    // SQLite doesn't have boolean type - store as 0/1 integers.
     const vals = keys.map((k) => {
       const val = partial[k];
       return typeof val === "boolean" ? (val ? 1 : 0) : val;
     });
-    // UPDATE path with dynamic SET list; safe values substituted via prepare(...).run(...)
     db.prepare(`UPDATE guild_config SET ${sets} WHERE guild_id = ?`).run(...vals, guildId);
   }
   invalidateCache(guildId);
@@ -387,12 +396,15 @@ export function isReviewer(guildId: string, member: GuildMember | null): boolean
   const reviewerRoleId = row?.reviewer_role_id ?? null;
   const reviewChannelId = row?.review_channel_id ?? null;
 
-  // If a reviewer role is configured, use that (old behavior)
+  // Legacy path: explicit reviewer role takes precedence if configured.
+  // New path: if no role set, we infer reviewer status from channel visibility.
+  // This is more flexible but requires careful channel permission setup.
   if (reviewerRoleId) {
     return member.roles.cache.has(reviewerRoleId);
   }
 
-  // Otherwise: treat users who can VIEW the review channel as staff
+  // Channel-based reviewer detection: if you can see the review channel, you're staff.
+  // This works well when review channel is locked to @Staff role - no extra config needed.
   if (!reviewChannelId) return false;
 
   const channel = member.guild.channels.cache.get(reviewChannelId);
@@ -455,8 +467,9 @@ export function canRunAllCommands(member: GuildMember | null, guildId: string): 
     return false;
   }
 
-  // Parse CSV and check if member has any of the configured roles
-  // DOCS: https://discord.js.org/#/docs/discord.js/main/class/GuildMemberRoleManager
+  // mod_role_ids is stored as comma-separated string in DB. Not ideal for queries
+  // but simple and works fine for the typical 1-3 mod roles per server.
+  // If you're adding 50 mod roles, maybe reconsider your role hierarchy.
   const modRoleIdList = modRoleIds
     .split(",")
     .map((id) => id.trim())
@@ -505,13 +518,15 @@ export function requireStaff(interaction: ChatInputCommandInteraction): boolean 
   const member = interaction.member as GuildMember | null;
   const guildId = interaction.guildId!;
 
-  // Try canRunAllCommands first (owner + mod roles)
+  // Permission hierarchy: owner > mod roles > ManageGuild > reviewer role.
+  // This layered check ensures bot owners always work, configured mod roles
+  // work without needing server permissions, and falls back gracefully.
   const canRun = canRunAllCommands(member, guildId);
   if (canRun) {
     return true;
   }
 
-  // Fall back to hasStaffPermissions (ManageGuild or reviewer role)
+  // Fall back to Discord's native permission (ManageGuild) or reviewer role
   const ok = hasStaffPermissions(member, guildId);
   if (!ok) {
     // Ephemeral reply avoids leaking permission info publicly.

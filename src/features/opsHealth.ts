@@ -112,9 +112,12 @@ function getWsPing(): number {
 /**
  * WHAT: Run PRAGMA quick_check on database.
  * WHY: Fast integrity check (seconds vs minutes for full check).
+ * NOTE: quick_check only verifies B-tree structure, not foreign keys or
+ * indexes. For full validation, use PRAGMA integrity_check (but it's SLOW).
  */
 function checkDbIntegrity(): DbIntegrity {
   try {
+    // pluck() returns just the value, not {quick_check: 'ok'}
     const result = db.prepare("PRAGMA quick_check").pluck().get() as string;
     const ok = result === "ok";
 
@@ -139,7 +142,8 @@ function checkDbIntegrity(): DbIntegrity {
  */
 function computeQueueMetrics(guildId: string): QueueMetrics {
   try {
-    // Backlog: count of pending applications
+    // Backlog = apps waiting for any mod action. High backlog indicates either
+    // understaffing or a surge in applications (e.g., viral moment).
     const backlog = db
       .prepare(
         `
@@ -182,7 +186,8 @@ function computeQueueMetrics(guildId: string): QueueMetrics {
       }
     }
 
-    // Compute percentiles (nearest-rank method)
+    // Compute percentiles using nearest-rank. P95 is the key SLO metric -
+    // if 95% of responses are under threshold, we're healthy.
     let p50Ms = 0;
     let p95Ms = 0;
     if (responseTimes.length > 0) {
@@ -196,12 +201,13 @@ function computeQueueMetrics(guildId: string): QueueMetrics {
     // Throughput: apps processed per hour (last 24h)
     const throughputPerHour = reviewActions.length > 0 ? reviewActions.length / 24 : 0;
 
-    // Timeseries: simplified hourly buckets for last 24h
+    // Timeseries for charting. This is a STUB - it just repeats current values
+    // across 24 hours. A proper implementation would store hourly snapshots in
+    // a metrics_history table. Good enough for MVP dashboard.
     const timeseries: Array<{ ts: number; backlog: number; p95: number }> = [];
     const now = Math.floor(Date.now() / 1000);
     for (let i = 0; i < 24; i++) {
       const hourStart = now - (24 - i) * 3600;
-      // Simplified: use current backlog and p95 for all hours (real impl would query historical data)
       timeseries.push({
         ts: hourStart,
         backlog: backlog.count,
@@ -337,14 +343,17 @@ export async function runCheck(guildId: string, client: Client): Promise<HealthC
   const summary = await getSummary(guildId);
   const triggeredAlerts: HealthAlert[] = [];
 
-  // Load thresholds from env (with defaults)
+  // Threshold defaults are conservative. 200 backlog is a problem for most
+  // communities; 500ms WS ping means Discord connection is degraded.
+  // Override via env vars for guilds with different SLOs.
   const thresholds = {
     queueBacklog: parseInt(process.env.QUEUE_BACKLOG_ALERT || "200", 10),
     p95ResponseMs: parseInt(process.env.P95_RESPONSE_MS_ALERT || "2000", 10),
     wsPingMs: parseInt(process.env.WS_PING_MS_ALERT || "500", 10),
   };
 
-  // Check: Queue backlog
+  // Check: Queue backlog. Severity escalates at 2x threshold because that
+  // suggests sustained growth, not just a temporary spike.
   if (summary.queue.backlog >= thresholds.queueBacklog) {
     const alert = upsertAlert(
       "queue_backlog",
@@ -425,10 +434,10 @@ export async function runCheck(guildId: string, client: Client): Promise<HealthC
     }
   }
 
-  // Check: Orphaned modmail tickets
-  // WHAT: Detect tickets in 'open' status but missing from open_modmail guard table
-  // WHY: These tickets won't receive routed messages and block ticket slots
-  // HOW: Compare modmail_ticket.status='open' with open_modmail.thread_id
+  // Check: Orphaned modmail tickets. This is a data integrity check - tickets
+  // can become orphaned if the bot crashes mid-create or if someone manually
+  // deletes from open_modmail. Symptoms: user can't open new ticket, existing
+  // ticket stops receiving messages.
   try {
     const orphanedTickets = db
       .prepare(
@@ -493,7 +502,9 @@ function upsertAlert(
   const now = Math.floor(Date.now() / 1000);
 
   try {
-    // Check if alert exists (not resolved)
+    // Check for existing unresolved alert of same type. We only create one
+    // active alert per type - subsequent occurrences just bump last_seen_at.
+    // This prevents alert spam while still tracking persistence.
     const existing = db
       .prepare(
         `
@@ -509,7 +520,8 @@ function upsertAlert(
       | undefined;
 
     if (existing) {
-      // Update last_seen_at
+      // Alert still firing - update last_seen_at but don't re-notify.
+      // Gap between triggered_at and last_seen_at shows duration of issue.
       db.prepare(
         `
         UPDATE health_alerts
@@ -519,7 +531,7 @@ function upsertAlert(
       ).run(now, JSON.stringify(meta), existing.id);
 
       logger.debug({ alertId: existing.id, alertType }, "[opshealth] alert updated (last_seen_at)");
-      return null; // Not a new alert
+      return null; // Not a new alert, no notification
     }
 
     // Create new alert
@@ -560,11 +572,14 @@ async function notifyAlert(guildId: string, alert: HealthAlert, client: Client):
   try {
     const guild = client.guilds.cache.get(guildId);
     if (!guild) {
+      // Guild not in cache = bot not in that guild. Shouldn't happen in prod
+      // but can occur if health check runs before guild cache is populated.
       logger.warn({ guildId }, "[opshealth] guild not found for alert notification");
       return;
     }
 
-    // Log to action_log + pretty embed
+    // Log to both action_log table AND send pretty embed to mod channel.
+    // This creates an audit trail AND immediate visibility.
     await logActionPretty(guild, {
       actorId: client.user?.id || "system",
       action: "ops_health_alert",
@@ -575,13 +590,14 @@ async function notifyAlert(guildId: string, alert: HealthAlert, client: Client):
       },
     });
 
-    // Optional: send to HEALTH_ALERT_WEBHOOK if configured
+    // Webhook support for external alerting (PagerDuty, Slack, etc.)
     const webhookUrl = process.env.HEALTH_ALERT_WEBHOOK;
     if (webhookUrl) {
-      // TODO: implement webhook notification (future enhancement)
+      // TODO: POST to webhook with alert payload. For now, Discord is enough.
       logger.debug({ alertId: alert.id }, "[opshealth] webhook notification skipped (not implemented)");
     }
   } catch (err: any) {
+    // Don't throw - notification failure shouldn't break health checks
     logger.error({ err: err.message, alertId: alert.id }, "[opshealth] failed to notify alert");
   }
 }

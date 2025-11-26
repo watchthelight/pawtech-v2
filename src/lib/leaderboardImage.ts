@@ -5,6 +5,8 @@
  * Clean, minimal, Discord-native aesthetic.
  */
 
+// node-canvas: Native canvas bindings for server-side rendering.
+// Requires system libs (cairo, pango) - see README for install instructions.
 import { createCanvas, CanvasRenderingContext2D } from "canvas";
 
 // ============================================================================
@@ -32,18 +34,25 @@ export interface ModStats {
 // Configuration
 // ============================================================================
 
+/**
+ * Rendering config. All values are in "base" units; actual pixels = base * scale.
+ * Scale of 3 gives us a 1380px wide image for crisp rendering on Retina/high-DPI
+ * displays when Discord downscales it.
+ */
 const CONFIG = {
-  scale: 3,
+  scale: 3, // 3x rendering for high-DPI. Discord will downscale, but it stays sharp.
   baseWidth: 460,
   baseRowHeight: 36,
   baseHeaderHeight: 32,
   basePaddingX: 14,
-  basePaddingY: 4, // Minimal padding to blend with embed
+  basePaddingY: 4, // Minimal padding to blend seamlessly with Discord embed chrome
   baseFontSize: 14,
   baseHeaderFontSize: 11,
   baseIconSize: 14,
   columnGap: 6,
 
+  // Column definitions. "icon: true" means header renders an icon instead of text.
+  // Widths are tuned for typical Discord display names (15-20 chars).
   columns: [
     { key: "rank", header: "#", width: 32, align: "center" as const },
     { key: "name", header: "Moderator", width: 155, align: "left" as const },
@@ -55,23 +64,30 @@ const CONFIG = {
   ],
 };
 
+/**
+ * Color palette matched to Discord's dark theme. If Discord changes their
+ * embed background color, update `background` here.
+ * Green/red/yellow match Discord's semantic colors for success/error/warning.
+ */
 const COLORS = {
-  background: "#131416", // Discord embed background
+  background: "#131416", // Discord embed background - must match exactly for seamless look
   text: "#FFFFFF",
-  textMuted: "#B9BBBE",
-  textDimmed: "rgba(255, 255, 255, 0.35)",
-  green: "#57F287",
-  red: "#ED4245",
-  yellow: "#FEE75C",
-  divider: "rgba(255, 255, 255, 0.06)", // Very subtle dividers
+  textMuted: "#B9BBBE", // Secondary text, like timestamps
+  textDimmed: "rgba(255, 255, 255, 0.35)", // Zero values get this to de-emphasize
+  green: "#57F287", // Discord's "positive" green
+  red: "#ED4245", // Discord's "danger" red
+  yellow: "#FEE75C", // Discord's warning yellow
+  divider: "rgba(255, 255, 255, 0.06)", // Barely visible row separators
   gold: "#FFD700",
   silver: "#C0C0C0",
   bronze: "#CD7F32",
 };
 
 // ============================================================================
-// Icon Drawing Functions (simple outlines, no backgrounds)
+// Icon Drawing Functions
 // ============================================================================
+// Hand-drawn vector icons instead of loading image assets. Keeps deployment simple
+// (no font files or image dependencies) and scales perfectly at any resolution.
 
 function drawCheckmark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
   ctx.strokeStyle = COLORS.green;
@@ -167,6 +183,10 @@ function drawHeaderIcon(ctx: CanvasRenderingContext2D, type: string, x: number, 
 // Helper Functions
 // ============================================================================
 
+/**
+ * Human-friendly time formatting. Prefers compact output (e.g., "5m" not "5 minutes")
+ * since column space is tight. Rounds to nearest minute for anything over 60s.
+ */
 function formatTime(seconds: number): string {
   if (seconds === 0) return "0s";
   if (seconds < 60) return `${seconds}s`;
@@ -183,19 +203,29 @@ function getRankColor(rank: number): string {
   return COLORS.textMuted;
 }
 
+/**
+ * Removes emojis that node-canvas can't render. Canvas doesn't have emoji fonts
+ * by default, so they'd show as tofu boxes. Multiple regex passes cover different
+ * Unicode blocks where emojis live. ZWJ (200D) removed to prevent orphaned joiners.
+ */
 function stripEmoji(text: string): string {
   return text
-    .replace(/[\u{1F300}-\u{1F9FF}]/gu, "")
-    .replace(/[\u{2600}-\u{26FF}]/gu, "")
-    .replace(/[\u{2700}-\u{27BF}]/gu, "")
-    .replace(/[\u{FE00}-\u{FE0F}]/gu, "")
-    .replace(/[\u{1F000}-\u{1F02F}]/gu, "")
-    .replace(/[\u{1F0A0}-\u{1F0FF}]/gu, "")
-    .replace(/[\u{200D}]/gu, "")
+    .replace(/[\u{1F300}-\u{1F9FF}]/gu, "") // Misc symbols, emoticons
+    .replace(/[\u{2600}-\u{26FF}]/gu, "") // Misc symbols
+    .replace(/[\u{2700}-\u{27BF}]/gu, "") // Dingbats
+    .replace(/[\u{FE00}-\u{FE0F}]/gu, "") // Variation selectors
+    .replace(/[\u{1F000}-\u{1F02F}]/gu, "") // Mahjong, dominos
+    .replace(/[\u{1F0A0}-\u{1F0FF}]/gu, "") // Playing cards
+    .replace(/[\u{200D}]/gu, "") // Zero-width joiner
     .replace(/\s+/g, " ")
     .trim();
 }
 
+/**
+ * Truncates text to fit within pixel width, using ellipsis if needed.
+ * Note: This is O(n) per character removed - fine for short names, but don't
+ * use on long strings. Binary search would be faster but overkill here.
+ */
 function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   let truncated = stripEmoji(text);
   while (ctx.measureText(truncated).width > maxWidth && truncated.length > 3) {
@@ -207,6 +237,15 @@ function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: num
   return truncated || "Unknown";
 }
 
+/**
+ * Renders text with a linear gradient fill. Used for Nitro users who have
+ * gradient name colors. The gradient is calculated to span exactly the text width,
+ * so short names still show the full color range.
+ *
+ * Note: Currently only handles horizontal gradients properly. Angle support
+ * is partial - vertical components are ignored. Good enough for typical Nitro
+ * gradients which are usually horizontal.
+ */
 function drawGradientText(
   ctx: CanvasRenderingContext2D,
   text: string,
@@ -240,6 +279,14 @@ function drawGradientText(
 // Main Generator
 // ============================================================================
 
+/**
+ * Generates the complete leaderboard as a PNG buffer. Image height scales
+ * dynamically with row count. Memory usage is roughly 4 bytes per pixel
+ * (RGBA), so a 10-row board at 3x scale is about 1380x500x4 = ~2.7MB.
+ *
+ * Performance: Rendering is CPU-bound (canvas operations). For large boards
+ * (30+ rows), consider caching or generating off the hot path.
+ */
 export async function generateLeaderboardImage(stats: ModStats[]): Promise<Buffer> {
   const s = CONFIG.scale;
 
@@ -330,7 +377,8 @@ export async function generateLeaderboardImage(stats: ModStats[]): Promise<Buffe
     ctx.textAlign = "center";
     ctx.fillText(`${stat.rank}.`, colPositions[0] + (CONFIG.columns[0].width * s) / 2, rowCenterY);
 
-    // Name column (with role color or gradient)
+    // Name column - priority: Nitro gradient > role color > default white.
+    // Black (#000000) role color is treated as "no color" since it's invisible on dark bg.
     ctx.font = `500 ${fontSize}px Arial, "Segoe UI", sans-serif`;
     ctx.textAlign = "left";
     const maxNameWidth = CONFIG.columns[1].width * s - 8;
@@ -371,11 +419,12 @@ export async function generateLeaderboardImage(stats: ModStats[]): Promise<Buffe
     ctx.fillText(formatTime(stat.avgTimeSeconds), colPositions[6] + CONFIG.columns[6].width * s, rowCenterY);
   }
 
-  // No rounded corners - square edges blend with embed
+  // Square corners intentional - Discord embed already has rounded corners,
+  // so adding our own would create a double-rounded look.
   return canvas.toBuffer("image/png");
 }
 
-// Alias for backwards compatibility
+// Legacy alias - some older code still calls this name
 export async function generateStatsImage(stats: ModStats[]): Promise<Buffer> {
   return generateLeaderboardImage(stats);
 }

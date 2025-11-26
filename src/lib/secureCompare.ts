@@ -35,16 +35,23 @@ import { timingSafeEqual, createHash } from "node:crypto";
  * - Hash-first ensures equal-length buffers for timingSafeEqual
  */
 export function secureCompare(a: string, b: string): boolean {
-  // Hash both strings to ensure equal-length buffers
-  // timingSafeEqual requires equal-length inputs
+  // Hash both strings to ensure equal-length buffers.
+  // timingSafeEqual requires equal-length inputs, and we can't know string
+  // lengths in advance without leaking timing info. Hashing normalizes this.
+  //
+  // Why SHA-256? Fast enough for this use, produces fixed 64-char hex output.
+  // We don't need collision resistance here, just length normalization.
   const ah = Buffer.from(createHash("sha256").update(a, "utf8").digest("hex"), "utf8");
   const bh = Buffer.from(createHash("sha256").update(b, "utf8").digest("hex"), "utf8");
 
-  // Length check first (constant time if equal)
+  // This check is technically redundant since SHA-256 always produces 64 chars,
+  // but it's cheap insurance against future refactors breaking the assumption.
   if (ah.length !== bh.length) {
     return false;
   }
 
-  // Constant-time comparison
+  // The actual constant-time comparison. Each byte is compared regardless of
+  // whether earlier bytes matched, preventing attackers from using response
+  // timing to progressively guess the correct value.
   return timingSafeEqual(ah, bh);
 }

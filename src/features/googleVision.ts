@@ -32,9 +32,17 @@ type VisionAPIResponse = {
   }>;
 };
 
+// Feature flag - disabled if no API key configured. This is intentional:
+// running without Vision API just means we skip this detection layer.
 const GOOGLE_VISION_ENABLED = process.env.GOOGLE_VISION_API_KEY ? true : false;
 
-// Convert likelihood enum to probability score
+/**
+ * Maps Google's categorical likelihood enum to numeric probability.
+ * These mappings are somewhat arbitrary - Google doesn't publish exact percentages.
+ * We use conservative estimates that err toward flagging suspicious content.
+ *
+ * POSSIBLE at 0.5 is the "maybe" threshold - warrants human review.
+ */
 function likelihoodToScore(likelihood: SafeSearchLikelihood): number {
   switch (likelihood) {
     case "VERY_UNLIKELY": return 0.0;
@@ -42,12 +50,23 @@ function likelihoodToScore(likelihood: SafeSearchLikelihood): number {
     case "POSSIBLE": return 0.5;
     case "LIKELY": return 0.8;
     case "VERY_LIKELY": return 1.0;
-    default: return 0.0;
+    default: return 0.0;  // UNKNOWN treated as safe - fail open
   }
 }
 
+// Singleton pattern for client - avoid re-initializing on every request.
+// Note: We don't actually use the SDK anymore (see below), but keeping the
+// lazy-load pattern in case we switch back to SDK auth later.
 let visionClient: any = null;
 
+/**
+ * Legacy SDK loader - kept for potential future use.
+ *
+ * We switched to direct HTTP API because:
+ * 1. @google-cloud/vision requires service account JSON, not API keys
+ * 2. API key auth via REST is simpler for this single-endpoint use case
+ * 3. Avoids bundling the entire Google Cloud SDK just for SafeSearch
+ */
 async function loadVisionClient() {
   if (!GOOGLE_VISION_ENABLED) {
     return null;
@@ -60,15 +79,13 @@ async function loadVisionClient() {
   try {
     const vision = await import("@google-cloud/vision");
 
-    // Use API key authentication (simpler than service account for this use case)
     const apiKey = process.env.GOOGLE_VISION_API_KEY;
     if (!apiKey) {
       logger.warn("[googleVision] GOOGLE_VISION_API_KEY not set, Vision API disabled");
       return null;
     }
 
-    // @google-cloud/vision requires service account credentials, not API key
-    // We'll use direct HTTP API instead for simplicity with API key
+    // Marker object - actual calls use HTTP API, not SDK
     visionClient = { useHttpApi: true };
     return visionClient;
   } catch (err) {
@@ -95,15 +112,20 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
       return null;
     }
 
-    // Use Google Vision REST API directly with API key
+    // Direct REST API call - simpler than SDK for API key auth.
+    // Warning: API key is in URL which appears in logs. In production,
+    // consider masking or using request headers if supported.
     const endpoint = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
 
+    // We request both SAFE_SEARCH_DETECTION and LABEL_DETECTION.
+    // This is a pricing optimization: SafeSearch is FREE when bundled with
+    // any other detection type. Label detection is the cheapest add-on.
     const requestBody = {
       requests: [
         {
           image: {
             source: {
-              imageUri: imageUrl
+              imageUri: imageUrl  // Must be publicly accessible URL
             }
           },
           features: [
@@ -113,7 +135,7 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
             },
             {
               type: "LABEL_DETECTION",
-              maxResults: 1
+              maxResults: 1  // We don't use labels, just need it for free SafeSearch
             }
           ]
         }
@@ -177,18 +199,21 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
 }
 
 /**
- * Calculate combined NSFW score from Vision API results
- * Prioritizes adult content, but also considers racy (suggestive) content
+ * Calculate combined NSFW score from Vision API results.
+ *
+ * Design decision: We use max() instead of weighted average because a single
+ * strong signal (e.g., adult=0.9) should trigger review regardless of other
+ * scores. Averaging would dilute clear violations.
+ *
+ * Weight rationale:
+ * - Adult (1.0x): explicit content, always flag
+ * - Racy (0.6x): suggestive but not explicit, might be fine for furry server
+ * - Violence (0.3x): less relevant here, but gore avatars are still a concern
  *
  * @param result - VisionResult from detectNsfwVision
- * @returns Combined score 0-1
+ * @returns Combined score 0-1, where >0.5 typically warrants review
  */
 export function calculateVisionScore(result: VisionResult): number {
-  // Prioritize adult > racy > violence
-  // Adult content gets full weight
-  // Racy content gets 60% weight (suggestive but not explicit)
-  // Violence gets 30% weight (less relevant for NSFW in this context)
-
   const adultWeight = result.adultScore;
   const racyWeight = result.racyScore * 0.6;
   const violenceWeight = result.violenceScore * 0.3;

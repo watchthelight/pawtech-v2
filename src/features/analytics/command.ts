@@ -51,6 +51,9 @@ export function parseWindow(
   from?: number,
   to?: number
 ): { from: number; to: number } {
+  // Default window: last 7 days ending now. This is the most common use case for
+  // "how are we doing this week?" and keeps the query fast by limiting scope.
+  // Note: Both bounds are inclusive, so a 7-day window actually spans 7*86400+1 seconds.
   const resolvedTo = to !== undefined ? to : now;
   const resolvedFrom = from !== undefined ? from : resolvedTo - 7 * 86400;
 
@@ -78,6 +81,9 @@ export function isOwner(userId: string): boolean {
  * @returns Formatted string
  */
 function formatDuration(seconds: number): string {
+  // Human-friendly duration formatting. We intentionally drop precision at each tier
+  // because "2h 15m" is more useful than "2h 15m 42s" for analytics at a glance.
+  // Negative durations (shouldn't happen, but data bugs exist) will show as "0s".
   if (seconds < 60) return `${seconds}s`;
   if (seconds < 3600) {
     const mins = Math.floor(seconds / 60);
@@ -163,6 +169,10 @@ export async function executeAnalyticsCommand(
     });
 
     // Query analytics data in parallel
+    // These are all synchronous SQLite calls wrapped in Promise.resolve for the Promise.all pattern.
+    // We run them "in parallel" for consistency and future-proofing if any become async (e.g., remote DB).
+    // In practice, better-sqlite3 is synchronous so they execute sequentially anyway.
+    // The queueAge query is guild-scoped only because cross-guild queue stats don't make sense.
     const [actionCounts, topReasons, volumeSeries, leadTimeStats, queueAge] = await Promise.all([
       Promise.resolve(getActionCountsByMod({ guildId: scope, from: window.from, to: window.to })),
       Promise.resolve(
@@ -240,8 +250,8 @@ export async function executeAnalyticsCommand(
         .join("\n");
 
       embed.addFields({
-        name: "👥 Top Moderators",
-        value: modLines.slice(0, 1024), // Discord field limit
+        name: "Top Moderators",
+        value: modLines.slice(0, 1024), // Discord field limit (1024 chars per field value)
         inline: false,
       });
     }
@@ -385,6 +395,11 @@ export async function executeAnalyticsExportCommand(
     });
 
     // Stream CSV to buffer
+    // We use a PassThrough stream here instead of buffering in memory because:
+    // 1. It lets streamReviewActionsCSV write incrementally (back-pressure friendly)
+    // 2. Future optimization: could stream directly to Discord if they ever support it
+    // Current limitation: We still buffer the full CSV before sending, so very large
+    // exports (100k+ rows) could cause memory pressure. Consider pagination for those.
     const chunks: Buffer[] = [];
     const stream = new PassThrough();
 

@@ -1,3 +1,11 @@
+/**
+ * Pawtropolis Tech - src/lib/configCard.ts
+ * WHAT: Posts a configuration summary embed to the review channel
+ * WHY: Gives mods a quick reference for current gate setup without running commands
+ *
+ * The card is auto-pinned for easy access. Link buttons avoid needing to
+ * remember channel names - just click to jump.
+ */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import {
   ActionRowBuilder,
@@ -28,8 +36,10 @@ export async function postGateConfigCard(
   questionCount: number,
   postChannelId?: string
 ): Promise<void> {
+  // Default to review channel, but allow override for testing or alternate workflows
   const targetChannelId = postChannelId ?? cfg.reviewChannelId;
 
+  // Defensive fetch - guild.channels.cache might be stale if channel was just created
   const channel = await guild.channels.fetch(targetChannelId);
   if (!channel || !channel.isTextBased() || channel.isDMBased()) {
     throw new Error(`Channel ${targetChannelId} is not a valid text channel`);
@@ -44,7 +54,8 @@ export async function postGateConfigCard(
     ? `<#${cfg.unverifiedChannelId}>`
     : "not set";
 
-  // Check Google Vision API status
+  // Surface Vision API status in the config card so admins know if avatar scanning works.
+  // The 75% accuracy note sets expectations - it's not perfect and manual review still matters.
   const visionApiKey = process.env.GOOGLE_VISION_API_KEY;
   const visionStatus = visionApiKey
     ? "✅ Enabled (75% accuracy on NSFW)"
@@ -81,12 +92,16 @@ export async function postGateConfigCard(
       .setURL(`https://discord.com/channels/${guild.id}/${cfg.generalChannelId}`)
   );
 
+  // allowedMentions: { parse: [] } prevents the role mentions from pinging everyone.
+  // We want to show @Reviewer but not actually notify the whole team.
   const message = await textChannel.send({
     embeds: [embed],
     components: [buttons],
     allowedMentions: { parse: [] },
   });
 
+  // Auto-pin is nice-to-have, not critical. Common failure: bot lacks MANAGE_MESSAGES
+  // or channel has 50 pins already (Discord limit). Either way, card still works.
   let pinned = false;
   try {
     if (!message.pinned) {

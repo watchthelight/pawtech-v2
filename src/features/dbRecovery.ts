@@ -80,10 +80,14 @@ export interface RestoreResult {
  * @returns Array of backup candidates sorted by created_at DESC (newest first)
  */
 export async function listCandidates(): Promise<BackupCandidate[]> {
+  // Discover all .db files in the backup directory and return metadata.
+  // This is intentionally lightweight - we don't run integrity checks here because
+  // that's expensive and the caller should use validateCandidate() when they need it.
   const backupsDir = path.resolve(env.DB_BACKUPS_DIR);
   logger.info(`[dbRecovery] Scanning for backup candidates in ${backupsDir}`);
 
   try {
+    // Create directory if it doesn't exist (common on first run)
     await fs.mkdir(backupsDir, { recursive: true });
     const files = await fs.readdir(backupsDir);
     const dbFiles = files.filter((f) => f.endsWith(".db"));
@@ -98,6 +102,9 @@ export async function listCandidates(): Promise<BackupCandidate[]> {
         const stats = await fs.stat(filePath);
 
         // Generate unique ID from timestamp + short filename
+        // The ID needs to be stable across calls so we can reference candidates by ID.
+        // Using mtime means if a file is modified, it gets a new ID - this is intentional
+        // because a modified backup should be re-validated before restore.
         const shortName = filename.replace(/\.db$/, "").replace(/[^a-zA-Z0-9\-]/g, "-");
         const id = `cand-${stats.mtimeMs.toFixed(0)}-${shortName}`.substring(0, 64);
 
@@ -161,6 +168,9 @@ export async function findCandidateById(candidateId: string): Promise<BackupCand
  * @returns ValidationResult with all check results
  */
 export async function validateCandidate(candidateId: string): Promise<ValidationResult> {
+  // Run comprehensive integrity checks on a backup candidate.
+  // This can take several seconds for large databases, so don't call it in hot paths.
+  // Results are persisted to db_backups table for future reference.
   logger.info(`[dbRecovery] Validating candidate ${candidateId}`);
 
   const candidate = await findCandidateById(candidateId);
@@ -174,6 +184,7 @@ export async function validateCandidate(candidateId: string): Promise<Validation
   const row_counts: Record<string, number> = {};
 
   // Open candidate DB in read-only mode
+  // IMPORTANT: readonly prevents accidental modifications to backup files
   let candidateDb: Database.Database | null = null;
   try {
     candidateDb = new Database(candidate.path, { readonly: true });
@@ -190,6 +201,10 @@ export async function validateCandidate(candidateId: string): Promise<Validation
     }
 
     // 2. PRAGMA foreign_key_check (requires foreign_keys ON)
+    // This catches orphaned foreign keys that integrity_check misses.
+    // Common cause: manual deletion of parent rows without cascade.
+    // Note: We enable foreign_keys here even though it's read-only because
+    // the pragma is needed for foreign_key_check to work properly.
     logger.info(`[dbRecovery] Running PRAGMA foreign_key_check`);
     candidateDb.pragma("foreign_keys = ON");
     const fkRows = candidateDb.pragma("foreign_key_check") as Array<any>;
@@ -206,6 +221,9 @@ export async function validateCandidate(candidateId: string): Promise<Validation
     }
 
     // 3. Row counts for important tables
+    // This serves two purposes:
+    // 1. Sanity check - if a backup has 0 rows in core tables, something's wrong
+    // 2. Help operators pick the right backup by seeing data volume
     logger.info(`[dbRecovery] Counting rows in important tables`);
     const tablesToCheck = ["action_log", "guilds", "users", "review_card"];
     for (const table of tablesToCheck) {
@@ -279,6 +297,9 @@ export async function validateCandidate(candidateId: string): Promise<Validation
  * Compute SHA256 checksum of a file
  */
 async function computeChecksum(filePath: string): Promise<string> {
+  // SHA256 checksum for integrity verification.
+  // We read the entire file into memory here - this is fine for SQLite DBs which
+  // are typically <100MB, but would need streaming for larger files.
   const fileBuffer = await fs.readFile(filePath);
   const hashSum = createHash("sha256");
   hashSum.update(fileBuffer);
@@ -310,6 +331,14 @@ export async function restoreCandidate(
 ): Promise<RestoreResult> {
   const { dryRun = false, pm2Coord = false, confirm = false, actorId = "cli", notes = "" } = opts;
 
+  // Restore is a multi-step process with built-in safety mechanisms:
+  // 1. Re-validate the candidate (ensure nothing changed since last validation)
+  // 2. Create a pre-restore backup of the live DB (for rollback)
+  // 3. Optionally stop PM2 to release file locks
+  // 4. Replace the live DB file
+  // 5. Verify the restored DB works
+  // 6. Optionally restart PM2
+  // If anything fails after step 2, we have the pre-restore backup for recovery.
   logger.info({ candidateId, dryRun, pm2Coord, confirm }, `[dbRecovery] Starting restore`);
 
   const messages: string[] = [];
@@ -416,9 +445,13 @@ export async function restoreCandidate(
     // Note: In production, PM2 should be stopped first
     // db.close(); // Don't close here - it's shared across the app
 
-    // Copy candidate to live DB path (atomic on same filesystem)
+    // Copy candidate to live DB path
+    // Note: fs.copyFile is NOT atomic - there's a brief window where the file
+    // could be corrupted if the process crashes mid-copy. For true atomicity,
+    // we'd need to copy to a temp file then rename. In practice, this is
+    // acceptable because: 1) PM2 should be stopped, 2) we have pre-restore backup.
     await fs.copyFile(candidate.path, liveDbPath);
-    messages.push(`✅ Database replaced successfully`);
+    messages.push(`Database replaced successfully`);
   } catch (err) {
     messages.push(`❌ Failed to replace database: ${err}`);
     messages.push(`🔄 Attempting rollback to pre-restore backup...`);

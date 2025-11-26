@@ -1,9 +1,12 @@
 /**
  * Pawtropolis Tech — src/commands/flag.ts
- * WHAT: Slash command for manually flagging users as bots
- * WHY: Allows moderators to flag suspicious users with a manual flag reason
- * FLOWS:
- *  - /flag <user> [reason] — Flags a user and logs to flagged channel
+ *
+ * Manual flagging for suspicious users. This complements the automatic flagger
+ * (Silent-Since-Join) by letting mods flag users based on gut instinct or
+ * behavior patterns the auto-flagger can't detect.
+ *
+ * Flags are idempotent - reflagging an already-flagged user is a no-op.
+ * This prevents duplicate alerts and preserves the original flag reason/timestamp.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -50,13 +53,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    // Check if user is already flagged (manual or auto)
+    // Idempotency check: don't create duplicate flags. This is important because:
+    // 1. Multiple mods might flag the same sus user
+    // 2. Auto-flagger might have already caught them
+    // 3. Preserves original timestamp/reason for audit purposes
     if (isAlreadyFlagged(guildId, targetUser.id)) {
       const existing = getExistingFlag(guildId, targetUser.id);
       if (!existing) {
-        // Should never happen, but handle gracefully
+        // Race condition or DB inconsistency. Shouldn't happen in practice.
         await interaction.editReply({
-          content: `ℹ️ User <@${targetUser.id}> appears to be flagged, but details could not be retrieved.`,
+          content: `User <@${targetUser.id}> appears to be flagged, but details could not be retrieved.`,
         });
         return;
       }
@@ -66,12 +72,15 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       const flagReason = existing.flagged_reason || "No reason provided";
 
       await interaction.editReply({
-        content: `ℹ️ Already flagged on ${flaggedDate} by ${flaggedBy}. Reason: "${flagReason}". No new flag created.`,
+        content: `Already flagged on ${flaggedDate} by ${flaggedBy}. Reason: "${flagReason}". No new flag created.`,
       });
       return;
     }
 
-    // Get member's join timestamp if available
+    // Fetch join timestamp for the flag record. This can fail if:
+    // - User already left the server (we can still flag them for future reference)
+    // - Bot lacks permission to fetch members
+    // We continue without it - it's nice-to-have metadata, not required.
     let joinedAt: number | null = null;
     try {
       const member = await guild.members.fetch(targetUser.id);
@@ -101,13 +110,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       content: `✅ Flag recorded for <@${targetUser.id}> (ID ${targetUser.id}). Reason: "${reason}"`,
     });
 
-    // Post to flagged channel if configured
+    // Post alert to the flags channel. This is separate from the ephemeral reply
+    // because the alert needs to be visible to all staff, not just the invoker.
+    // The channel is configured via FLAGGED_REPORT_CHANNEL_ID env var or /config.
     const flaggedChannelId = env.FLAGGED_REPORT_CHANNEL_ID;
     if (flaggedChannelId) {
       try {
         const channel = await guild.channels.fetch(flaggedChannelId);
         if (channel?.isTextBased()) {
-          // Check if bot has permission to send messages and embeds
+          // Proactive permission check. Without this, the send() would fail with
+          // a generic "Missing Permissions" error that's harder to debug.
           const permissions = channel.permissionsFor(guild.members.me!);
           if (!permissions?.has(["SendMessages", "EmbedLinks"])) {
             logger.warn(
@@ -121,6 +133,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
             ? new Date(joinedAt * 1000).toISOString().split("T")[0]
             : "Unknown";
 
+          // The footer "manual_flag=1" distinguishes manual flags from auto-flags
+          // in case anyone parses embeds programmatically. The timestamp format
+          // <t:...:F> is Discord's dynamic timestamp - it shows in the viewer's timezone.
           const embed = new EmbedBuilder()
             .setColor(Colors.Red)
             .setTitle("User Flagged")
@@ -140,6 +155,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
           await channel.send({ embeds: [embed] });
         }
       } catch (err) {
+        // Non-fatal: the flag was recorded in the DB, we just couldn't post the alert.
+        // Staff will see it next time they query flags. Log and move on.
         logger.warn(
           { err, channelId: flaggedChannelId },
           "[flag] Failed to send alert to flagged channel (non-fatal)"

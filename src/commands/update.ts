@@ -92,6 +92,9 @@ export const data = new SlashCommandBuilder()
       )
   );
 
+// Maps user-friendly choice values to Discord.js ActivityType enum.
+// Note: Custom status uses ActivityType.Custom but is handled separately
+// because it requires the 'state' field instead of 'name'.
 const ACTIVITY_TYPE_MAP: Record<string, ActivityType> = {
   playing: ActivityType.Playing,
   watching: ActivityType.Watching,
@@ -145,14 +148,16 @@ async function handleActivityUpdate(
   const activityType = ACTIVITY_TYPE_MAP[activityTypeStr];
 
   await withStep(ctx, "update_presence", async () => {
-    // Get existing status to preserve custom status if it exists
+    // Discord supports multiple activities simultaneously. We combine
+    // the regular activity (Playing/Watching/etc.) with the custom status
+    // (the green text). Both show in the user popout.
     const saved = getStatus("global");
     const activities = [];
 
-    // Add the regular activity
     activities.push({ name: text, type: activityType });
 
-    // Preserve custom status if it exists (Custom type uses 'name' field)
+    // Preserve custom status if set. Discord shows this as a separate
+    // line below the main activity.
     if (saved?.customStatus) {
       activities.push({ type: ActivityType.Custom, name: saved.customStatus });
     }
@@ -164,7 +169,8 @@ async function handleActivityUpdate(
   });
 
   await withStep(ctx, "persist_status", async () => {
-    // Get existing saved status to preserve custom status
+    // Save to DB so presence survives bot restarts. The statusStore module
+    // is loaded on startup and reapplies the saved presence.
     const saved = getStatus("global");
 
     upsertStatus({
@@ -241,7 +247,8 @@ async function handleStatusUpdate(
 async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteraction>) {
   const { interaction } = ctx;
 
-  // Defer reply since image processing takes time
+  // Image processing (download + sharp conversion) can take 5-10 seconds.
+  // Discord's interaction timeout is 3 seconds, so we must defer.
   await withStep(ctx, "defer_reply", async () => {
     await interaction.deferReply();
   });
@@ -272,12 +279,14 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
     return Buffer.from(await response.arrayBuffer());
   });
 
-  // Process images (PNG and WebP)
+  // Process into two formats: PNG for Discord API, WebP for web embeds
   const [pngBuffer, webpBuffer] = await withStep(ctx, "process_images", async () => {
-    // Convert to PNG (high quality for guild banner)
+    // PNG: Full quality for Discord's profile banner endpoint.
+    // Discord will re-encode anyway, but starting with lossless gives best results.
     const png = await sharp(imageBuffer).png({ quality: 100, compressionLevel: 6 }).toBuffer();
 
-    // Convert to WebP (optimized for embeds)
+    // WebP: Smaller file for embed thumbnails and website.
+    // 1280x720 is a good balance between quality and load time.
     const webp = await sharp(imageBuffer)
       .resize({ width: 1280, height: 720, fit: "inside", withoutEnlargement: true })
       .webp({ quality: 85 })
@@ -294,7 +303,9 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
     logger.info({ pngSize: pngBuffer.length, webpSize: webpBuffer.length }, "Banner files saved");
   });
 
-  // Update bot profile banner directly
+  // Update bot's profile banner via Discord API.
+  // Note: Requires the bot account to have Nitro or be a verified bot.
+  // This is different from the server banner (which requires BANNER guild feature).
   await withStep(ctx, "update_bot_banner", async () => {
     if (!interaction.client.user) {
       throw new Error("Bot user not available");
@@ -304,11 +315,13 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
     logger.info("Bot profile banner updated");
   });
 
-  // Refresh gate entry message with new banner
+  // The gate entry message displays the banner. Refresh it so users
+  // see the new image immediately without waiting for a cache expiry.
   await withStep(ctx, "refresh_gate_message", async () => {
     if (!interaction.guildId) return;
 
     try {
+      // Dynamic import to avoid circular dependency - gate.js imports from config
       const { ensureGateEntry } = await import("../features/gate.js");
       const result = await ensureGateEntry(ctx, interaction.guildId);
 
@@ -379,15 +392,17 @@ async function handleAvatarUpdate(ctx: CommandContext<ChatInputCommandInteractio
     return Buffer.from(await response.arrayBuffer());
   });
 
-  // Process image - keep GIFs as-is, convert others to PNG
+  // Process image - GIFs pass through unchanged, others get cropped/converted
   const avatarBuffer = await withStep(ctx, "process_image", async () => {
-    // If it's a GIF, keep it as-is for animation
+    // GIFs are special: sharp can process them but loses animation.
+    // Discord handles animated avatars natively, so pass through as-is.
     if (attachment.contentType === "image/gif") {
       logger.info("Keeping GIF format for animated avatar");
       return imageBuffer;
     }
 
-    // Convert to PNG for static images
+    // Discord avatars are displayed as circles, so we crop to square from center.
+    // 1024x1024 is Discord's max avatar resolution.
     const png = await sharp(imageBuffer)
       .resize({ width: 1024, height: 1024, fit: "cover", position: "center" })
       .png({ quality: 100, compressionLevel: 6 })
@@ -409,6 +424,8 @@ async function handleAvatarUpdate(ctx: CommandContext<ChatInputCommandInteractio
 
   await withStep(ctx, "final_reply", async () => {
     const isAnimated = attachment.contentType === "image/gif";
+    // The propagation delay is real - Discord's CDN caches aggressively.
+    // Users might see the old avatar for up to 10 minutes in some clients.
     await interaction.editReply({
       content: [
         "✅ Avatar updated successfully!",

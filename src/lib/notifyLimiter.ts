@@ -26,6 +26,8 @@ interface RateLimitCheck {
 }
 
 interface GuildNotifyState {
+  // Unbounded array - cleanup() prevents runaway growth but watch memory
+  // in high-traffic guilds. Consider circular buffer if this becomes an issue.
   timestamps: number[]; // Last N notification timestamps (epoch ms)
   lastNotifyAt: number; // Last notification timestamp (epoch ms)
 }
@@ -50,7 +52,9 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
   private cleanupInterval: NodeJS.Timeout | null = null;
 
   constructor() {
-    // Run cleanup every 5 minutes
+    // 5-minute cleanup interval chosen to balance memory efficiency vs CPU overhead.
+    // At 10k guilds with 60 notifies/hour each, worst case is ~600k timestamps
+    // before cleanup runs. If that's too much, tune the interval down.
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
   }
 
@@ -79,7 +83,9 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
         };
       }
 
-      // Check hourly cap
+      // Check hourly cap - O(n) filter on each check. Fine for small arrays
+      // but if timestamps array grows large, consider pre-filtering in recordNotify
+      // or using a sorted structure with binary search.
       const oneHourAgo = now - 60 * 60 * 1000;
       const recentNotifications = guildState.timestamps.filter((ts) => ts > oneHourAgo);
 
@@ -104,6 +110,8 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
     const now = Date.now();
     const guildState = this.state.get(guildId) || { timestamps: [], lastNotifyAt: 0 };
 
+    // No deduplication - callers are responsible for only calling this after
+    // successful notification sends. Double-calling will mess up rate limits.
     guildState.timestamps.push(now);
     guildState.lastNotifyAt = now;
 
@@ -115,6 +123,9 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
    * WHY: Keep state map bounded
    */
   cleanup(): void {
+    // PERF: This is O(n*m) where n=guilds, m=timestamps per guild.
+    // For most bots this is trivial. If you're at 100k+ guilds, consider
+    // batching cleanup or moving to Redis with native TTLs.
     const now = Date.now();
     const oneHourAgo = now - 60 * 60 * 1000;
     let cleanedGuilds = 0;

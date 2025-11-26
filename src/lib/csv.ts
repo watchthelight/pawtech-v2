@@ -40,7 +40,10 @@ function escapeCsvField(value: string | null | undefined): string {
 
   const str = String(value);
 
-  // If field contains comma, newline, or quote, wrap in quotes and escape quotes
+  // RFC 4180 rules: quote the field if it contains delimiter, newline, or quote.
+  // Double-quote escaping (""") is the standard way to include literal quotes.
+  // This also prevents CSV injection attacks where =, +, -, @ could trigger
+  // formula execution in Excel. Wrapping in quotes neutralizes that.
   if (str.includes(",") || str.includes("\n") || str.includes('"')) {
     return `"${str.replace(/"/g, '""')}"`;
   }
@@ -77,7 +80,9 @@ export function formatActionLogRow(row: {
   meta_json?: string | null;
   guild_id: string;
 }): Record<string, any> {
-  // Parse meta_json if present
+  // meta_json contains variable schema data depending on action type.
+  // Parse defensively - malformed JSON shouldn't crash the export.
+  // If parse fails, preserve the raw string so data isn't silently lost.
   let meta: Record<string, any> = {};
   if (row.meta_json) {
     try {
@@ -150,7 +155,9 @@ export async function streamReviewActionsCSV(
     stream.write(header);
     bytes += header.length;
 
-    // Build query with chunked iteration
+    // Chunked iteration keeps memory bounded regardless of dataset size.
+    // 5000 rows is a reasonable balance between DB round trips and memory.
+    // At ~500 bytes per row average, each chunk is ~2.5MB in memory.
     const chunkSize = 5000;
     let offset = 0;
     let hasMore = true;
@@ -172,7 +179,8 @@ export async function streamReviewActionsCSV(
       const conditions: string[] = [];
       const params: any[] = [];
 
-      // Filter by guild (unless allGuilds is true)
+      // Multi-tenant safety: default to filtering by guild unless explicitly
+      // requesting all guilds. Prevents accidental data leakage across servers.
       if (!opts.allGuilds && opts.guildId) {
         conditions.push(`a.guild_id = ?`);
         params.push(opts.guildId);
@@ -192,7 +200,9 @@ export async function streamReviewActionsCSV(
         sql += ` WHERE ${conditions.join(" AND ")}`;
       }
 
-      // Order by created_at for deterministic pagination
+      // Deterministic ordering is critical for pagination. Without it, rows could
+      // be skipped or duplicated between chunks if the DB returns them in different order.
+      // Secondary sort on id handles ties (multiple actions same second).
       sql += ` ORDER BY ra.created_at ASC, ra.id ASC`;
       sql += ` LIMIT ? OFFSET ?`;
 
@@ -230,7 +240,8 @@ export async function streamReviewActionsCSV(
         rowCount++;
       }
 
-      // Check if we've exhausted the data
+      // Early termination when we get fewer rows than requested.
+      // This is more efficient than checking COUNT(*) upfront.
       if (rows.length < chunkSize) {
         hasMore = false;
       } else {

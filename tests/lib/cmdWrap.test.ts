@@ -116,13 +116,15 @@ describe("wrapCommand", () => {
         phase: "db_begin",
         traceId: "trace-fixed",
         lastSql: null,
+        errorKind: "db_error",
+        errorMessage: "boom",
         err: expect.objectContaining({
           name: "SqliteError",
           code: "SQLITE_ERROR",
           message: "boom",
         }),
       }),
-      "command error"
+      "command error: boom"
     );
     expect(postErrorCardMock).toHaveBeenCalledWith(
       interaction,

@@ -12,10 +12,33 @@
 import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 
+/*
+ * Health Check Command
+ * --------------------
+ * The simplest possible command - no database, no external calls, just process
+ * uptime and WebSocket latency. Useful for:
+ *
+ *   1. Verifying the bot is responsive (not stuck in an event loop block)
+ *   2. Checking WS connection quality to Discord's gateway
+ *   3. Quick "is it up?" check without needing server access
+ *
+ * LATENCY NOTE: client.ws.ping is the heartbeat ACK latency to Discord's gateway,
+ * not HTTP API latency. A healthy connection should be under 200ms. If you see
+ * values consistently above 500ms, check your hosting region relative to Discord's
+ * gateway servers.
+ *
+ * NO PERMISSIONS REQUIRED: Anyone can run /health. It exposes nothing sensitive.
+ */
+
 export const data = new SlashCommandBuilder()
   .setName("health")
   .setDescription("Bot health (uptime and latency).");
 
+/**
+ * Formats uptime for human consumption. The "|| parts.length === 0" check
+ * ensures we always show at least "0s" for freshly-started bots rather than
+ * returning an empty string.
+ */
 function formatUptime(seconds: number): string {
   const days = Math.floor(seconds / 86400);
   const hours = Math.floor((seconds % 86400) / 3600);

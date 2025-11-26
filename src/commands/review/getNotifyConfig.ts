@@ -40,13 +40,17 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Authorization check
+  // Multi-tier authorization check. The order matters for performance -
+  // owner checks are cheapest (single ID comparison), guild owner is next,
+  // then we fall through to the more expensive role/permission lookups.
   if (isOwner(userId)) {
-    // Owner always allowed
+    // Bot owner always allowed - useful for debugging across all servers
   } else if (interaction.guild?.ownerId === userId) {
-    // Guild owner allowed
+    // Server owner - they own the place, let them in
   } else {
     const member = interaction.member;
+    // String permissions = we got the API version instead of the cached GuildMember.
+    // This usually happens in uncached guilds. Deny by default.
     if (!member || typeof member.permissions === "string") {
       await interaction.reply({
         content: "❌ You must be a server administrator to use this command.",
@@ -55,8 +59,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       return;
     }
 
+    // hasStaffPermissions checks for Admin/ManageGuild permissions
     const hasPerms = hasStaffPermissions(member as any, guildId);
     const config = getConfig(guildId);
+    // Leadership role is a configurable role that grants admin-like access
+    // without actual Discord admin permissions. Useful for head mods.
     const hasLeadershipRole = config?.leadership_role_id && (member as any).roles.cache.has(config.leadership_role_id);
 
     if (!hasPerms && !hasLeadershipRole) {
@@ -116,17 +123,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
     await interaction.editReply({ embeds: [embed] });
 
-    // Log action
+    // Dual logging: pretty log to Discord audit channel + structured log to DB.
+    // This is intentional redundancy - Discord channel can be cleared, DB persists.
     if (interaction.guild) {
       await logActionPretty(interaction.guild, {
         actorId: userId,
-        action: "forum_post_ping",
+        action: "forum_post_ping", // Reusing existing action type, not ideal but works
         reason: "Viewed forum post notification configuration",
         meta: { config },
       });
     }
 
-    // Insert action_log entry
+    // Direct DB insert for the action_log table. This gives us queryable
+    // audit history independent of the Discord audit channel.
     db.prepare(
       `
       INSERT INTO action_log (guild_id, actor_id, action, target_type, target_id, reason, metadata)

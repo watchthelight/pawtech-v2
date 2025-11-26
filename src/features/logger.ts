@@ -36,9 +36,9 @@ import { logger } from "../lib/logger.js";
  * }
  */
 export async function getLoggingChannel(guild: Guild): Promise<TextChannel | null> {
-  // Priority 1: Guild-specific DB config
-  // Priority 2: Environment variable fallback
-  // Priority 3: null (console JSON logging)
+  // Resolution order: DB config > env var > null.
+  // The fallback chain ensures logging works during initial setup (before DB config)
+  // and degrades gracefully to console when Discord is unavailable.
   const channelId = getLoggingChannelId(guild.id);
 
   if (!channelId) {
@@ -67,7 +67,9 @@ export async function getLoggingChannel(guild: Guild): Promise<TextChannel | nul
     return null;
   }
 
-  // Verify bot permissions
+  // Permission validation before attempting to post.
+  // This prevents silent failures where we think logging is working but embeds
+  // are just getting dropped due to missing perms.
   const textChannel = channel as TextChannel;
   const botMember = guild.members.me;
   if (!botMember) {
@@ -84,6 +86,8 @@ export async function getLoggingChannel(guild: Guild): Promise<TextChannel | nul
     return null;
   }
 
+  // SendMessages + EmbedLinks are the minimum for our audit embeds.
+  // We don't need AttachFiles since we don't attach anything to log messages.
   const requiredPerms = [PermissionFlagsBits.SendMessages, PermissionFlagsBits.EmbedLinks];
 
   const missingPerms = requiredPerms.filter((perm) => !permissions.has(perm));
@@ -100,7 +104,6 @@ export async function getLoggingChannel(guild: Guild): Promise<TextChannel | nul
     return null;
   }
 
-  // All checks passed
   return textChannel;
 }
 
@@ -119,6 +122,16 @@ export async function getLoggingChannel(guild: Guild): Promise<TextChannel | nul
  *   timestamp: 1234567890,
  * });
  */
+/**
+ * Console-based fallback logger. Outputs structured JSON for log aggregation.
+ *
+ * Why console.log instead of logger.info? Pino adds its own envelope (timestamp,
+ * pid, hostname, etc.) which can interfere with external parsing. For audit
+ * events we want a clean, predictable JSON structure that tools like Datadog
+ * or Splunk can parse without custom transformations.
+ *
+ * This is only called when Discord channel logging fails - it's the last resort.
+ */
 export function logActionJSON(params: {
   action: string;
   appId?: string;
@@ -130,9 +143,6 @@ export function logActionJSON(params: {
   metadata?: Record<string, any>;
   timestamp: number;
 }): void {
-  // Single-line JSON for easy parsing by log aggregators (Datadog, Splunk, etc.)
-  // Using console.log (not logger.info) to ensure it's captured by process stdout
-  // without additional pino formatting that might complicate parsing
   console.log(
     JSON.stringify({
       level: "info",
@@ -193,7 +203,8 @@ export async function postAuditEmbed(
     return;
   }
 
-  // Build embed with color based on result
+  // Dynamic import to avoid circular dependency issues at module load time.
+  // Colors follow Discord's semantic palette: green=success, red=denied, yellow=error
   const { EmbedBuilder } = await import("discord.js");
   const color = params.result === "success" ? 0x57f287 : params.result === "denied" ? 0xed4245 : 0xfee75c;
 

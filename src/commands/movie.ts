@@ -30,6 +30,37 @@ import {
   updateMovieTierRole,
 } from "../features/movieNight.js";
 
+/*
+ * Movie Night Attendance System
+ * -----------------------------
+ * Tracks voice channel participation during movie night events. The workflow:
+ *
+ *   1. Staff runs /movie start #voice-channel
+ *   2. Bot listens to voiceStateUpdate events (see features/movieNight.ts)
+ *   3. Users joining/leaving the VC are logged with timestamps
+ *   4. Staff runs /movie end to finalize
+ *   5. Users with 30+ minutes get "qualified" status and tier role updates
+ *
+ * TIER ROLES (ascending):
+ *   - Red Carpet Guest: 1+ qualified movies
+ *   - Popcorn Club: 5+ qualified movies
+ *   - Director's Cut: 10+ qualified movies
+ *   - Cinematic Royalty: 20+ qualified movies
+ *
+ * The bot automatically promotes users to higher tiers but DOES NOT demote.
+ * If someone has Director's Cut and skips a few movies, they keep the role.
+ *
+ * DATA MODEL:
+ *   - movie_event: Active event state (one per guild max)
+ *   - movie_attendance: Per-user, per-event duration tracking
+ *   - movie_session: Raw join/leave timestamps for debugging
+ *
+ * EDGE CASES:
+ *   - User joins, leaves, rejoins: All sessions summed for total duration
+ *   - Bot crashes mid-event: Session data preserved, /movie end still works
+ *   - User in VC when /movie start runs: Counted from start time, not join time
+ */
+
 export const data = new SlashCommandBuilder()
   .setName("movie")
   .setDescription("Movie night attendance tracking commands")
@@ -144,6 +175,11 @@ async function handleEnd(interaction: ChatInputCommandInteraction): Promise<void
     return;
   }
 
+  /*
+   * Defer immediately - finalizeMovieAttendance can take a while if there are
+   * many users (fetches each member, updates roles). Discord gives us 15 minutes
+   * after deferring, plenty of time for even large events.
+   */
   await interaction.deferReply();
 
   logger.info({
@@ -291,7 +327,15 @@ async function handleAttendance(interaction: ChatInputCommandInteraction): Promi
     .setColor(0x5865F2)
     .setTimestamp();
 
-  // Determine current tier
+  /*
+   * Tier calculation logic:
+   * - tiers is ordered highest-to-lowest for currentTier lookup (first match wins)
+   * - For nextTier, we reverse and find the first tier the user HASN'T reached
+   *
+   * Example: User has 7 qualified movies
+   *   - currentTier: Popcorn Club (threshold 5, first one they meet going down)
+   *   - nextTier: Director's Cut (threshold 10, first one above their count)
+   */
   const tiers = [
     { name: "Cinematic Royalty", threshold: 20 },
     { name: "Director's Cut", threshold: 10 },

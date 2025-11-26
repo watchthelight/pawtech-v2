@@ -18,13 +18,17 @@ export function computePercentile(values: number[], percentile: number): number 
   if (values.length === 0) return null;
   if (values.length === 1) return values[0];
 
-  // Sort ascending
+  // Creates a copy to avoid mutating input - intentional trade-off of O(n) space
+  // for cleaner API. If you're computing percentiles on huge arrays frequently,
+  // consider an in-place sort variant or streaming quantile algorithms.
   const sorted = [...values].sort((a, b) => a - b);
 
   // Nearest-rank method: P = ceil(percentile/100 * N)
+  // Note: percentile=0 gives index=-1 which the clamp handles.
+  // If you need linear interpolation (e.g., for smoother p99), use a different algo.
   const index = Math.ceil((percentile / 100) * sorted.length) - 1;
 
-  // Clamp to valid array bounds
+  // Clamp handles edge cases: percentile <= 0 returns min, >= 100 returns max
   return sorted[Math.max(0, Math.min(index, sorted.length - 1))];
 }
 
@@ -49,7 +53,8 @@ export function computePercentiles(
     return result;
   }
 
-  // Sort once
+  // Sort once, compute many - O(n log n) dominates regardless of how many
+  // percentiles you request. Much better than calling computePercentile in a loop.
   const sorted = [...values].sort((a, b) => a - b);
 
   for (const p of percentiles) {

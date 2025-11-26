@@ -37,6 +37,9 @@ export const data = new SlashCommandBuilder()
       .setRequired(false)
   );
 
+// Hardcoded channel/role IDs - these are specific to the Pawtropolis server.
+// If this bot ever runs on other servers, these should move to per-guild config.
+// The notification role ping alerts staff when a long-running backfill completes.
 const NOTIFICATION_CHANNEL_ID = '1429947536793145374';
 const NOTIFICATION_ROLE_ID = '1120074045883420753';
 
@@ -78,7 +81,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   logger.info({ guildId, weeks, dryRun }, '[backfill] Starting backfill command');
 
-  // Spawn backfill script as child process
+  // Spawn as child process rather than inline because:
+  // 1. Backfill takes 15-20 minutes - we can't block the main event loop
+  // 2. If the bot restarts mid-backfill, the child continues (mostly harmless, idempotent)
+  // 3. Memory isolation - backfill can be memory-hungry and we don't want to OOM the bot
+  // stdio: 'pipe' lets us capture stdout/stderr for progress reporting.
   const backfillProcess = spawn('npx', ['tsx', 'scripts/backfill-message-activity.ts', ...args], {
     cwd: process.cwd(),
     stdio: 'pipe',
@@ -90,11 +97,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   let channelsProcessed = 0;
   let insertedMessages = 0;
 
+  // Parsing stdout for progress is fragile - if the script's output format changes,
+  // this breaks silently. But it's good enough for a staff-only diagnostic command.
+  // The regexes handle comma-formatted numbers (e.g., "1,234") which the script outputs.
   backfillProcess.stdout?.on('data', (data) => {
     const output = data.toString();
     stdout += output;
 
-    // Parse progress from output
     const totalMatch = output.match(/Total messages found: ([\d,]+)/);
     if (totalMatch) {
       totalMessages = parseInt(totalMatch[1].replace(/,/g, ''), 10);
@@ -155,7 +164,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         embed.setDescription(`Backfill failed with exit code ${code}.\n\nCheck logs for details.`);
       }
 
-      // Send notification with role ping
+      // The "send" in channel check is a TypeScript narrowing trick. channels.fetch()
+      // returns a Channel | null, but not all Channel types have send(). TextChannel,
+      // NewsChannel, etc. do, but CategoryChannel doesn't. This check satisfies TS.
+      // Note: role ping requires the bot to have permission to mention the role.
       if ("send" in channel) {
         await channel.send({
           content: `<@&${NOTIFICATION_ROLE_ID}>`,

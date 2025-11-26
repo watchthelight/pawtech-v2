@@ -330,12 +330,15 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
     .setColor(actionMeta.color)
     .setTimestamp(createdAt * 1000); // Convert Unix seconds → milliseconds for Discord
 
-  // Add fields
+  // Add fields - prefer appCode (short hex) over appId (full UUID)
+  // appId is stored in DB for data integrity but humans see appCode
   if (appCode) {
     embed.addFields({ name: "App Code", value: `\`${appCode}\``, inline: true });
-  }
-  if (appId) {
-    embed.addFields({ name: "App ID", value: `\`${appId}\``, inline: true });
+  } else if (appId) {
+    // Fallback: extract short code from appId if appCode not provided
+    const { shortCode } = await import("../lib/ids.js");
+    const code = shortCode(appId);
+    embed.addFields({ name: "App Code", value: `\`${code}\``, inline: true });
   }
 
   embed.addFields({ name: "Actor", value: `<@${actorId}>`, inline: true });

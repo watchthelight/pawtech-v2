@@ -46,6 +46,7 @@ import { isOwner } from "./utils/owner.js";
 import { TRACE_INTERACTIONS, OWNER_IDS } from "./config.js";
 import type { ModalSubmitInteraction } from "discord.js";
 import { logger } from "./lib/logger.js";
+import { wrapEvent, wrapEventRateLimited } from "./lib/eventWrap.js";
 import { env } from "./lib/env.js";
 import { requireEnv } from "./util/ensureEnv.js";
 import * as health from "./commands/health.js";
@@ -214,6 +215,7 @@ client.once(Events.ClientReady, async () => {
       ensureActionLogFreeText,
       ensureManualFlagColumns,
       ensureSearchIndexes,
+      ensurePanicModeColumn,
     } = await import("./db/ensure.js");
     const { ensureBotStatusSchema } = await import("./features/statusStore.js");
     ensureAvatarScanSchema();
@@ -225,9 +227,18 @@ client.once(Events.ClientReady, async () => {
     ensureActionLogFreeText();
     ensureManualFlagColumns();
     ensureSearchIndexes();
+    ensurePanicModeColumn();
     ensureBotStatusSchema();
   } catch (err) {
     logger.error({ err }, "[startup] schema ensure failed");
+  }
+
+  // Load panic mode state from database (survives restarts now)
+  try {
+    const { loadPanicState } = await import("./features/panicStore.js");
+    loadPanicState();
+  } catch (err) {
+    logger.error({ err }, "[startup] panic state load failed");
   }
 
   // Heal legacy parent overwrites so moderators can speak in older modmail threads

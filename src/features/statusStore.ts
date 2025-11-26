@@ -13,6 +13,9 @@
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 
+// Persisted bot presence state. scopeKey is either 'global' or a guild_id for per-guild status.
+// activityType maps to Discord.js ActivityType enum (0=Playing, 1=Streaming, 2=Listening, etc.)
+// customStatus is only used when activityType=4 (Custom), stores the "state" field.
 export type SavedStatus = {
   scopeKey: string;
   activityType: number | null;
@@ -31,6 +34,9 @@ export type SavedStatus = {
  * RETURNS: void
  * THROWS: Propagates SQLite errors
  */
+// UPSERT pattern: INSERT with ON CONFLICT ensures exactly one row per scopeKey.
+// This is called after every /statusupdate command and should be fast.
+// Re-throws SQLite errors since a failed status save is recoverable (bot still works, just won't persist).
 export function upsertStatus(status: SavedStatus): void {
   try {
     db.prepare(
@@ -76,8 +82,13 @@ export function upsertStatus(status: SavedStatus): void {
  * RETURNS: SavedStatus object or null if not found
  * THROWS: Never; logs and returns null on error
  */
+// Called at bot startup to restore the last known presence.
+// Returns null if no saved status exists (first run or DB was cleared).
+// Never throws - swallows errors and returns null to ensure bot starts cleanly.
 export function getStatus(scopeKey: string): SavedStatus | null {
   try {
+    // ORDER BY updated_at DESC is redundant with UNIQUE(scope_key) but kept for safety
+    // in case the schema ever changes to allow history.
     const row = db
       .prepare(
         `SELECT scope_key, activity_type, activity_text, custom_status, status, updated_at
@@ -136,6 +147,10 @@ export function getStatus(scopeKey: string): SavedStatus | null {
  * RETURNS: void
  * THROWS: Never; logs and continues on error
  */
+// Migration fallback: ensures bot_status table exists before first use.
+// This handles the case where the bot runs against an older DB without this table.
+// Proper migrations should be the primary mechanism, but this provides a safety net.
+// Never throws - logs errors but continues, allowing the bot to run without status persistence.
 export function ensureBotStatusSchema(): void {
   try {
     const tableExists = db
@@ -144,6 +159,7 @@ export function ensureBotStatusSchema(): void {
 
     if (!tableExists) {
       logger.info("[statusStore] creating bot_status table");
+      // scope_key is PRIMARY KEY so it's automatically UNIQUE and indexed.
       db.prepare(
         `CREATE TABLE IF NOT EXISTS bot_status (
           scope_key TEXT NOT NULL PRIMARY KEY,

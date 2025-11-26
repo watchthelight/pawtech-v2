@@ -66,6 +66,11 @@ export interface RoleAssignment {
  * Check if the bot can manage a specific role
  * @returns true if bot has MANAGE_ROLES and role is below bot's highest role
  */
+// Pre-flight check before any role operation. Discord's role hierarchy rules:
+// 1. Bot needs MANAGE_ROLES permission (server-level)
+// 2. Bot's highest role must be ABOVE the target role (position comparison)
+// 3. Server owner bypasses this, but bots never do
+// Always call this before add/remove to get a clear error message instead of cryptic 50013.
 export async function canManageRole(guild: Guild, roleId: string): Promise<{
   canManage: boolean;
   reason?: string;
@@ -80,7 +85,8 @@ export async function canManageRole(guild: Guild, roleId: string): Promise<{
     return { canManage: false, reason: "Bot missing MANAGE_ROLES permission" };
   }
 
-  // Check role hierarchy
+  // Check role hierarchy - this is the most common failure mode.
+  // Bot's highest role position must be strictly greater than target role's position.
   const targetRole = guild.roles.cache.get(roleId);
   if (!targetRole) {
     return { canManage: false, reason: "Target role not found" };
@@ -104,6 +110,10 @@ export async function canManageRole(guild: Guild, roleId: string): Promise<{
 /**
  * Log role assignment to audit trail
  */
+// Audit logging is synchronous (SQLite). If this becomes a bottleneck, consider:
+// 1. Batching writes with a queue
+// 2. Moving to async writes with WAL mode
+// The details JSON blob is optional but useful for debugging failures.
 function logRoleAssignment(
   guildId: string,
   userId: string,
@@ -154,6 +164,9 @@ function logRoleAssignment(
 /**
  * Assign a role to a user with full audit trail
  */
+// Idempotent: if user already has the role, logs "skipped" and returns success.
+// This prevents duplicate role adds from spamming Discord's API and audit log.
+// Errors are caught and logged, never thrown - callers check result.success instead.
 export async function assignRole(
   guild: Guild,
   userId: string,
@@ -162,7 +175,7 @@ export async function assignRole(
   triggeredBy: string
 ): Promise<RoleAssignmentResult> {
   try {
-    // Fetch member
+    // Fetch member - catch handles users who left the server
     const member = await guild.members.fetch(userId).catch(() => null);
     if (!member) {
       const errorMsg = "Member not found in guild";
@@ -349,6 +362,9 @@ export async function removeRole(
 /**
  * Get all role tiers for a guild by type
  */
+// Role tiers are the threshold-based role rewards (e.g., "Level 10 = Gold Member").
+// When tierType is provided, filters to just that category. Otherwise returns all tiers.
+// Results sorted by threshold ASC so progression order is intuitive.
 export function getRoleTiers(guildId: string, tierType?: string): RoleTier[] {
   if (tierType) {
     const stmt = db.prepare(`
@@ -370,6 +386,8 @@ export function getRoleTiers(guildId: string, tierType?: string): RoleTier[] {
 /**
  * Get role tier by role ID (to detect when Amaribot assigns a level role)
  */
+// Used for reverse lookup: when we see a role added, check if it's a tier role we track.
+// This enables reacting to external bots (like AmariBot) assigning level roles.
 export function getRoleTierByRoleId(guildId: string, roleId: string): RoleTier | null {
   const stmt = db.prepare(`
     SELECT * FROM role_tiers

@@ -28,9 +28,16 @@ import { randomBytes } from "node:crypto";
 import { hasStaffPermissions, isReviewer } from "../lib/config.js";
 import { isOwner } from "../utils/owner.js";
 
-// Application statuses that are NOT final (user can still work on these)
+/*
+ * FINAL_STATUSES defines terminal application states. Once an app reaches one of
+ * these, it won't appear in /listopen because there's nothing left to do.
+ *
+ * Note: "perm_rejected" is handled separately in some queries (see modstats.ts).
+ * The distinction matters for re-application eligibility but not for listing.
+ */
 const FINAL_STATUSES = ["approved", "rejected", "kicked"];
 
+// 10 apps per page balances information density vs. embed field limits (25 max)
 const PAGE_SIZE = 10;
 
 interface OpenApplication {
@@ -48,6 +55,18 @@ interface ReviewCardMapping {
   message_id: string;
 }
 
+/*
+ * PERMISSION STRATEGY:
+ * setDefaultMemberPermissions(null) makes the command visible to everyone in the
+ * command picker. We then check permissions at runtime (isOwner, isStaff, isReviewer).
+ *
+ * Why not use setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)?
+ * Because reviewer_role members need access but may not have ManageGuild. Discord's
+ * built-in permission system doesn't support custom role checks, so we do it ourselves.
+ *
+ * The tradeoff: users without permission see the command but get denied when they try
+ * to use it. This is fine - the error message explains what's needed.
+ */
 export const data = new SlashCommandBuilder()
   .setName("listopen")
   .setDescription("List claimed applications that need review")
@@ -457,13 +476,21 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 }
 
 /**
- * WHAT: Handle pagination button clicks (Prev/Next).
- * WHY: Allow moderators to navigate through pages of open applications.
+ * Pagination button handler for /listopen.
  *
- * This should be registered as a button handler in src/index.ts:
- * if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+(:(all))?$/)) {
- *   await handleListOpenPagination(interaction);
- * }
+ * REGISTRATION: Add this to your button handler router in src/index.ts:
+ *   if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+(:(all))?$/)) {
+ *     await handleListOpenPagination(interaction);
+ *   }
+ *
+ * CUSTOM ID FORMAT: listopen:{nonce}:{direction}:{currentPage}[:all]
+ *   - nonce: 8-char hex, prevents button ID collisions across messages
+ *   - direction: "prev" or "next"
+ *   - currentPage: 0-indexed page number before navigation
+ *   - :all: optional suffix indicating "all moderators" view
+ *
+ * EDGE CASE: If a user clicks "Next" but all remaining apps were resolved
+ * since the embed was rendered, they'll see "No more pages available."
  */
 export async function handleListOpenPagination(interaction: any): Promise<void> {
   const customId = interaction.customId;

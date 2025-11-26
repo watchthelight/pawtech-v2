@@ -27,10 +27,11 @@ import {
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { isOwner } from "../utils/owner.js";
 
-// Content length limits per Discord API
+// Discord API hard limits. Exceeding these causes 400 Bad Request.
+// The embed limit is particularly useful for longer announcements.
 const MAX_PLAIN_MESSAGE_LENGTH = 2000;
 const MAX_EMBED_DESCRIPTION_LENGTH = 4096;
-const AUDIT_LOG_PREVIEW_LENGTH = 512;
+const AUDIT_LOG_PREVIEW_LENGTH = 512; // Truncate for readability in audit logs
 
 /**
  * Command data builder
@@ -67,30 +68,31 @@ export const data = new SlashCommandBuilder()
  * @returns true if allowed, false if denied
  */
 function checkRoleAccess(interaction: ChatInputCommandInteraction): boolean {
-  // Owner override: owners bypass all permission checks
+  // Owner bypass - useful for debugging without needing server roles
   if (isOwner(interaction.user.id)) {
     return true;
   }
 
   const allowedRoleIds = process.env.SEND_ALLOWED_ROLE_IDS;
 
-  // If no role restriction configured, allow all (permission check already passed)
+  // If SEND_ALLOWED_ROLE_IDS isn't set, we rely solely on ManageMessages permission.
+  // This is the default behavior for most servers.
   if (!allowedRoleIds) {
     return true;
   }
 
-  // Parse comma-separated role IDs
+  // Parse comma-separated role IDs (e.g., "123,456,789")
   const roleIds = allowedRoleIds.split(",").map((id) => id.trim());
 
-  // Check if member has at least one of the allowed roles
-  // Guild is guaranteed to exist due to defaultMemberPermissions check
+  // Type narrowing: interaction.member can be APIInteractionGuildMember (no roles cache)
+  // or GuildMember (has roles.cache). We need the latter.
   if (interaction.member && "roles" in interaction.member) {
     const memberRoles = interaction.member.roles as { cache: Map<string, any> };
     const hasRole = roleIds.some((roleId) => memberRoles.cache.has(roleId));
     return hasRole;
   }
 
-  // Fallback: deny if we can't verify roles
+  // Can't verify roles (shouldn't happen in guild context) - fail closed
   return false;
 }
 
@@ -103,6 +105,9 @@ function checkRoleAccess(interaction: ChatInputCommandInteraction): boolean {
  * @returns Sanitized content
  */
 function neutralizeMassPings(content: string): string {
+  // Zero-width space (U+200B) breaks Discord's mention parser while remaining invisible.
+  // This runs even when silent:false because @everyone/@here are too dangerous to allow
+  // through an anonymous command - could be used for social engineering.
   return content.replace(/@everyone/g, "@\u200beveryone").replace(/@here/g, "@\u200bhere");
 }
 
@@ -142,6 +147,8 @@ async function sendAuditLog(
       preview = preview.substring(0, AUDIT_LOG_PREVIEW_LENGTH) + " …";
     }
 
+    // Audit log reveals the invoker - this is the accountability mechanism.
+    // Without this, /send would be ripe for abuse.
     const auditEmbed = new EmbedBuilder()
       .setTitle("🔇 Anonymous /send used")
       .setDescription(preview)
@@ -160,7 +167,7 @@ async function sendAuditLog(
         { name: "Silent", value: silent ? "✅ Yes" : "❌ No", inline: true }
       )
       .setTimestamp()
-      .setColor(0x5865f2); // Discord blurple
+      .setColor(0x5865f2);
 
     await (loggingChannel as TextChannel).send({
       embeds: [auditEmbed],
@@ -223,12 +230,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  // Build message payload
+  // Build message payload with mention controls.
+  // Note: allowedMentions is processed server-side, so even if someone
+  // bypasses the client, Discord won't actually ping.
   const messagePayload: MessageCreateOptions = {
-    // Configure allowed mentions based on silent flag
     allowedMentions: silent
-      ? { parse: [], repliedUser: false } // Block all mentions
-      : { parse: ["users", "roles"], repliedUser: false }, // Allow user/role, block @everyone/@here
+      ? { parse: [], repliedUser: false } // Block all mentions including reply ping
+      : { parse: ["users", "roles"], repliedUser: false }, // Allow @user and @role but never @everyone/@here
   };
 
   // Add content (plain or embed)
@@ -244,17 +252,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     messagePayload.files = [attachment];
   }
 
-  // Handle reply_to (fetch message and set reference, or fall back to normal send)
+  // Reply threading: if reply_to is specified, we try to make this message
+  // a reply to that message. This preserves context in conversations.
   let replyToMessage: Message | null = null;
   if (replyToId) {
     try {
       replyToMessage = await (interaction.channel as TextChannel).messages.fetch(replyToId);
       messagePayload.reply = {
         messageReference: replyToMessage.id,
-        failIfNotExists: false, // Graceful fallback if message is deleted mid-fetch
+        failIfNotExists: false, // If message was deleted between command and send, just post normally
       };
     } catch (err) {
-      // Message not found or fetch failed - continue with normal send
+      // Message doesn't exist or bot can't see it. Silent fallback - don't bother
+      // the user with an error for a convenience feature.
       console.warn(`[send] Failed to fetch reply_to message ${replyToId}: ${err}`);
     }
   }

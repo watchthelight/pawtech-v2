@@ -72,6 +72,10 @@ export function getActionCountsByMod(opts: QueryOptions): ActionCount[] {
   const start = Date.now();
 
   try {
+    // Dynamic SQL construction for optional guild filter. The JOIN is only added when
+    // guildId is specified to avoid the join overhead for cross-guild queries.
+    // Performance note: This query benefits from an index on review_action(created_at)
+    // and application(guild_id) when filtering. Consider composite index if slow.
     let sql = `
       SELECT
         ra.moderator_id,
@@ -84,6 +88,7 @@ export function getActionCountsByMod(opts: QueryOptions): ActionCount[] {
     const params: any[] = [];
 
     // Join with application if we need to filter by guild
+    // The join is relatively cheap because app_id is indexed as a foreign key
     if (opts.guildId) {
       sql += ` INNER JOIN application a ON ra.app_id = a.id`;
       conditions.push(`a.guild_id = ?`);
@@ -176,6 +181,10 @@ export function getLeadTimeStats(opts: QueryOptions): LeadTimeStats {
     }
 
     // Only get the latest terminal decision per app
+    // This correlated subquery ensures we only count one decision per application.
+    // Without this, apps with multiple reject->approve cycles would skew the stats.
+    // The ORDER BY lead_time_sec ASC is required for accurate percentile calculation
+    // using the nearest-rank method below.
     sql += `
       AND ra.created_at = (
         SELECT MAX(ra2.created_at)
@@ -194,12 +203,16 @@ export function getLeadTimeStats(opts: QueryOptions): LeadTimeStats {
     }
 
     // Calculate statistics
+    // We compute these in JS rather than SQL because SQLite lacks percentile functions
+    // and the dataset is typically small enough (thousands of rows) that this is fine.
     const leadTimes = rows.map((r) => r.lead_time_sec);
     const n = leadTimes.length;
     const sum = leadTimes.reduce((acc, val) => acc + val, 0);
     const mean = Math.round(sum / n);
 
     // Percentiles (using nearest-rank method)
+    // This is simpler than interpolation and good enough for our analytics purposes.
+    // At small n, the difference between methods is negligible anyway.
     const p50Index = Math.ceil(0.5 * n) - 1;
     const p90Index = Math.ceil(0.9 * n) - 1;
     const p50 = leadTimes[p50Index];
@@ -244,6 +257,11 @@ export function getTopReasons(opts: QueryOptions & { limit?: number }): ReasonCo
   const limit = opts.limit || 10;
 
   try {
+    // Normalization: lowercase, trim whitespace, collapse newlines and multiple spaces.
+    // This groups "Too young" and "too young" and "too  young\n" as the same reason.
+    // The REPLACE chain is ugly but SQLite doesn't have regex replace.
+    // Known limitation: Only collapses double-spaces once; "too   young" becomes "too  young".
+    // Not worth fixing since it's rare and the results are still readable.
     let sql = `
       SELECT
         LOWER(TRIM(REPLACE(REPLACE(reason, CHAR(10), ' '), '  ', ' '))) as normalized_reason,
@@ -337,6 +355,10 @@ export function getVolumeSeries(opts: QueryOptions & { bucket?: "day" | "week" }
     const to = opts.to || nowUtc();
     const from = opts.from || to - 7 * 86400;
 
+    // Time-bucket aggregation using integer division trick: (ts / bucket) * bucket
+    // This truncates timestamps to bucket boundaries (midnight UTC for days).
+    // Note: This uses server timezone (UTC assumed). If you need local timezone bucketing,
+    // you'd need to offset timestamps before division, which gets complicated.
     let sql = `
       SELECT
         (ra.created_at / ${bucketSec}) * ${bucketSec} as bucket_start,
@@ -421,6 +443,10 @@ export function getOpenQueueAge(guildId: string): QueueAgeStats {
   const start = Date.now();
 
   try {
+    // Embed current timestamp directly in query rather than using datetime('now')
+    // because we want consistent age calculations across all rows and with our JS code.
+    // The status filter includes 'needs_info' because those are still "open" from a
+    // workload perspective - they need moderator attention eventually.
     const now = nowUtc();
 
     const sql = `

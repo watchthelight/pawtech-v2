@@ -25,6 +25,11 @@ import { z } from "zod";
 const isTest = process.env.NODE_ENV === "test";
 dotenv.config({ path: path.join(process.cwd(), ".env"), override: !isTest });
 
+/**
+ * Raw environment extraction. Every variable gets trimmed to handle
+ * stray whitespace in .env files (copy-paste accidents are common).
+ * We extract everything first, then validate in one pass via zod.
+ */
 const raw = {
   DISCORD_TOKEN: process.env.DISCORD_TOKEN?.trim(),
   CLIENT_ID: process.env.CLIENT_ID?.trim(),
@@ -66,14 +71,21 @@ const raw = {
   WS_PING_MS_ALERT: process.env.WS_PING_MS_ALERT?.trim(),
 };
 
+/**
+ * Schema defines what's required vs optional. Required secrets (TOKEN, CLIENT_ID,
+ * RESET_PASSWORD) fail fast at startup rather than crashing later when first used.
+ * Optional fields get sensible defaults where possible.
+ */
 const schema = z.object({
+  // Core Discord credentials - bot won't start without these
   DISCORD_TOKEN: z.string().min(1, "Missing DISCORD_TOKEN"),
   CLIENT_ID: z.string().min(1, "Missing CLIENT_ID"),
-  GUILD_ID: z.string().optional(),
+  GUILD_ID: z.string().optional(), // Only needed for guild-specific command deployment
   NODE_ENV: z.enum(["development", "production", "test"]).default("development"),
   DB_PATH: z.string().default("data/data.db"),
 
-  // Sentry error tracking (optional)
+  // Sentry error tracking - disabled if DSN not provided
+  // 0.1 default sample rate = 10% of transactions traced (saves quota in prod)
   SENTRY_DSN: z.string().optional(),
   SENTRY_ENVIRONMENT: z.string().optional(),
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
@@ -117,6 +129,11 @@ const schema = z.object({
   WS_PING_MS_ALERT: z.string().optional(),
 });
 
+/**
+ * Fail-fast validation. If required vars are missing, exit immediately with
+ * clear error messages rather than letting the app limp along and fail randomly.
+ * safeParse gives us all errors at once instead of one-at-a-time.
+ */
 const parsed = schema.safeParse(raw);
 if (!parsed.success) {
   const issues = parsed.error.issues.map((i) => `- ${i.path.join(".")}: ${i.message}`).join("\n");
@@ -125,6 +142,12 @@ if (!parsed.success) {
 }
 export const env = parsed.data;
 
+/**
+ * Boolean feature flags parsed separately. These read directly from process.env
+ * rather than going through zod since they have trivial parsing logic and
+ * default to "on" for backwards compat.
+ */
 const truthyPattern = /^(1|true|yes|on)$/i;
 
+// Controls whether avatar risk warnings appear in review UI. Defaults ON.
 export const GATE_SHOW_AVATAR_RISK = truthyPattern.test(process.env.GATE_SHOW_AVATAR_RISK ?? "1");

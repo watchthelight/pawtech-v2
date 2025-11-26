@@ -36,8 +36,8 @@ import {
   type GuildConfig,
 } from "../lib/config.js";
 import { ensureGateEntry } from "../features/gate.js";
+import { findAppByShortCode } from "../features/appLookup.js";
 import {
-  findAppByShortCode,
   findPendingAppByUserId,
   ensureReviewMessage,
   approveTx,
@@ -69,6 +69,30 @@ import { db } from "../db/db.js";
 import { timingSafeEqual } from "node:crypto";
 import { logger } from "../lib/logger.js";
 import { env } from "../lib/env.js";
+
+/*
+ * Gate Command Architecture Notes:
+ * --------------------------------
+ * This module is the entry point for guild gating functionality. The actual
+ * review workflow lives in features/review.ts - this file just defines slash
+ * commands and routes to the appropriate handlers.
+ *
+ * PERMISSION MODEL:
+ * - /gate setup/reset/config: Requires ManageGuild or reviewer_role
+ * - /accept /reject /kick: Requires staff (reviewer_role or ManageGuild)
+ * - /gate set-questions: Requires gate admin (owner, bot owners, admin roles, or ManageGuild)
+ *
+ * SHORT CODES (HEX6):
+ * Application IDs are UUIDs internally, but we expose 6-char hex codes (e.g., "A1B2C3")
+ * to staff for easier verbal communication. The shortCode() function in lib/ids.ts
+ * derives these deterministically from the UUID.
+ *
+ * CLAIM SYSTEM:
+ * To prevent two moderators from working on the same app simultaneously, we use
+ * a claim system. When a mod starts reviewing, they claim the app. Other mods
+ * see "claimed by X" and are blocked from taking action. Claims are released
+ * on decision or via /unclaim.
+ */
 import { closeModmailForApplication } from "../features/modmail.js";
 import { shortCode } from "../lib/ids.js";
 import type { GuildMember } from "discord.js";
@@ -174,6 +198,16 @@ export const data = new SlashCommandBuilder()
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
 
+/**
+ * Constant-time string comparison to prevent timing attacks on password validation.
+ *
+ * SECURITY: Standard === comparison leaks information via timing differences.
+ * An attacker can measure response time to guess characters one by one.
+ * timingSafeEqual always takes the same time regardless of where strings differ.
+ *
+ * The length check happens first (leaking only length info, not content), then
+ * the actual byte comparison runs in constant time.
+ */
 function safeEq(a: string, b: string): boolean {
   const ab = Buffer.from(a, "utf8");
   const bb = Buffer.from(b, "utf8");
@@ -354,6 +388,18 @@ export const handleResetModal = wrapCommand<ModalSubmitInteraction>("gate:reset"
 
   const guildId = interaction.guildId;
 
+  /*
+   * RESET TRANSACTION:
+   * All tables are wiped in a single transaction for atomicity. If any delete
+   * fails (except optional tables), the entire reset is rolled back.
+   *
+   * Optional tables (review_card, avatar_scan, review_claim) may not exist in
+   * older schema versions - we silently skip those rather than failing the reset.
+   *
+   * NOTE: guild_question is wiped separately (outside transaction) because it's
+   * scoped to guild_id, while the tables below are global. This is intentional -
+   * questions are guild-specific config, not application data.
+   */
   const resetAll = db.transaction(() => {
     const runDelete = (phase: string, sql: string, optional = false) => {
       ctx.step(phase);
@@ -699,6 +745,20 @@ async function executeWelcomeRole(ctx: CommandContext<ChatInputCommandInteractio
   await replyOrEdit(interaction, { content: "Welcome ping role updated." });
 }
 
+/*
+ * ACCEPT/REJECT/KICK COMMANDS
+ * ---------------------------
+ * These are registered as separate top-level slash commands (not /gate subcommands)
+ * for ergonomics - moderators use them frequently and /accept is faster to type
+ * than /gate accept.
+ *
+ * Both support lookup by:
+ *   - app: 6-char hex short code (verbal-friendly, e.g., "A1B2C3")
+ *   - uid: Discord user ID (18-digit snowflake)
+ *
+ * The uid option exists because sometimes you need to find someone's app by their
+ * Discord profile, especially when they DM asking about their application status.
+ */
 export const acceptData = new SlashCommandBuilder()
   .setName("accept")
   .setDescription("Approve an application by short code or Discord user ID")
@@ -803,6 +863,15 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
   let roleApplied = false;
   let roleError: { code?: number; message?: string } | null = null;
   if (cfg) {
+    /*
+     * approveFlow handles the Discord side: fetching the member and applying
+     * the accepted_role. It returns roleError if the bot lacks permissions
+     * (error code 50013) or the role is higher in hierarchy than the bot's role.
+     *
+     * We proceed even if role assignment fails - the app is marked approved in
+     * the database, and we report the failure to the reviewer so they can fix
+     * permissions or assign the role manually.
+     */
     const flow = await approveFlow(interaction.guild, resolvedApp.user_id, cfg);
     approvedMember = flow.member;
     roleApplied = flow.roleApplied;

@@ -81,7 +81,16 @@ export const data = new SlashCommandBuilder()
   );
 
 /**
- * Decision actions (approve, reject, perm_reject, kick, modmail_open)
+ * Actions that count as "decisions" for moderator metrics.
+ *
+ * Why modmail_open is included: Opening a modmail thread is a deliberate choice
+ * to engage with an applicant rather than immediately approve/reject. It represents
+ * active work even though it's not a terminal decision. Excluding it would
+ * undercount moderators who do a lot of applicant communication.
+ *
+ * perm_reject vs reject: Both count equally for stats, but perm_reject prevents
+ * the user from ever re-applying. The distinction matters for user lifecycle,
+ * not moderator workload measurement.
  */
 const DECISION_ACTIONS = ["approve", "reject", "perm_reject", "kick", "modmail_open"];
 
@@ -285,7 +294,17 @@ async function handleLeaderboard(interaction: ChatInputCommandInteraction): Prom
   const exportCsv = interaction.options.getBoolean("export") ?? false;
   const windowStartS = nowUtc() - days * 86400;
 
-  // Get decision counts per moderator
+  /*
+   * Leaderboard query aggregates by actor_id within the time window.
+   * The ORDER BY prioritizes total decisions, then approvals as tiebreaker.
+   *
+   * LIMIT 100 is a safety cap - we only display top 15 in the image, but
+   * fetch more in case CSV export is requested. In practice, most servers
+   * have fewer than 100 active moderators.
+   *
+   * NOTE: This query can be slow on very large action_log tables. Consider
+   * adding an index on (guild_id, created_at_s, action) if you see issues.
+   */
   const rows = db
     .prepare(
       `
@@ -522,10 +541,18 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
  * WHY: Routes to leaderboard or user subcommand.
  */
 /**
- * WHAT: Rate limiter for /modstats reset attempts.
- * WHY: Prevents brute-force password guessing attacks.
- * HOW: In-memory map of userId -> last attempt timestamp.
- * SECURITY: 30-second cooldown per user after failed attempt.
+ * In-memory rate limiter for /modstats reset password attempts.
+ *
+ * SECURITY CONSIDERATIONS:
+ * - 30-second cooldown after each failed attempt (per user)
+ * - In-memory only - resets on bot restart (acceptable for this use case)
+ * - Does NOT persist across shards in multi-process deployments
+ *
+ * For a distributed deployment, you'd want to use Redis or similar.
+ * For a single-process bot, this is sufficient to prevent casual brute-forcing.
+ *
+ * The cooldown applies even to successful attempts conceptually, but we
+ * clear the entry on success (line ~630) to avoid penalizing legitimate use.
  */
 const resetRateLimiter = new Map<string, number>();
 const RESET_RATE_LIMIT_MS = 30000; // 30 seconds

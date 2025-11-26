@@ -17,11 +17,15 @@ import { logger } from "../lib/logger.js";
 import { env } from "../lib/env.js";
 
 // In-memory cache of current banner URL
+// These are module-level singletons - fine for a single-process bot, but would need
+// rethinking if we ever shard across processes (use Redis or similar).
 let cachedBannerURL: string | null = null;
 let cachedGuildBannerHash: string | null = null;
 let lastSyncTime: number | null = null;
 
 // Rate limiting: don't update bot banner more than once per 10 minutes
+// Discord's API has stricter limits on profile updates, but 10 min is conservative
+// and prevents hammering the API if someone rapidly changes the server banner.
 const MIN_UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
@@ -51,6 +55,8 @@ export async function syncBannerFromGuild(
 ): Promise<void> {
   try {
     // Get guild banner URL (highest quality)
+    // size: 4096 is the max Discord supports. We want highest quality for the bot profile.
+    // extension: png for lossless quality (Discord CDN handles the conversion).
     const guildBannerURL = guild.bannerURL({
       size: 4096,
       extension: "png",
@@ -142,6 +148,9 @@ export async function initializeBannerSync(client: Client): Promise<void> {
   }
 
   // Periodic check every 6 hours as fallback (in case events are missed)
+  // This handles edge cases like: bot was offline when banner changed, websocket
+  // reconnection lost the event, or Discord just didn't send it (rare but happens).
+  // 6 hours is a reasonable balance between freshness and not being wasteful.
   const PERIODIC_CHECK_MS = 6 * 60 * 60 * 1000; // 6 hours
   setInterval(async () => {
     try {
@@ -156,6 +165,9 @@ export async function initializeBannerSync(client: Client): Promise<void> {
   logger.info({ intervalHours: 6 }, "Periodic banner sync check scheduled");
 
   // Listen for guild updates (including banner changes)
+  // This is the primary sync mechanism - guildUpdate fires whenever guild settings change.
+  // We compare banner hashes rather than URLs because the hash is the canonical identifier
+  // and URLs can vary (different CDN subdomains, query params, etc.).
   client.on("guildUpdate", async (oldGuild, newGuild) => {
     // Only sync for the configured guild
     if (newGuild.id !== env.GUILD_ID) return;

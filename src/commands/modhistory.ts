@@ -34,6 +34,8 @@ import { randomBytes } from "node:crypto";
 
 const DEFAULT_DAYS = 30;
 const MAX_DAYS = 365;
+// Cap for percentile calculation to prevent memory issues with very active servers
+// 30k rows is enough for statistically meaningful p50/p95 while staying reasonable
 const MAX_PERCENTILE_ROWS = 30000;
 
 export const data = new SlashCommandBuilder()
@@ -56,8 +58,22 @@ export const data = new SlashCommandBuilder()
   .setDMPermission(false);
 
 /**
- * requireLeadership (slash command version)
- * WHY: Verify caller has leadership permissions
+ * Leadership permission check for moderator oversight commands.
+ *
+ * PERMISSION HIERARCHY (any one grants access):
+ *   1. Bot owner (OWNER_IDS in env) - global override for debugging
+ *   2. Guild owner - always has access to their own server
+ *   3. Staff permissions (mod_role_ids or ManageGuild) - server admins
+ *   4. Leadership role (leadership_role_id in config) - designated oversight role
+ *
+ * WHY SO MANY CHECKS?
+ * Different servers organize their staff differently. Some have a dedicated
+ * "Leadership" role for senior mods, others just use ManageGuild for admins.
+ * We support all common patterns.
+ *
+ * The `member.permissions` string check handles an edge case where Discord
+ * returns permissions as a bitfield string instead of a Permissions object
+ * (happens in some webhook/API contexts).
  */
 async function requireLeadership(interaction: ChatInputCommandInteraction): Promise<boolean> {
   const userId = interaction.user.id;
@@ -170,7 +186,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     const totalDecisions = approveCount + rejectCount;
     const rejectRate = totalDecisions > 0 ? ((rejectCount / totalDecisions) * 100).toFixed(1) : "0.0";
 
-    // Anomaly detection
+    /*
+     * ANOMALY DETECTION:
+     * We compute daily action counts and run them through detectModeratorAnomalies()
+     * which uses z-score analysis to flag unusual patterns. High z-scores indicate
+     * activity significantly above/below the moderator's normal baseline.
+     *
+     * Use cases:
+     *   - Catching compromised accounts (sudden spike in rejections)
+     *   - Identifying burnout (gradual decline in activity)
+     *   - Detecting potential abuse (high reject rate on specific days)
+     *
+     * The threshold for "anomaly" is configurable in lib/anomaly.ts
+     */
     const dailyRows = db
       .prepare(
         `SELECT DATE(created_at_s, 'unixepoch') as day, COUNT(*) as cnt
@@ -241,6 +269,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
       const csv = generateModHistoryCsv(rows);
 
+      /*
+       * CSV files are written to data/exports/ with a randomized filename
+       * to prevent enumeration attacks. The random suffix ensures that even
+       * knowing the moderator ID and timestamp isn't enough to guess the URL.
+       *
+       * CLEANUP: These files should be pruned by a scheduled task (cron or
+       * similar) after 24 hours. The "expires in 24 hours" message is a
+       * promise to the user that we honor via that cleanup process.
+       *
+       * SECURITY: The exports directory should NOT be publicly listable.
+       * Only direct file access should work. Configure your web server
+       * to disable directory listing for /exports/.
+       */
       const exportsDir = join(process.cwd(), "data", "exports");
       try {
         mkdirSync(exportsDir, { recursive: true });

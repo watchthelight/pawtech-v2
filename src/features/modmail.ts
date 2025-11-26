@@ -108,9 +108,17 @@ function missingPermsForStartThread(
 
 // ===== Open Thread Tracking =====
 
-// In-memory set to track open modmail threads for efficient routing
-// Prevents DB queries on every message; hydrated on startup
-// Docs: https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Set
+/**
+ * In-memory set to track open modmail threads for efficient routing.
+ *
+ * Without this, we'd need a DB query on EVERY message to check if it's in a
+ * modmail thread. That's expensive at scale. Instead, we keep thread IDs in
+ * memory and only query DB when the set says "yes, this is a modmail thread".
+ *
+ * IMPORTANT: This must stay in sync with the database. We add on thread open,
+ * remove on thread close, and hydrate from DB on startup. If the bot crashes
+ * mid-operation, startup hydration will fix any inconsistencies.
+ */
 export const OPEN_MODMAIL_THREADS = new Set<string>();
 
 export async function hydrateOpenModmailThreadsOnStartup(client: Client) {
@@ -174,6 +182,28 @@ export function appendTranscript(ticketId: number, author: "STAFF" | "USER", con
  */
 function formatTranscript(lines: TranscriptLine[]): string {
   return lines.map((line) => `[${line.timestamp}] ${line.author}: ${line.content}`).join("\n");
+}
+
+/**
+ * Format message content with attachment URLs for transcript.
+ * WHAT: Combines message text with attachment URLs for complete audit trail.
+ * WHY: Ensures images and files are traceable in transcript even though we can't embed them.
+ */
+function formatContentWithAttachments(content: string, attachments?: ReadonlyMap<string, Attachment>): string {
+  let fullContent = content || "";
+
+  if (attachments && attachments.size > 0) {
+    const attachmentUrls = Array.from(attachments.values())
+      .map((att) => `[${att.contentType || "file"}] ${att.url}`)
+      .join("\n");
+    if (fullContent) {
+      fullContent += `\n${attachmentUrls}`;
+    } else {
+      fullContent = attachmentUrls;
+    }
+  }
+
+  return fullContent || "(empty message)";
 }
 
 /**
@@ -257,10 +287,13 @@ async function ensureModsCanSpeakInThread(
       const me = guild?.members.me;
       if (me) {
         try {
-          await thread.members.add(me.id).catch(() => {
+          await thread.members.add(me.id).catch((err) => {
             // Bot is likely already in the thread since it created it
+            logger.debug({ threadId: thread.id, err }, "[modmail] bot already in thread (expected)");
           });
-        } catch {}
+        } catch (err) {
+          logger.debug({ threadId: thread.id, err }, "[modmail] failed to add bot to thread");
+        }
       }
       logger.info(
         { threadId: thread.id, guildId: thread.guildId, threadType: thread.type },
@@ -379,7 +412,7 @@ async function flushTranscript(params: {
   guildId: string;
   userId: string;
   appCode?: string | null;
-}): Promise<string | null> {
+}): Promise<{ messageId: string | null; lineCount: number }> {
   const { client, ticketId, guildId, userId, appCode } = params;
 
   // Get config to find log channel
@@ -388,7 +421,7 @@ async function flushTranscript(params: {
 
   if (!config?.modmail_log_channel_id) {
     logger.info({ ticketId, guildId }, "[modmail] transcript skipped (no log channel configured)");
-    return null;
+    return { messageId: null, lineCount: 0 };
   }
 
   // Get transcript from in-memory buffer first (fast path)
@@ -454,10 +487,10 @@ async function flushTranscript(params: {
           },
         });
       } catch (alertErr) {
-        logger.debug({ err: alertErr }, "[modmail] failed to log transcript failure alert");
+        logger.warn({ err: alertErr }, "[modmail] failed to log transcript failure alert");
       }
 
-      return null;
+      return { messageId: null, lineCount: 0 };
     }
 
     const textChannel = channel as TextChannel;
@@ -504,7 +537,7 @@ async function flushTranscript(params: {
         "[modmail] empty transcript logged"
       );
 
-      return message.id;
+      return { messageId: message.id, lineCount: 0 };
     }
 
     // Format transcript as plain text
@@ -539,10 +572,13 @@ async function flushTranscript(params: {
       "[modmail] transcript flushed to log channel"
     );
 
+    // Capture count before clearing buffer
+    const lineCount = lines.length;
+
     // Clear buffer after successful flush
     transcriptBuffers.delete(ticketId);
 
-    return message.id;
+    return { messageId: message.id, lineCount };
   } catch (err) {
     logger.warn(
       { err, ticketId, guildId, channelId: config.modmail_log_channel_id },
@@ -567,10 +603,10 @@ async function flushTranscript(params: {
         },
       });
     } catch (alertErr) {
-      logger.debug({ err: alertErr }, "[modmail] failed to log transcript failure alert");
+      logger.warn({ err: alertErr }, "[modmail] failed to log transcript failure alert");
     }
 
-    return null;
+    return { messageId: null, lineCount: lines?.length ?? 0 };
   }
 }
 
@@ -696,9 +732,22 @@ type ModmailMessageMap = {
   content?: string; // Message content for transcript persistence
 };
 
+/**
+ * Insert or update a modmail message mapping.
+ *
+ * Each routed message creates a mapping between its thread message ID and DM
+ * message ID. This lets us support reply chains: when a user replies to a
+ * specific DM message, we look up its corresponding thread message and
+ * create a reply there too.
+ *
+ * The ON CONFLICT clause handles edge cases where a message is recorded twice
+ * (e.g., retry after partial failure). COALESCE ensures we don't overwrite
+ * existing data with NULL.
+ *
+ * We also persist content for transcript generation. This survives bot restarts -
+ * if the bot crashes, we can reconstruct the transcript from this table.
+ */
 export function insertModmailMessage(map: ModmailMessageMap) {
-  // Insert first; update if the opposite side arrives later.
-  // content column added in migration 021 to persist transcript data across restarts
   const stmt = db.prepare(`
     INSERT INTO modmail_message
       (ticket_id, direction, thread_message_id, dm_message_id, reply_to_thread_message_id, reply_to_dm_message_id, content)
@@ -831,7 +880,19 @@ function chunkText(text: string, maxLength: number): string[] {
 
 // ===== Message Routing =====
 
-// In-memory set to prevent echo loops
+/**
+ * In-memory set to prevent echo loops in message routing.
+ *
+ * Problem: When staff sends "Hello" in the thread, we forward it to the user's DM.
+ * The bot sends that DM. Without this set, the DM handler might see the bot's
+ * message and try to route it back to the thread, creating an infinite loop.
+ *
+ * Solution: When we forward a message, we mark its ID in this set. The routing
+ * handlers check this set and skip messages that were already forwarded.
+ *
+ * The 5-minute TTL prevents memory leaks while being long enough that we won't
+ * accidentally re-process a message (Discord message IDs are unique anyway).
+ */
 const forwardedMessages = new Set<string>();
 
 export function isForwarded(messageId: string): boolean {
@@ -840,7 +901,7 @@ export function isForwarded(messageId: string): boolean {
 
 export function markForwarded(messageId: string) {
   forwardedMessages.add(messageId);
-  // Clean up after 5 minutes to prevent memory leak
+  // TTL prevents unbounded memory growth. 5 minutes is plenty of buffer.
   setTimeout(() => forwardedMessages.delete(messageId), 5 * 60 * 1000);
 }
 
@@ -912,6 +973,9 @@ export async function routeThreadToDm(message: Message, ticket: ModmailTicket, c
 
     markForwarded(dmMessage.id);
 
+    // Format content with attachments for complete audit trail
+    const transcriptContent = formatContentWithAttachments(message.content, message.attachments);
+
     // Store mapping + content for transcript persistence (survives bot restarts)
     insertModmailMessage({
       ticketId: ticket.id,
@@ -920,11 +984,11 @@ export async function routeThreadToDm(message: Message, ticket: ModmailTicket, c
       dmMessageId: dmMessage.id,
       replyToThreadMessageId: message.reference?.messageId,
       replyToDmMessageId,
-      content: message.content, // Persist content for transcript
+      content: transcriptContent, // Persist content with attachments for transcript
     });
 
     // Append to transcript buffer for audit trail (in-memory, also persisted above)
-    appendTranscript(ticket.id, "STAFF", message.content);
+    appendTranscript(ticket.id, "STAFF", transcriptContent);
 
     logger.info(
       {
@@ -1019,6 +1083,9 @@ export async function routeDmToThread(message: Message, ticket: ModmailTicket, c
 
     markForwarded(threadMessage.id);
 
+    // Format content with attachments for complete audit trail
+    const transcriptContent = formatContentWithAttachments(message.content, message.attachments);
+
     // Store mapping + content for transcript persistence (survives bot restarts)
     insertModmailMessage({
       ticketId: ticket.id,
@@ -1027,11 +1094,11 @@ export async function routeDmToThread(message: Message, ticket: ModmailTicket, c
       dmMessageId: message.id,
       replyToThreadMessageId,
       replyToDmMessageId: message.reference?.messageId,
-      content: message.content, // Persist content for transcript
+      content: transcriptContent, // Persist content with attachments for transcript
     });
 
     // Append to transcript buffer for audit trail (in-memory, also persisted above)
-    appendTranscript(ticket.id, "USER", message.content);
+    appendTranscript(ticket.id, "USER", transcriptContent);
 
     logger.info(
       {
@@ -1055,10 +1122,13 @@ export async function routeDmToThread(message: Message, ticket: ModmailTicket, c
 // ===== Thread Management =====
 
 /**
- * registerModmailThreadTx
- * WHAT: Idempotent DB writes for modmail thread registration (inside transaction).
- * WHY: Separates DB logic from Discord API calls; prevents nested transactions.
- * USAGE: Called within openPublicModmailThreadFor's transaction after thread creation.
+ * Register the final thread_id after Discord thread creation.
+ *
+ * This is the second part of the race-safe open flow. We inserted a 'pending'
+ * placeholder earlier; now we update it with the real thread ID.
+ *
+ * The UPSERT (ON CONFLICT DO UPDATE) makes this idempotent - if something goes
+ * wrong and this gets called twice, it won't create duplicate rows.
  */
 function registerModmailThreadTx(params: {
   guildId: string;
@@ -1122,12 +1192,39 @@ export async function openPublicModmailThreadFor(params: {
     return { success: false, message: "You do not have permission for this." };
   }
 
-  // RACE-SAFE CHECK: Fast path - if thread already tracked in open_modmail, link to it
+  // ======================================================================
+  // RACE CONDITION PROTECTION (important, read carefully)
+  // ======================================================================
+  //
+  // Problem: Two mods click "Open Modmail" at the same time for the same user.
+  // Without protection, both would create threads, causing confusion.
+  //
+  // Solution: Use the open_modmail table as a lock. The table has a PRIMARY KEY
+  // on (guild_id, applicant_id), so only one row can exist per user per guild.
+  //
+  // The flow is:
+  // 1. Check if row exists (fast path, no lock)
+  // 2. Inside transaction, double-check and INSERT with thread_id='pending'
+  // 3. Create Discord thread (outside transaction - can't await in db.transaction)
+  // 4. UPDATE the row with the real thread_id
+  //
+  // If step 3 fails, we clean up the 'pending' row so future attempts work.
+  // If two mods race past step 1, only one will succeed at step 2 (PRIMARY KEY).
+  // ======================================================================
+
+  // Fast path check - avoids transaction overhead for common "already exists" case
   const existingRow = db
     .prepare(`SELECT thread_id FROM open_modmail WHERE guild_id = ? AND applicant_id = ?`)
     .get(interaction.guildId, userId) as { thread_id: string } | undefined;
 
   if (existingRow?.thread_id) {
+    // Handle 'pending' case - another mod is in the middle of creating the thread
+    if (existingRow.thread_id === "pending") {
+      return {
+        success: false,
+        message: "Modmail thread is being created by another moderator. Please wait a moment and try again.",
+      };
+    }
     return {
       success: false,
       message: `Modmail thread already exists: <#${existingRow.thread_id}>`,
@@ -1193,9 +1290,12 @@ export async function openPublicModmailThreadFor(params: {
       };
     }
 
-    // Execute DB writes in a single atomic transaction
+    // Execute DB writes in a single atomic transaction.
+    // This is the critical section for race protection - see comment above.
     const openResult = db.transaction(() => {
-      // Double-check guard inside transaction (race protection)
+      // Double-check guard INSIDE transaction. The fast path check above doesn't
+      // hold a lock, so another mod could have snuck in between then and now.
+      // This check happens under SQLite's write lock, so it's authoritative.
       const guardCheck = db
         .prepare(`SELECT thread_id FROM open_modmail WHERE guild_id = ? AND applicant_id = ?`)
         .get(interaction.guildId, userId) as { thread_id: string } | undefined;
@@ -1204,8 +1304,8 @@ export async function openPublicModmailThreadFor(params: {
         return { alreadyExists: true, threadId: guardCheck.thread_id };
       }
 
-      // Create ticket in DB first
-      // At this point, interaction.guildId is guaranteed non-null (checked at line 1025)
+      // Create ticket in DB. We do this inside the transaction so that if the
+      // INSERT into open_modmail fails (race), we don't leave orphan tickets.
       ticketId = createTicket({
         guildId: interaction.guildId!,
         userId,
@@ -1213,10 +1313,31 @@ export async function openPublicModmailThreadFor(params: {
         reviewMessageId,
       });
 
+      // Insert with 'pending' thread_id to acquire the lock. The PRIMARY KEY
+      // constraint will cause this to fail if another transaction beat us.
+      // We can't put the real thread_id here because we can't call Discord API
+      // inside a synchronous transaction.
+      db.prepare(
+        `INSERT INTO open_modmail (guild_id, applicant_id, thread_id, created_at)
+         VALUES (?, ?, 'pending', strftime('%s','now'))`
+      ).run(interaction.guildId, userId);
+
+      logger.debug(
+        { guildId: interaction.guildId, userId, ticketId },
+        "[modmail] Acquired lock in open_modmail with pending thread_id"
+      );
+
       return { alreadyExists: false, ticketId };
     })();
 
     if (openResult.alreadyExists) {
+      // Handle 'pending' case - another mod is in the middle of creating the thread
+      if (openResult.threadId === "pending") {
+        return {
+          success: false,
+          message: "Modmail thread is being created by another moderator. Please wait a moment and try again.",
+        };
+      }
       return {
         success: false,
         message: `Modmail thread already exists: <#${openResult.threadId}>`,
@@ -1270,7 +1391,8 @@ export async function openPublicModmailThreadFor(params: {
     // Ensure moderators can speak in the thread (sets parent perms, no member adds for public)
     await ensureModsCanSpeakInThread(thread, member);
 
-    // Register thread in DB (single transaction for atomicity)
+    // Register the real thread_id now that we have it.
+    // This updates the 'pending' placeholder we inserted earlier.
     db.transaction(() => {
       registerModmailThreadTx({
         guildId: interaction.guildId!,
@@ -1383,9 +1505,10 @@ export async function openPublicModmailThreadFor(params: {
       message: `Modmail thread created: <#${thread.id}>`,
     };
   } catch (err: any) {
-    // Transaction rollback is automatic via db.transaction()
+    // Transaction rollback is automatic via db.transaction() - no explicit rollback needed
 
-    // Check if this was a race condition (UNIQUE constraint violation)
+    // Detect race condition: if we hit a PRIMARY KEY constraint, another mod won.
+    // SQLite error codes vary by driver, so we check both the message and code.
     const isRaceCondition =
       String(err?.message || "").includes("UNIQUE") ||
       String(err?.message || "").includes("PRIMARY KEY") ||
@@ -1393,12 +1516,13 @@ export async function openPublicModmailThreadFor(params: {
       err?.code === "SQLITE_CONSTRAINT";
 
     if (isRaceCondition) {
-      // Another moderator beat us to it - link to the existing thread
+      // Race detected: another moderator beat us. Look up their thread and link to it.
+      // This is a clean failure - no error card needed, just redirect to existing thread.
       const existingThread = db
         .prepare(`SELECT thread_id FROM open_modmail WHERE guild_id = ? AND applicant_id = ?`)
         .get(interaction.guildId, userId) as { thread_id: string } | undefined;
 
-      if (existingThread?.thread_id) {
+      if (existingThread?.thread_id && existingThread.thread_id !== "pending") {
         logger.info(
           { guildId: interaction.guildId, userId, threadId: existingThread.thread_id },
           "[modmail] race condition detected - linking to existing thread"
@@ -1408,6 +1532,31 @@ export async function openPublicModmailThreadFor(params: {
           message: `Modmail thread already exists: <#${existingThread.thread_id}>`,
         };
       }
+      // Edge case: the winner is still in the 'pending' state (creating the thread)
+      if (existingThread?.thread_id === "pending") {
+        return {
+          success: false,
+          message: "Modmail thread is being created by another moderator. Please wait a moment and try again.",
+        };
+      }
+    }
+
+    // CRITICAL CLEANUP: If we fail for any reason (Discord API error, permission issue,
+    // etc.), we must remove our 'pending' entry. Otherwise, future attempts will see
+    // 'pending' forever and no one can create a thread for this user.
+    try {
+      db.prepare(
+        `DELETE FROM open_modmail WHERE guild_id = ? AND applicant_id = ? AND thread_id = 'pending'`
+      ).run(interaction.guildId, userId);
+      logger.debug(
+        { guildId: interaction.guildId, userId },
+        "[modmail] Cleaned up pending entry after thread creation failure"
+      );
+    } catch (cleanupErr) {
+      // If cleanup fails, we're in trouble - manual intervention may be needed.
+      // Log at warn level so it shows up in monitoring.
+      logger.warn({ cleanupErr, guildId: interaction.guildId, userId },
+        "[modmail] Failed to clean up pending entry - manual cleanup may be required");
     }
 
     // Unknown error - log and return generic message
@@ -1517,14 +1666,17 @@ export async function closeModmailThread(params: {
 
     // Flush transcript to log channel
     let logMessageId: string | null = null;
+    let transcriptLines = 0;
     if (interaction.guildId) {
-      logMessageId = await flushTranscript({
+      const result = await flushTranscript({
         client: interaction.client,
         ticketId: ticket.id,
         guildId: interaction.guildId,
         userId: ticket.user_id,
         appCode: ticket.app_code,
       });
+      logMessageId = result.messageId;
+      transcriptLines = result.lineCount;
     }
 
     // Save log_channel_id and log_message_id to ticket
@@ -1569,9 +1721,6 @@ export async function closeModmailThread(params: {
     }
 
     logger.info({ ticketId: ticket.id, threadId: ticket.thread_id }, "[modmail] thread closed");
-
-    // Get transcript line count for logging
-    const transcriptLines = transcriptBuffers.get(ticket.id)?.length ?? 0;
 
     // Log modmail close action (before auto-delete so we know which action was taken)
     let archiveAction: "delete" | "archive" = "archive";
@@ -1865,13 +2014,17 @@ async function archiveOrDeleteThread(
     // Best effort: remove bot from thread to hide it from sidebar
     try {
       if (client.user) {
-        await thread.members.remove(client.user.id).catch(() => {});
+        await thread.members.remove(client.user.id).catch((removeErr) => {
+          logger.debug({ threadId: thread.id, removeErr }, "[modmail] failed to remove bot from thread (best effort)");
+        });
         logger.info(
           { threadId: thread.id },
           "[modmail] close:archive final fallback: removed bot from thread"
         );
       }
-    } catch {}
+    } catch (cleanupErr) {
+      logger.debug({ threadId: thread.id, cleanupErr }, "[modmail] cleanup failed during archive fallback");
+    }
 
     return { action: "archive", ok: false, err: e, code };
   }
@@ -1972,7 +2125,7 @@ export async function closeModmailForApplication(
     );
 
     // ===== PHASE B: Flush transcript to log channel =====
-    const logMessageId = await flushTranscript({
+    const { messageId: logMessageId, lineCount: transcriptLines } = await flushTranscript({
       client,
       ticketId,
       guildId,
@@ -1980,7 +2133,6 @@ export async function closeModmailForApplication(
       appCode: ticket.app_code ?? appCode,
     });
 
-    const transcriptLines = transcriptBuffers.get(ticketId)?.length ?? 0;
     logger.info(
       {
         ticketId,

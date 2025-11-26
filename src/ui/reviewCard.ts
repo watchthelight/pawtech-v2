@@ -274,361 +274,32 @@ export function googleReverseImageUrl(avatarUrl: string): string {
   return `https://lens.google.com/uploadbyurl?url=${encodeURIComponent(avatarUrl)}`;
 }
 
-// ============================================================================
-// Main Embed Builder
-// ============================================================================
-
-export function buildReviewEmbed(
-  app: ReviewCardApplication,
-  opts: BuildEmbedOptions = {}
-): EmbedBuilder {
-  const {
-    answers = [],
-    flags = [],
-    avatarScan = null,
-    claim = null,
-    accountCreatedAt = null,
-    modmailTicket = null,
-    member = null,
-    recentActions = null,
-    isSample = false,
-    reasonAttachment = null,
-  } = opts;
-
-  const code = shortCode(app.id);
-  const username = app.userTag.replace(/@/g, "@\u200b"); // prevent mention
-  const hr = "\n────────────────\n";
-
-  // Parse timestamps
-  const submittedEpoch = app.submitted_at
-    ? Math.floor(new Date(app.submitted_at).getTime() / 1000)
-    : Math.floor(new Date(app.created_at).getTime() / 1000);
-
-  // Build embed
-  const embed = new EmbedBuilder()
-    .setTitle(`New Application • ${username} • App #${code}`)
-    .setColor(getEmbedColor(app.status, member === null));
-
-  // Thumbnail
-  if (app.avatarUrl) {
-    embed.setThumbnail(app.avatarUrl);
-  }
-
-  // Description: Decision + Reason (mobile-first, single block)
-  const topSections: string[] = [];
-
-  // Show prominent notice if member has left
-  if (member === null && (app.status === "draft" || app.status === "submitted")) {
-    topSections.push(`⚠️ **Member left server.**`);
-  }
-
-  if (app.status === "rejected" && app.resolution_reason) {
-    const reason = app.resolution_reason;
-    topSections.push(`**Decision**\nRejected`);
-    if (reason.length > 3800) {
-      topSections.push(`**Reason**\nAttached as rejection-reason.txt (too long to display)`);
-    } else {
-      topSections.push(`**Reason**\n\`\`\`text\n${reason}\n\`\`\``);
-    }
-  } else if (app.status === "approved") {
-    topSections.push(`**Decision**\nApproved`);
-  }
-  if (topSections.length > 0) {
-    embed.setDescription(topSections.join(hr));
-  }
-
-  // Field: Application Info
-  const metaLines: string[] = [];
-
-  // Submitted time with full date (absolute, copy-pasteable)
-  metaLines.push(`Submitted: ${formatAbsolute(submittedEpoch, { hour12: false })}`);
-
-  // Claim status
-  if (claim) {
-    const claimEpoch = parseClaimedAt(claim.claimed_at);
-    if (claimEpoch) {
-      metaLines.push(`**Claimed by:** <@${claim.reviewer_id}> • ${discordTimestamp(claimEpoch, "R")}`);
-    } else {
-      metaLines.push(`**Claimed by:** <@${claim.reviewer_id}> • (timestamp parse error)`);
-    }
-  } else {
-    metaLines.push(`Claimed by: Unclaimed`);
-  }
-
-  // Account age with full date
-  if (typeof accountCreatedAt === 'number' && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
-    const accountSec = Math.floor(accountCreatedAt / 1000);
-    if (Number.isFinite(accountSec) && accountSec > 0) {
-      metaLines.push(`**Account created:** ${discordTimestamp(accountSec, "F")} (${discordTimestamp(accountSec, "R")})`);
-    }
-  }
-
-  embed.addFields({
-    name: "──────────── Application ────────────",
-    value: metaLines.join("\n"),
-    inline: false,
-  });
-
-  // Fields: Questions + Answers (each in code block)
-  const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
-
-  // Add Q&A section header
-  embed.addFields({
-    name: "────────────── Q&A ──────────────",
-    value: orderedAnswers.length === 0 ? "No answers submitted yet" : "\u200b", // Zero-width space for separator
-    inline: false,
-  });
-
-  if (orderedAnswers.length > 0) {
-    for (const qa of orderedAnswers) {
-      const question = qa.question || `Question ${qa.q_index + 1}`;
-      // Don't truncate answers - show full text
-      const answer = qa.answer || "(no response)";
-      const wrappedAnswer = wrapCode(answer, 72);
-
-      embed.addFields({
-        name: `Q${qa.q_index + 1}: ${question}`,
-        value: wrappedAnswer,
-        inline: false,
-      });
-    }
-  }
-
-  // Field: Status
-  const statusLines: string[] = [];
-
-  // Modmail status
-  if (modmailTicket) {
-    if (modmailTicket.status === "open" && modmailTicket.thread_id) {
-      statusLines.push(
-        `**Modmail:** [Open Thread](https://discord.com/channels/${app.guild_id}/${modmailTicket.thread_id})`
-      );
-    } else if (
-      modmailTicket.status === "closed" &&
-      modmailTicket.log_channel_id &&
-      modmailTicket.log_message_id
-    ) {
-      statusLines.push(
-        `**Modmail:** [View Log](https://discord.com/channels/${app.guild_id}/${modmailTicket.log_channel_id}/${modmailTicket.log_message_id})`
-      );
-    } else if (modmailTicket.status === "closed") {
-      statusLines.push(`**Modmail:** Closed`);
-    }
-  } else {
-    statusLines.push(`**Modmail:** None`);
-  }
-
-  // Member status
-  if (member === null) {
-    statusLines.push(`**Member status:** Left server`);
-  } else {
-    statusLines.push(`**Member status:** In server`);
-  }
-
-  // Avatar risk
-  if (avatarScan) {
-    const pct = avatarScan.finalPct ?? 0;
-    const reverseLink = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
-    statusLines.push(`**Avatar risk:** ${pct}% • [Reverse Search](${reverseLink})`);
-    statusLines.push(`*Google Vision API - 75% accuracy estimate*`);
-  }
-
-  embed.addFields({
-    name: "─────────────── Status ───────────────",
-    value: statusLines.join("\n"),
-    inline: false,
-  });
-
-  // Field: History (last 3 actions with full timestamps)
-  if (recentActions && recentActions.length > 0) {
-    const historyLines = recentActions.slice(0, 3).map((action) => {
-      // Use Discord timestamp formatting for consistency
-      const timestamp = `${discordTimestamp(action.created_at, "F")}`;
-      let line = `• **${action.action}** by <@${action.moderator_id}>\n  ${timestamp}`;
-      return line;
-    });
-
-    embed.addFields({
-      name: "───────────── History (Last 3) ─────────────",
-      value: historyLines.join("\n\n"), // Double newline for spacing
-      inline: false,
-    });
-  } else if (recentActions) {
-    embed.addFields({
-      name: "───────────── History (Last 3) ─────────────",
-      value: "No recent history",
-      inline: false,
-    });
-  }
-
-  // Flags (if any)
-  if (flags.length > 0) {
-    embed.addFields({
-      name: "──────────────── Flags ────────────────",
-      value: flags.join("\n"),
-      inline: false,
-    });
-  }
-
-  // Footer
-  const todayLocal = fmtLocal(Math.floor(Date.now() / 1000));
-  const footerText = isSample
-    ? `Sample Preview • Submitted: ${fmtUtc(submittedEpoch)} • App ID: ${app.id.slice(0, 8)} • ${todayLocal}`
-    : `Submitted: ${fmtUtc(submittedEpoch)} • App ID: ${app.id.slice(0, 8)} • ${todayLocal}`;
-
-  embed.setFooter({ text: footerText });
-  embed.setTimestamp(submittedEpoch * 1000);
-
-  // Check total size and truncate if needed
-  const totalSize = estimateEmbedSize(embed);
-  if (totalSize > 5500) {
-    // Remove history to save space
-    const fields = embed.data.fields || [];
-    const historyIndex = fields.findIndex((f) => f.name.startsWith("History"));
-    if (historyIndex >= 0) {
-      fields.splice(historyIndex, 1);
-    }
-
-    // Add truncation notice
-    if (embed.data.description) {
-      embed.setDescription(embed.data.description + "\n\n*Some content truncated for mobile.*");
-    } else {
-      embed.setDescription("*Some content truncated for mobile.*");
-    }
-  }
-
-  return embed;
-}
-
-// ============================================================================
-// Mobile-first builder (V2)
-// ============================================================================
-
-export function buildReviewEmbedV2(
-  app: ReviewCardApplication,
-  opts: BuildEmbedOptions = {}
-): EmbedBuilder {
-  const {
-    answers = [],
-    flags = [],
-    avatarScan = null,
-    claim = null,
-    accountCreatedAt = null,
-    modmailTicket = null,
-    member = null,
-    recentActions = null,
-    isSample = false,
-  } = opts;
-
-  const code = shortCode(app.id);
-  const username = app.userTag.replace(/@/g, "@\u200b");
-  const submittedEpoch = app.submitted_at
-    ? Math.floor(new Date(app.submitted_at).getTime() / 1000)
-    : Math.floor(new Date(app.created_at).getTime() / 1000);
-
-  const embed = new EmbedBuilder()
-    .setTitle(`New Application • ${username} • App #${code}`)
-    .setColor(getEmbedColor(app.status, member === null));
-  if (app.avatarUrl) embed.setThumbnail(app.avatarUrl);
-
-  const hr = "\n────────────────\n";
-  const sections: string[] = [];
-
-  // Show prominent notice if member has left
-  if (member === null && (app.status === "draft" || app.status === "submitted")) {
-    sections.push(`⚠️ **Member left server.**`);
-  }
-
-  if (app.status === "rejected" && app.resolution_reason) {
-    sections.push(`**Decision**\nRejected`);
-    const reason = app.resolution_reason;
-    if (reason.length > 3800) {
-      sections.push(`**Reason**\nAttached as rejection-reason.txt (too long to display)`);
-    } else {
-      sections.push(`**Reason**\n\`\`\`text\n${reason}\n\`\`\``);
-    }
-  } else if (app.status === "approved") {
-    sections.push(`**Decision**\nApproved`);
-  }
-
-  // Application meta
-  const claimed = claim ? `<@${claim.reviewer_id}>` : "Unclaimed";
-  const metaLines: string[] = [`Submitted: ${toDiscordAbs(submittedEpoch)}; Claimed by: ${claimed}`];
-  if (claim) {
-    const claimEpoch = parseClaimedAt(claim.claimed_at);
-    metaLines[0] = `Submitted: ${toDiscordAbs(submittedEpoch)}`; // keep Submitted first line
-    if (claimEpoch) {
-      metaLines.push(`Claimed by: ${claimed} • ${toDiscordRel(claimEpoch)}`);
-    } else {
-      metaLines.push(`Claimed by: ${claimed} • (timestamp parse error)`);
-    }
-  }
-  if (typeof accountCreatedAt === 'number' && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
-    const accountSec = Math.floor(accountCreatedAt / 1000);
-    if (Number.isFinite(accountSec) && accountSec > 0) {
-      metaLines.push(`Account created: ${toDiscordAbs(accountSec)} (${toDiscordRel(accountSec)})`);
-    }
-  }
-  sections.push(`**Application**\n${metaLines.join("\n")}`);
-
-  // Q&A header as a field adjacent to answers
-  const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
-  if (orderedAnswers.length > 0) {
-    embed.addFields({ name: "Q&A", value: "\u200b", inline: false });
-  }
-  for (const qa of orderedAnswers) {
-    const question = qa.question || `Question ${qa.q_index + 1}`;
-    const wrapped = wrapCode(qa.answer || "(no response)", 72);
-    embed.addFields({ name: `Q${qa.q_index + 1}: ${question}`, value: wrapped, inline: false });
-  }
-
-  // Status
-  const statusLines: string[] = [];
-  if (modmailTicket) {
-    if (modmailTicket.status === "open") statusLines.push("Modmail: Open");
-    else if (modmailTicket.status === "closed") statusLines.push("Modmail: Closed");
-  } else {
-    statusLines.push("Modmail: None");
-  }
-  statusLines.push(member === null ? "Member status: Left server" : "Member status: In server");
-  if (avatarScan) {
-    const pct = avatarScan.finalPct ?? 0;
-    const reverse = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
-    statusLines.push(`Avatar risk: ${pct}% • [Reverse Search](${reverse})`);
-    statusLines.push(`*Model estimates — verify manually.*`);
-  }
-  sections.push(`**Status**\n${statusLines.join("\n")}`);
-
-  if (recentActions && recentActions.length > 0) {
-    const lines = recentActions.slice(0, 3).map((a) => {
-      const when = formatAbsolute(a.created_at, { hour12: false });
-      const verb = a.action.replace(/_/g, " ");
-      return `• ${verb} by <@${a.moderator_id}> — ${when}`;
-    });
-    sections.push(`**History (Last 3)**\n${lines.join("\n")}`);
-  }
-
-  if (flags && flags.length > 0) {
-    sections.push(`**Flags**\n${flags.join("\n")}`);
-  }
-
-  const footerText = isSample
-    ? `Sample Preview • Submitted: ${formatAbsoluteUtc(submittedEpoch)} • App ID: ${app.id.slice(0, 8)}`
-    : `Submitted: ${formatAbsoluteUtc(submittedEpoch)} • App ID: ${app.id.slice(0, 8)}`;
-  embed.setFooter({ text: footerText });
-  embed.setTimestamp(submittedEpoch * 1000);
-
-  if (sections.length > 0) embed.setDescription(sections.join("\n\n"));
-  return embed;
-}
-
 export function buildActionRowsV2(
   app: ReviewCardApplication,
-  claim: ReviewClaimRow | null
+  claim: ReviewClaimRow | null,
+  options: { memberHasLeft?: boolean } = {}
 ): ActionRowBuilder<ButtonBuilder>[] {
+  const { memberHasLeft = false } = options;
   const terminal = app.status === "approved" || app.status === "rejected" || app.status === "kicked";
   const idSuffix = `code${shortCode(app.id)}`;
   const rows: ActionRowBuilder<ButtonBuilder>[] = [];
+
+  // If member has left server, disable all review actions
+  // They must re-apply when they rejoin
+  if (memberHasLeft && !terminal) {
+    const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+      new ButtonBuilder()
+        .setCustomId(`review:reject:${idSuffix}`)
+        .setLabel("Reject (Member Left)")
+        .setStyle(ButtonStyle.Danger),
+      new ButtonBuilder()
+        .setCustomId(`review:copy_uid:${idSuffix}:user${app.user_id}`)
+        .setLabel("Copy UID")
+        .setStyle(ButtonStyle.Secondary)
+    );
+    rows.push(row);
+    return rows;
+  }
 
   if (claim && !terminal) {
     const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
@@ -693,6 +364,7 @@ export function buildReviewEmbedV3(
 ): EmbedBuilder {
   const {
     answers = [],
+    flags = [],
     avatarScan = null,
     claim = null,
     accountCreatedAt = null,
@@ -714,8 +386,16 @@ export function buildReviewEmbedV3(
   const lines: string[] = [];
 
   // Show prominent notice if member has left
-  if (member === null && (app.status === "draft" || app.status === "submitted")) {
+  if (member === null) {
     lines.push("⚠️ **Member left server.**");
+    lines.push("");
+  }
+
+  // Show flags (important warnings for moderators)
+  if (flags.length > 0) {
+    for (const flag of flags) {
+      lines.push(flag);
+    }
     lines.push("");
   }
 
@@ -737,6 +417,7 @@ export function buildReviewEmbedV3(
 
   // Application
   lines.push("**Application**");
+  lines.push(`Applicant: <@${app.user_id}>`);
   lines.push(`Submitted: ${ts(submittedDate, 'f')} • ${ts(submittedDate, 'R')}`);
   const claimedText = claim ? `<@${claim.reviewer_id}>` : "Unclaimed";
   if (claim) {
@@ -758,7 +439,15 @@ export function buildReviewEmbedV3(
   // Status
   lines.push("**Status**");
   if (modmailTicket) {
-    lines.push(modmailTicket.status === "open" ? "Modmail: Open" : "Modmail: Closed");
+    if (modmailTicket.status === "open" && modmailTicket.thread_id) {
+      lines.push(`Modmail: [Open Thread](https://discord.com/channels/${app.guild_id}/${modmailTicket.thread_id})`);
+    } else if (modmailTicket.status === "closed" && modmailTicket.log_channel_id && modmailTicket.log_message_id) {
+      lines.push(`Modmail: [View Log](https://discord.com/channels/${app.guild_id}/${modmailTicket.log_channel_id}/${modmailTicket.log_message_id})`);
+    } else if (modmailTicket.status === "closed") {
+      lines.push("Modmail: Closed");
+    } else {
+      lines.push("Modmail: Open");
+    }
   } else {
     lines.push("Modmail: None");
   }
@@ -804,79 +493,26 @@ export function buildReviewEmbedV3(
   const footerText = isSample ? `Sample Preview • App ID: ${app.id.slice(0, 8)}` : `App ID: ${app.id.slice(0, 8)}`;
   embed.setFooter({ text: footerText });
   embed.setTimestamp(submittedDate.getTime());
-  embed.setDescription(lines.join("\n"));
 
-  return embed;
-}
+  // Join lines and check size (Discord description limit: 4096 chars)
+  let description = lines.join("\n");
 
-// ============================================================================
-// Action Rows Builder
-// ============================================================================
-
-export function buildActionRows(
-  app: ReviewCardApplication,
-  claim: ReviewClaimRow | null
-): ActionRowBuilder<ButtonBuilder>[] {
-  const status = app.status;
-  const terminal = status === "approved" || status === "rejected" || status === "kicked";
-  const idSuffix = `code${shortCode(app.id)}`;
-
-  const rows: ActionRowBuilder<ButtonBuilder>[] = [];
-
-  // Only show action buttons if claimed and not terminal
-  if (claim && !terminal) {
-    // Row 1: Primary actions (no emojis)
-    const row1 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:approve:${idSuffix}`)
-        .setLabel("Accept")
-        .setStyle(ButtonStyle.Success),
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:reject:${idSuffix}`)
-        .setLabel("Reject")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:permreject:${idSuffix}`)
-        .setLabel("Permanently Reject")
-        .setStyle(ButtonStyle.Danger),
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:kick:${idSuffix}`)
-        .setLabel("Kick")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    // Row 2: Workflows (no emojis)
-    const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:modmail:${idSuffix}`)
-        .setLabel("Modmail")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:copyuid:${idSuffix}:user${app.user_id}`)
-        .setLabel("Copy UID")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`v1:ping:${idSuffix}:user${app.user_id}`)
-        .setLabel("Ping in Unverified")
-        .setStyle(ButtonStyle.Secondary),
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:unclaim:${idSuffix}`)
-        .setLabel("Unclaim")
-        .setStyle(ButtonStyle.Secondary)
-    );
-
-    rows.push(row1, row2);
-  } else if (!terminal) {
-    // Show claim button if not claimed (no emoji)
-    const claimRow = new ActionRowBuilder<ButtonBuilder>().addComponents(
-      new ButtonBuilder()
-        .setCustomId(`v1:decide:claim:${idSuffix}`)
-        .setLabel("Claim Application")
-        .setStyle(ButtonStyle.Primary)
-    );
-
-    rows.push(claimRow);
+  // If too long, try removing history section first
+  if (description.length > 4000 && recentActions && recentActions.length > 0) {
+    const historyStart = description.indexOf("**History (Last 3)**");
+    const historyEnd = description.indexOf("**Answers:**");
+    if (historyStart !== -1 && historyEnd !== -1) {
+      description = description.slice(0, historyStart) + description.slice(historyEnd);
+      description = description.replace(/\n{3,}/g, "\n\n"); // Clean up extra newlines
+    }
   }
 
-  return rows;
+  // If still too long, truncate answers
+  if (description.length > 4000) {
+    description = description.slice(0, 3950) + "\n\n*...content truncated for Discord limits*";
+  }
+
+  embed.setDescription(description);
+
+  return embed;
 }

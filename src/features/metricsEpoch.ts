@@ -40,8 +40,13 @@ export function getMetricsEpoch(guildId: string): Date | null {
       return null;
     }
 
+    // ISO string from DB gets parsed here. If someone stores a garbage date,
+    // Date() will happily return "Invalid Date" rather than throwing.
+    // Callers should handle NaN timestamps gracefully.
     return new Date(row.start_at);
   } catch (err) {
+    // Swallow errors and return null - this is intentional. Missing/corrupt
+    // epoch should never block metric queries, just show unfiltered data.
     logger.error({ err, guildId }, "[metricsEpoch] failed to get epoch");
     return null;
   }
@@ -57,6 +62,9 @@ export function getMetricsEpoch(guildId: string): Date | null {
  */
 export function setMetricsEpoch(guildId: string, startAt: Date): void {
   try {
+    // Using ON CONFLICT for atomic upsert. This avoids race conditions if two
+    // admins hit reset at the same time - last write wins, no partial states.
+    // Note: better-sqlite3 is synchronous, so no await needed here.
     db.prepare(
       `
       INSERT INTO metrics_epoch (guild_id, start_at)
@@ -67,6 +75,8 @@ export function setMetricsEpoch(guildId: string, startAt: Date): void {
 
     logger.info({ guildId, epoch: startAt.toISOString() }, "[metricsEpoch] epoch set");
   } catch (err) {
+    // Unlike getMetricsEpoch, we DO throw here. A failed epoch set is a real
+    // problem - admin expects metrics to reset but they won't.
     logger.error({ err, guildId, startAt }, "[metricsEpoch] failed to set epoch");
     throw err;
   }
@@ -93,12 +103,17 @@ export function getEpochPredicate(
   const epoch = getMetricsEpoch(guildId);
 
   if (!epoch) {
+    // No epoch = no filtering. Returns empty string so callers can blindly
+    // append without checking: `SELECT ... WHERE guild_id = ? ${sql}`
     return { sql: "", params: [] };
   }
 
-  // Convert Date to Unix timestamp (seconds)
+  // Convert Date to Unix timestamp (seconds). Important: action_log stores
+  // timestamps as integer seconds, not milliseconds. Don't forget the /1000.
   const epochSec = Math.floor(epoch.getTime() / 1000);
 
+  // WARNING: timeColumnName is interpolated directly into SQL. This is safe
+  // only because callers control the column name. Never pass user input here.
   return {
     sql: `AND ${timeColumnName} >= ?`,
     params: [epochSec],
