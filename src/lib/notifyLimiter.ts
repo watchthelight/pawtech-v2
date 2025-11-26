@@ -55,7 +55,11 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
     // 5-minute cleanup interval chosen to balance memory efficiency vs CPU overhead.
     // At 10k guilds with 60 notifies/hour each, worst case is ~600k timestamps
     // before cleanup runs. If that's too much, tune the interval down.
+    //
+    // unref() allows Node.js to exit even if this interval is still pending,
+    // preventing the interval from keeping the process alive during graceful shutdown.
     this.cleanupInterval = setInterval(() => this.cleanup(), 5 * 60 * 1000);
+    this.cleanupInterval.unref();
   }
 
   /**

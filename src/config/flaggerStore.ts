@@ -154,9 +154,6 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
  * setFlagsChannelId('123456789', '987654321');
  */
 export function setFlagsChannelId(guildId: string, channelId: string): void {
-  // Invalidate cache BEFORE write to ensure stale reads are impossible
-  invalidateCache(guildId);
-
   const now = new Date().toISOString();
 
   try {
@@ -172,6 +169,10 @@ export function setFlagsChannelId(guildId: string, channelId: string): void {
         updated_at = excluded.updated_at
     `
     ).run(guildId, channelId, now);
+
+    // Invalidate cache AFTER successful write to prevent serving stale data
+    // This ensures any subsequent reads get the fresh value from DB
+    invalidateCache(guildId);
 
     logger.info({ guildId, channelId }, "[flagger] flags_channel_id updated");
   } catch (err: unknown) {
@@ -207,9 +208,6 @@ export function setSilentFirstMsgDays(guildId: string, days: number): void {
     throw new Error("Silent days threshold must be between 7 and 365 days");
   }
 
-  // Invalidate cache BEFORE write to ensure stale reads are impossible
-  invalidateCache(guildId);
-
   const now = new Date().toISOString();
 
   try {
@@ -223,6 +221,9 @@ export function setSilentFirstMsgDays(guildId: string, days: number): void {
         updated_at = excluded.updated_at
     `
     ).run(guildId, days, now);
+
+    // Invalidate cache AFTER successful write to prevent serving stale data
+    invalidateCache(guildId);
 
     logger.info({ guildId, days }, "[flagger] silent_first_msg_days updated");
   } catch (err: unknown) {

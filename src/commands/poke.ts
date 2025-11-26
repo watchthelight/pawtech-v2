@@ -84,9 +84,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       throw new Error("This command can only be used in a guild");
     }
 
-    // Fetch all channels - this returns a cached Collection, but we want
-    // fresh data to avoid stale channel references. Discord.js caches
-    // aggressively, so this is usually fast.
+    // Fetch all channels - discord.js v14 requires await on fetch()
+    // Returns Collection<Snowflake, GuildBasedChannel | null> from API
+    const channels = await guild.channels.fetch();
+
     const targetChannels = channels.filter((channel) => {
       if (!channel) return false;
       if (channel.id === EXCLUDED_CHANNEL_ID) return false;

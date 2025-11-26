@@ -19,6 +19,7 @@
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { nowUtc } from "../lib/time.js";
+import { isPanicMode } from "./panicStore.js";
 
 /**
  * ReviewClaimRow - Matches database schema for review_claim table
@@ -60,6 +61,12 @@ export class ClaimError extends Error {
 // The transaction ensures: check -> insert -> audit all happen atomically.
 // If two moderators call this simultaneously, one will win and the other gets ALREADY_CLAIMED.
 export function claimTx(appId: string, moderatorId: string, guildId: string): void {
+  // Panic mode check - block all claim operations during emergencies
+  if (isPanicMode(guildId)) {
+    logger.warn({ appId, moderatorId, guildId }, "[reviewActions] claimTx blocked - panic mode active");
+    throw new ClaimError("Panic mode is active. All review operations are suspended.", "INVALID_STATUS");
+  }
+
   return db.transaction(() => {
     logger.debug({ appId, moderatorId, guildId }, "[reviewActions] claimTx started");
 
@@ -140,6 +147,12 @@ export function claimTx(appId: string, moderatorId: string, guildId: string): vo
  *  - ClaimError('APP_NOT_FOUND') if app doesn't exist
  */
 export function unclaimTx(appId: string, moderatorId: string, guildId: string): void {
+  // Panic mode check - block all unclaim operations during emergencies
+  if (isPanicMode(guildId)) {
+    logger.warn({ appId, moderatorId, guildId }, "[reviewActions] unclaimTx blocked - panic mode active");
+    throw new ClaimError("Panic mode is active. All review operations are suspended.", "INVALID_STATUS");
+  }
+
   return db.transaction(() => {
     logger.debug({ appId, moderatorId, guildId }, "[reviewActions] unclaimTx started");
 

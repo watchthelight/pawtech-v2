@@ -453,12 +453,24 @@ export function ensureReviewActionFreeText() {
 /**
  * WHAT: Check if a table has a specific column.
  * WHY: Enables safe, idempotent schema migrations.
+ * SECURITY: table/column names validated to prevent SQL injection
  *
- * @param table - Table name
- * @param column - Column name to check
+ * @param table - Table name (validated as SQL identifier)
+ * @param column - Column name to check (validated as SQL identifier)
  * @returns true if column exists, false otherwise
+ * @throws Error if table or column name is invalid
  */
+const SQL_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
 function hasColumn(table: string, column: string): boolean {
+  // Validate identifiers to prevent SQL injection via PRAGMA
+  if (!SQL_IDENTIFIER_RE.test(table)) {
+    throw new Error(`Invalid table name for schema check: ${table}`);
+  }
+  if (!SQL_IDENTIFIER_RE.test(column)) {
+    throw new Error(`Invalid column name for schema check: ${column}`);
+  }
+
   const rows = db.prepare(`PRAGMA table_info(${table})`).all() as Array<{ name: string }>;
   return rows.some((r) => r.name === column);
 }

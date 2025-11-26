@@ -198,7 +198,22 @@ db.prepare(
 // Ensure guild_config has new avatar scan columns (migration helper)
 // Migration helper: probe schema and add a column if absent.
 // Uses PRAGMA table_info to introspect: https://sqlite.org/pragma.html#pragma_table_info
+// SECURITY: table/column names validated to prevent SQL injection
+const SQL_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
 const addColumnIfMissing = (table: string, column: string, definition: string) => {
+  // Validate identifiers to prevent SQL injection
+  if (!SQL_IDENTIFIER_RE.test(table)) {
+    throw new Error(`Invalid table name: ${table}`);
+  }
+  if (!SQL_IDENTIFIER_RE.test(column)) {
+    throw new Error(`Invalid column name: ${column}`);
+  }
+  // Block dangerous patterns in definition
+  if (definition.includes(";") || definition.includes("--") || definition.includes("/*")) {
+    throw new Error(`Invalid column definition: ${definition}`);
+  }
+
   try {
     const cols = db.pragma(`table_info(${table})`) as Array<{ name: string }>;
     if (!cols.some((c) => c.name === column)) {

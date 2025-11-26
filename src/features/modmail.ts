@@ -881,28 +881,53 @@ function chunkText(text: string, maxLength: number): string[] {
 // ===== Message Routing =====
 
 /**
- * In-memory set to prevent echo loops in message routing.
+ * In-memory map to prevent echo loops in message routing.
  *
  * Problem: When staff sends "Hello" in the thread, we forward it to the user's DM.
- * The bot sends that DM. Without this set, the DM handler might see the bot's
+ * The bot sends that DM. Without this map, the DM handler might see the bot's
  * message and try to route it back to the thread, creating an infinite loop.
  *
- * Solution: When we forward a message, we mark its ID in this set. The routing
- * handlers check this set and skip messages that were already forwarded.
+ * Solution: When we forward a message, we mark its ID in this map with timestamp.
+ * The routing handlers check this map and skip messages that were already forwarded.
  *
- * The 5-minute TTL prevents memory leaks while being long enough that we won't
- * accidentally re-process a message (Discord message IDs are unique anyway).
+ * Uses a Map with timestamps + periodic cleanup instead of Set with setTimeout
+ * to avoid accumulating thousands of pending timers under high load.
  */
-const forwardedMessages = new Set<string>();
+const forwardedMessages = new Map<string, number>(); // messageId -> timestamp
+const FORWARDED_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const FORWARDED_CLEANUP_INTERVAL_MS = 60 * 1000; // Cleanup every minute
+
+// Periodic cleanup to remove expired entries
+const forwardedCleanupInterval = setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+  for (const [msgId, timestamp] of forwardedMessages) {
+    if (now - timestamp > FORWARDED_TTL_MS) {
+      forwardedMessages.delete(msgId);
+      cleaned++;
+    }
+  }
+  if (cleaned > 0) {
+    // Only log if we actually cleaned something to avoid log spam
+    // logger.debug({ cleaned }, "[modmail] forwardedMessages cleanup");
+  }
+}, FORWARDED_CLEANUP_INTERVAL_MS);
+// Allow process to exit even if interval is running
+forwardedCleanupInterval.unref();
 
 export function isForwarded(messageId: string): boolean {
-  return forwardedMessages.has(messageId);
+  const timestamp = forwardedMessages.get(messageId);
+  if (!timestamp) return false;
+  // Check if entry is expired
+  if (Date.now() - timestamp > FORWARDED_TTL_MS) {
+    forwardedMessages.delete(messageId);
+    return false;
+  }
+  return true;
 }
 
 export function markForwarded(messageId: string) {
-  forwardedMessages.add(messageId);
-  // TTL prevents unbounded memory growth. 5 minutes is plenty of buffer.
-  setTimeout(() => forwardedMessages.delete(messageId), 5 * 60 * 1000);
+  forwardedMessages.set(messageId, Date.now());
 }
 
 /**

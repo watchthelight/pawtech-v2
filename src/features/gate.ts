@@ -422,8 +422,10 @@ function queueAvatarScan(params: {
   };
 
   setImmediate(() => {
-    (async () => {
-      logger.info({ ...baseLog, phase: "start" }, "[avatarScan] job queued");
+    // Outer try-catch for synchronous errors in callback setup
+    try {
+      (async () => {
+        logger.info({ ...baseLog, phase: "start" }, "[avatarScan] job queued");
 
       let result: ScanResult | null = null;
       try {
@@ -503,9 +505,13 @@ function queueAvatarScan(params: {
           "[avatarScan] failed to refresh review card"
         );
       }
-    })().catch((err) => {
-      logger.error({ ...baseLog, phase: "crash", err }, "[avatarScan] job crashed");
-    });
+      })().catch((err) => {
+        logger.error({ ...baseLog, phase: "crash", err }, "[avatarScan] job crashed");
+      });
+    } catch (err) {
+      // Catch synchronous errors in setImmediate callback
+      logger.error({ ...baseLog, phase: "sync_error", err }, "[avatarScan] synchronous error in job setup");
+    }
   });
 }
 
