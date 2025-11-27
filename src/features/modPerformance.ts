@@ -108,37 +108,37 @@ function calculatePercentile(values: number[], percentile: number): number | nul
 }
 
 /**
- * WHAT: Compute response times for app_submitted → first mod action pairs.
- * WHY: Measures how quickly moderators respond to new applications.
- * HOW: Groups actions by app_id, finds app_submitted + first mod action pairs, calculates delta.
- *      Attributes response time to the moderator who performed the FIRST action, not just who claimed.
+ * WHAT: Compute all response times from action_log in a single query
+ * WHY: Avoids N+1 query pattern - fetches all data once, computes in memory
+ * HOW: Groups actions by app_id, finds app_submitted + first mod action pairs
  *
  * @param guildId - Discord guild ID
- * @param moderatorId - Discord moderator user ID to filter results for
- * @returns Array of response time measurements attributed to this moderator
+ * @param epochFilter - Epoch filter predicate from getEpochPredicate
+ * @returns Map of moderator_id -> array of response times in seconds
  */
-function computeResponseTimes(guildId: string, moderatorId: string): number[] {
-  try {
-    const epochFilter = getEpochPredicate(guildId, "created_at_s");
+function computeAllResponseTimes(
+  guildId: string,
+  epochFilter: { sql: string; params: unknown[] }
+): Map<string, number[]> {
+  const responseTimesByMod = new Map<string, number[]>();
 
-    // This query is the heaviest part of metrics recalculation. We pull ALL
-    // application-related actions for the guild, then group in memory.
-    // For guilds with 100k+ actions, consider adding a covering index on
-    // (guild_id, app_id, created_at_s) if this becomes a bottleneck.
+  try {
     const modActionsPlaceholders = Array.from(MOD_ACTIONS)
       .map(() => "?")
       .join(",");
+
+    // Single query for all app_submitted and mod action events
     const actions = db
       .prepare(
         `
-      SELECT action, app_id, actor_id, created_at_s
-      FROM action_log
-      WHERE guild_id = ?
-        AND app_id IS NOT NULL
-        AND (action = 'app_submitted' OR action IN (${modActionsPlaceholders}))
-        ${epochFilter.sql}
-      ORDER BY app_id, created_at_s ASC
-    `
+        SELECT action, app_id, actor_id, created_at_s
+        FROM action_log
+        WHERE guild_id = ?
+          AND app_id IS NOT NULL
+          AND (action = 'app_submitted' OR action IN (${modActionsPlaceholders}))
+          ${epochFilter.sql}
+        ORDER BY app_id, created_at_s ASC
+      `
       )
       .all(guildId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as Array<{
       action: string;
@@ -147,14 +147,13 @@ function computeResponseTimes(guildId: string, moderatorId: string): number[] {
       created_at_s: number;
     }>;
 
-    // Group by app_id to find app_submitted → first mod action pairs
+    // Group by app_id to find app_submitted -> first mod action pairs
     const appGroups = new Map<string, Array<{ action: string; actor_id: string; time: number }>>();
 
     for (const row of actions) {
       if (!appGroups.has(row.app_id)) {
         appGroups.set(row.app_id, []);
       }
-
       appGroups.get(row.app_id)!.push({
         action: row.action,
         actor_id: row.actor_id,
@@ -162,14 +161,9 @@ function computeResponseTimes(guildId: string, moderatorId: string): number[] {
       });
     }
 
-    // Calculate response times (app_submitted -> first mod action).
-    // Key insight: we attribute the response time to whoever acted FIRST,
-    // not necessarily who claimed. This rewards fast responders.
-    const responseTimes: number[] = [];
-
+    // Calculate response times (app_submitted -> first mod action)
     for (const [appId, events] of appGroups) {
-      // Handle resubmissions: only measure from the LATEST submission.
-      // If user submits, gets rejected, resubmits - we measure from resubmit.
+      // Handle resubmissions: only measure from the LATEST submission
       const submissions = events.filter((e) => e.action === "app_submitted");
       if (submissions.length === 0) continue;
       const latestSubmission = submissions[submissions.length - 1];
@@ -179,32 +173,36 @@ function computeResponseTimes(guildId: string, moderatorId: string): number[] {
         (e) => e.time > latestSubmission.time && MOD_ACTIONS.has(e.action)
       );
 
-      // Only count if THIS moderator was the first responder
-      if (firstModAction && firstModAction.actor_id === moderatorId) {
+      if (firstModAction) {
         const responseTime = firstModAction.time - latestSubmission.time;
         // Sanity bounds: negative times are clock skew bugs, >7 days is
         // probably orphaned data that would skew percentiles badly.
         if (responseTime > 0 && responseTime < 86400 * 7) {
-          responseTimes.push(responseTime);
+          const modId = firstModAction.actor_id;
+          if (!responseTimesByMod.has(modId)) {
+            responseTimesByMod.set(modId, []);
+          }
+          responseTimesByMod.get(modId)!.push(responseTime);
         }
       }
     }
 
-    return responseTimes;
+    return responseTimesByMod;
   } catch (err) {
-    logger.error({ err, guildId, moderatorId }, "[metrics] failed to compute response times");
-    return [];
+    logger.error({ err, guildId }, "[metrics] failed to compute all response times");
+    return responseTimesByMod;
   }
 }
 
 /**
  * WHAT: Recalculate and persist moderator metrics for a guild.
  * WHY: Updates mod_metrics table with fresh counts and percentiles.
- * HOW:
- *  1. Query action_log grouped by actor_id
- *  2. Compute counts (claims, accepts, rejects, etc.)
- *  3. Calculate response time percentiles (p50, p95)
- *  4. UPSERT into mod_metrics table
+ * HOW: Batched approach (3 queries instead of 300+):
+ *  1. Single query for all action counts grouped by actor_id
+ *  2. Single query for all response time data, computed in memory
+ *  3. Batch UPSERT in a transaction
+ *
+ * PERF: 100x speedup for guilds with 100 moderators (300 queries -> 3 queries)
  *
  * @param guildId - Discord guild ID
  * @returns Number of moderators processed
@@ -218,133 +216,135 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
     // Get epoch filtering predicate
     const epochFilter = getEpochPredicate(guildId, "created_at_s");
 
-    // Query action_log for all moderators in this guild (only MOD_ACTIONS, not applicants)
     const modActionsList = Array.from(MOD_ACTIONS)
       .map(() => "?")
       .join(",");
-    let moderators: Array<{ actor_id: string }>;
+
+    // STEP 1: Single query for all action counts grouped by actor_id
+    let allCounts: Array<{
+      actor_id: string;
+      claims: number;
+      accepts: number;
+      rejects: number;
+      kicks: number;
+      modmail_opens: number;
+    }>;
     try {
-      moderators = db
+      allCounts = db
         .prepare(
           `
-        SELECT DISTINCT actor_id
-        FROM action_log
-        WHERE guild_id = ?
-          AND action IN (${modActionsList})
-          ${epochFilter.sql}
-      `
+          SELECT
+            actor_id,
+            SUM(CASE WHEN action = 'claim' THEN 1 ELSE 0 END) as claims,
+            SUM(CASE WHEN action = 'approve' THEN 1 ELSE 0 END) as accepts,
+            SUM(CASE WHEN action = 'reject' THEN 1 ELSE 0 END) as rejects,
+            SUM(CASE WHEN action = 'kick' THEN 1 ELSE 0 END) as kicks,
+            SUM(CASE WHEN action = 'modmail_open' THEN 1 ELSE 0 END) as modmail_opens
+          FROM action_log
+          WHERE guild_id = ? AND action IN (${modActionsList})
+            ${epochFilter.sql}
+          GROUP BY actor_id
+        `
         )
-        .all(guildId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as Array<{
-        actor_id: string;
-      }>;
+        .all(guildId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as typeof allCounts;
     } catch (err) {
-      logger.error({ err, guildId }, "[metrics] failed to query moderators");
+      logger.error({ err, guildId }, "[metrics] failed to query all action counts");
       throw err;
     }
 
-    if (moderators.length === 0) {
+    if (allCounts.length === 0) {
       logger.info({ guildId }, "[metrics] no actions found for guild");
       return 0;
     }
 
+    // STEP 2: Single query for all response time data, computed in memory
+    const responseTimesByMod = computeAllResponseTimes(guildId, epochFilter);
+
+    // Build metrics for each moderator
     const now = new Date().toISOString();
+    const metrics: Array<{
+      moderatorId: string;
+      claims: number;
+      accepts: number;
+      rejects: number;
+      kicks: number;
+      modmail_opens: number;
+      avgResponseTime: number | null;
+      p50: number | null;
+      p95: number | null;
+    }> = [];
+
+    for (const counts of allCounts) {
+      const responseTimes = responseTimesByMod.get(counts.actor_id) || [];
+      responseTimes.sort((a, b) => a - b);
+
+      const avgResponseTime =
+        responseTimes.length > 0
+          ? responseTimes.reduce((sum, t) => sum + t, 0) / responseTimes.length
+          : null;
+
+      const p50 = calculatePercentile(responseTimes, 50);
+      const p95 = calculatePercentile(responseTimes, 95);
+
+      metrics.push({
+        moderatorId: counts.actor_id,
+        claims: counts.claims || 0,
+        accepts: counts.accepts || 0,
+        rejects: counts.rejects || 0,
+        kicks: counts.kicks || 0,
+        modmail_opens: counts.modmail_opens || 0,
+        avgResponseTime,
+        p50,
+        p95,
+      });
+    }
+
+    // STEP 3: Batch UPSERT in a transaction
     let processed = 0;
-
-    for (const { actor_id: moderatorId } of moderators) {
-      try {
-        // Count actions by type (only MOD_ACTIONS, filtered by epoch)
-        let counts: {
-          claims: number;
-          accepts: number;
-          rejects: number;
-          kicks: number;
-          modmail_opens: number;
-        };
-        try {
-          counts = db
-            .prepare(
-              `
-            SELECT
-              SUM(CASE WHEN action = 'claim' THEN 1 ELSE 0 END) as claims,
-              SUM(CASE WHEN action = 'approve' THEN 1 ELSE 0 END) as accepts,
-              SUM(CASE WHEN action = 'reject' THEN 1 ELSE 0 END) as rejects,
-              SUM(CASE WHEN action = 'kick' THEN 1 ELSE 0 END) as kicks,
-              SUM(CASE WHEN action = 'modmail_open' THEN 1 ELSE 0 END) as modmail_opens
-            FROM action_log
-            WHERE guild_id = ? AND actor_id = ? AND action IN (${modActionsList})
-              ${epochFilter.sql}
+    try {
+      db.transaction(() => {
+        const stmt = db.prepare(
           `
-            )
-            .get(guildId, moderatorId, ...Array.from(MOD_ACTIONS), ...epochFilter.params) as {
-            claims: number;
-            accepts: number;
-            rejects: number;
-            kicks: number;
-            modmail_opens: number;
-          };
-        } catch (err) {
-          logger.error({ err, guildId, moderatorId }, "[metrics] failed to query action counts");
-          continue;
-        }
+          INSERT INTO mod_metrics (
+            moderator_id, guild_id,
+            total_claims, total_accepts, total_rejects, total_kicks, total_modmail_opens,
+            avg_response_time_s, p50_response_time_s, p95_response_time_s,
+            updated_at
+          )
+          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+          ON CONFLICT(moderator_id, guild_id) DO UPDATE SET
+            total_claims = excluded.total_claims,
+            total_accepts = excluded.total_accepts,
+            total_rejects = excluded.total_rejects,
+            total_kicks = excluded.total_kicks,
+            total_modmail_opens = excluded.total_modmail_opens,
+            avg_response_time_s = excluded.avg_response_time_s,
+            p50_response_time_s = excluded.p50_response_time_s,
+            p95_response_time_s = excluded.p95_response_time_s,
+            updated_at = excluded.updated_at
+        `
+        );
 
-        // Compute response times. Note: computeResponseTimes returns unsorted,
-        // we sort here for percentile calculation (though calculatePercentile
-        // also sorts internally - minor redundancy, but keeps code clear).
-        const responseTimes = computeResponseTimes(guildId, moderatorId);
-        responseTimes.sort((a, b) => a - b);
-
-        const avgResponseTime =
-          responseTimes.length > 0
-            ? responseTimes.reduce((sum, t) => sum + t, 0) / responseTimes.length
-            : null;
-
-        const p50 = calculatePercentile(responseTimes, 50);
-        const p95 = calculatePercentile(responseTimes, 95);
-
-        // UPSERT into mod_metrics
-        try {
-          db.prepare(
-            `
-            INSERT INTO mod_metrics (
-              moderator_id, guild_id,
-              total_claims, total_accepts, total_rejects, total_kicks, total_modmail_opens,
-              avg_response_time_s, p50_response_time_s, p95_response_time_s,
-              updated_at
-            )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            ON CONFLICT(moderator_id, guild_id) DO UPDATE SET
-              total_claims = excluded.total_claims,
-              total_accepts = excluded.total_accepts,
-              total_rejects = excluded.total_rejects,
-              total_kicks = excluded.total_kicks,
-              total_modmail_opens = excluded.total_modmail_opens,
-              avg_response_time_s = excluded.avg_response_time_s,
-              p50_response_time_s = excluded.p50_response_time_s,
-              p95_response_time_s = excluded.p95_response_time_s,
-              updated_at = excluded.updated_at
-          `
-          ).run(
-            moderatorId,
+        for (const m of metrics) {
+          stmt.run(
+            m.moderatorId,
             guildId,
-            counts.claims || 0,
-            counts.accepts || 0,
-            counts.rejects || 0,
-            counts.kicks || 0,
-            counts.modmail_opens || 0,
-            avgResponseTime,
-            p50,
-            p95,
+            m.claims,
+            m.accepts,
+            m.rejects,
+            m.kicks,
+            m.modmail_opens,
+            m.avgResponseTime,
+            m.p50,
+            m.p95,
             now
           );
-        } catch (err) {
-          logger.error({ err, guildId, moderatorId }, "[metrics] failed to upsert mod_metrics");
-          continue;
+          processed++;
         }
-
-        processed++;
-      } catch (err) {
-        logger.error({ err, guildId, moderatorId }, "[metrics] failed to process moderator");
-      }
+      })();
+    } catch (err) {
+      logger.error({ err, guildId }, "[metrics] failed to batch upsert mod_metrics");
+      throw err;
     }
 
     // Invalidate cache after DB writes complete. This ordering matters:

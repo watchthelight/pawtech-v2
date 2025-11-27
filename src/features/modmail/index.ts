@@ -1,25 +1,10 @@
 /**
- * Pawtropolis Tech -- src/features/modmail.ts
- * WHAT: Barrel re-export file for the modmail module.
- * WHY: Maintains backwards compatibility with existing imports.
- *
- * NOTE: All implementation code has been extracted to ./modmail/ submodules:
- *   - ./modmail/types.ts - Type definitions
- *   - ./modmail/tickets.ts - Ticket CRUD operations
- *   - ./modmail/transcript.ts - Transcript buffer management
- *   - ./modmail/routing.ts - Message routing between DM and threads
- *   - ./modmail/threads.ts - Thread operations (open, close, reopen)
- *   - ./modmail/handlers.ts - Button and context menu handlers
- *   - ./modmail/commands.ts - Slash commands
- *
- * DOCS:
- *  - Threads: https://discord.com/developers/docs/resources/channel#thread-create
- *  - DMs: https://discord.com/developers/docs/resources/user#create-dm
- *  - Barrel files: https://basarat.gitbook.io/typescript/main-1/barrel
+ * Pawtropolis Tech -- src/features/modmail/index.ts
+ * WHAT: Barrel file for modmail module - re-exports all public APIs.
+ * WHY: Maintains backwards compatibility with existing imports from "./features/modmail.js"
+ * DOCS: https://basarat.gitbook.io/typescript/main-1/barrel
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
-
-// ===== Re-exports from submodules =====
 
 // Re-export types
 export type {
@@ -32,7 +17,7 @@ export type {
   OpenPublicModmailThreadParams,
   CloseModmailThreadParams,
   ReopenModmailThreadParams,
-} from "./modmail/types.js";
+} from "./types.js";
 
 // Re-export tickets
 export {
@@ -47,7 +32,7 @@ export {
   insertModmailMessage,
   getThreadIdForDmReply,
   getDmIdForThreadReply,
-} from "./modmail/tickets.js";
+} from "./tickets.js";
 
 // Re-export transcript functions
 export {
@@ -57,7 +42,7 @@ export {
   formatTranscript,
   formatContentWithAttachments,
   flushTranscript,
-} from "./modmail/transcript.js";
+} from "./transcript.js";
 
 // Re-export routing functions
 export {
@@ -73,7 +58,7 @@ export {
   // Inbound message handlers
   handleInboundDmForModmail,
   handleInboundThreadMessageForModmail,
-} from "./modmail/routing.js";
+} from "./routing.js";
 
 // Re-export thread operations
 export {
@@ -89,18 +74,21 @@ export {
   closeModmailThread,
   reopenModmailThread,
   closeModmailForApplication,
-} from "./modmail/threads.js";
+} from "./threads.js";
 
 // Re-export handlers (button, context menu)
 export {
   handleModmailOpenButton,
   handleModmailCloseButton,
   handleModmailContextMenu,
-} from "./modmail/handlers.js";
+} from "./handlers.js";
 
 // Re-export commands
 export {
   modmailCommand,
   executeModmailCommand,
   modmailContextMenu,
-} from "./modmail/commands.js";
+} from "./commands.js";
+
+// Note: The parent modmail.ts now re-exports from this index file.
+// Import from either "../modmail.js" or "./modmail/index.js" for the same API.

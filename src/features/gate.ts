@@ -50,6 +50,7 @@ import type { CmdCtx } from "../lib/cmdWrap.js";
 import { currentTraceId, ensureDeferred, replyOrEdit, withSql } from "../lib/cmdWrap.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { getQuestions as getQuestionsShared } from "./gate/questions.js";
+import { touchSyncMarker } from "../lib/syncMarker.js";
 
 // Discord modal limits - these are API-enforced, not arbitrary.
 // See: https://discord.com/developers/docs/interactions/message-components#text-inputs
@@ -204,6 +205,7 @@ function getOrCreateDraft(db: BetterSqliteDatabase, guildId: string, userId: str
       VALUES (?, ?, ?, 'draft')
     `
   ).run(id, guildId, userId);
+  touchSyncMarker("application_create");
   return { application_id: id };
 }
 

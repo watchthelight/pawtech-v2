@@ -9,6 +9,7 @@ REM   start.cmd --local              Start bot locally (pulls remote DB first)
 REM   start.cmd --local --fresh      Clean install + rebuild + start
 REM   start.cmd --remote             Restart bot on remote server (pulls remote DB first)
 REM   start.cmd --remote --fresh     Full deploy: build + upload + restart
+REM   start.cmd --switch             Intelligent switch: detect running bot, sync DB, switch location
 REM   start.cmd --stop               Stop all local and remote processes
 REM   start.cmd --push-remote        Push local DB to remote (explicit only)
 REM   start.cmd --recover-remote-db  Download all remote DB candidates to _recovery\remote\
@@ -42,6 +43,7 @@ set ARG_PUSH_REMOTE=0
 set ARG_RECOVER_DB=0
 set ARG_RECOVER=0
 set ARG_SKIP_SYNC=0
+set ARG_SWITCH=0
 
 :parse_args
 if "%~1"=="" goto check_args
@@ -85,6 +87,11 @@ if /i "%~1"=="--skip-sync" (
     shift
     goto parse_args
 )
+if /i "%~1"=="--switch" (
+    set ARG_SWITCH=1
+    shift
+    goto parse_args
+)
 echo [ERROR] Unknown argument: %~1
 goto usage
 
@@ -99,6 +106,9 @@ if %ARG_FRESH%==1 if %ARG_LOCAL%==0 if %ARG_REMOTE%==0 (
     echo [ERROR] --fresh requires either --local or --remote
     goto usage
 )
+
+REM === SWITCH OPERATION ===
+if %ARG_SWITCH%==1 goto switch_operation
 
 REM === INTERACTIVE RECOVERY ===
 if %ARG_RECOVER%==1 goto interactive_recovery
@@ -731,6 +741,196 @@ echo [SUCCESS] Stop operation complete
 goto :eof
 
 REM ============================================================================
+REM SWITCH OPERATION
+REM ============================================================================
+:switch_operation
+echo.
+echo === INTELLIGENT SWITCH ===
+echo [switch] Detecting current state...
+
+REM Step 1: Check if local bot is running
+set LOCAL_RUNNING=0
+tasklist /FI "IMAGENAME eq node.exe" 2>NUL | find /I "node.exe" >NUL
+if not errorlevel 1 (
+    REM Check if it's our bot by looking for pawtropolis in command line
+    wmic process where "name='node.exe'" get commandline 2>NUL | find /I "pawtropolis" >NUL
+    if not errorlevel 1 set LOCAL_RUNNING=1
+)
+REM Also check local PM2
+where pm2 >nul 2>&1
+if not errorlevel 1 (
+    for /f "usebackq" %%s in (`pm2 jlist 2^>nul ^| find /c "\"%PM2_NAME%\""`) do (
+        if %%s GTR 0 set LOCAL_RUNNING=1
+    )
+)
+
+REM Step 2: Check if remote bot is running
+set REMOTE_RUNNING=0
+for /f "usebackq" %%s in (`ssh %REMOTE_ALIAS% "bash -lc 'pm2 jlist 2>/dev/null | grep -c \"\\\"%PM2_NAME%\\\"\" || echo 0'"`) do (
+    if %%s GTR 0 set REMOTE_RUNNING=1
+)
+
+echo [switch] Local running:  %LOCAL_RUNNING%
+echo [switch] Remote running: %REMOTE_RUNNING%
+
+REM Step 3: Get sync markers from both databases
+echo [switch] Reading sync markers...
+
+REM Local sync marker
+set L_MARKER_TIME=0
+set L_MARKER_BY=unknown
+set L_MARKER_COUNT=0
+if exist "%DB_LOCAL%" (
+    where sqlite3 >nul 2>&1
+    if not errorlevel 1 (
+        for /f "usebackq tokens=1,2,3 delims=|" %%a in (`sqlite3 "%DB_LOCAL%" "SELECT last_modified_at, last_modified_by, action_count FROM sync_marker WHERE id=1;" 2^>nul`) do (
+            set L_MARKER_TIME=%%a
+            set L_MARKER_BY=%%b
+            set L_MARKER_COUNT=%%c
+        )
+    )
+)
+echo [switch] Local  marker: time=%L_MARKER_TIME% by=%L_MARKER_BY% count=%L_MARKER_COUNT%
+
+REM Remote sync marker
+set R_MARKER_TIME=0
+set R_MARKER_BY=unknown
+set R_MARKER_COUNT=0
+for /f "usebackq tokens=1,2,3 delims=|" %%a in (`ssh %REMOTE_ALIAS% "sqlite3 %DB_REMOTE% 'SELECT last_modified_at, last_modified_by, action_count FROM sync_marker WHERE id=1;' 2>/dev/null"`) do (
+    set R_MARKER_TIME=%%a
+    set R_MARKER_BY=%%b
+    set R_MARKER_COUNT=%%c
+)
+echo [switch] Remote marker: time=%R_MARKER_TIME% by=%R_MARKER_BY% count=%R_MARKER_COUNT%
+
+REM Step 4: Determine which database is fresher
+set FRESHER=unknown
+if %L_MARKER_COUNT% GTR %R_MARKER_COUNT% (
+    set FRESHER=local
+) else if %R_MARKER_COUNT% GTR %L_MARKER_COUNT% (
+    set FRESHER=remote
+) else if %L_MARKER_TIME% GTR %R_MARKER_TIME% (
+    set FRESHER=local
+) else if %R_MARKER_TIME% GTR %L_MARKER_TIME% (
+    set FRESHER=remote
+) else (
+    set FRESHER=equal
+)
+echo [switch] Fresher database: %FRESHER%
+
+REM Step 5: Handle both running case
+if %LOCAL_RUNNING%==1 if %REMOTE_RUNNING%==1 (
+    echo.
+    echo =========================================================
+    echo   BOTH LOCAL AND REMOTE ARE RUNNING
+    echo   Fresher database: %FRESHER%
+    echo =========================================================
+    echo.
+    echo Choose direction:
+    echo   [1] Switch to LOCAL  ^(sync remote-^>local, stop remote, start local^)
+    echo   [2] Switch to REMOTE ^(sync local-^>remote, stop local, start remote^)
+    echo   [3] Cancel
+    echo.
+    set /p CHOICE="Enter choice (1/2/3): "
+
+    if "!CHOICE!"=="1" (
+        set SYNC_DIRECTION=to-local
+    ) else if "!CHOICE!"=="2" (
+        set SYNC_DIRECTION=to-remote
+    ) else (
+        echo [switch] Cancelled.
+        exit /b 0
+    )
+    goto execute_switch
+)
+
+REM Step 6: Auto-determine direction if only one is running
+if %REMOTE_RUNNING%==1 if %LOCAL_RUNNING%==0 (
+    echo [switch] Remote is running, will switch to LOCAL
+    set SYNC_DIRECTION=to-local
+    goto execute_switch
+)
+
+if %LOCAL_RUNNING%==1 if %REMOTE_RUNNING%==0 (
+    echo [switch] Local is running, will switch to REMOTE
+    set SYNC_DIRECTION=to-remote
+    goto execute_switch
+)
+
+REM Neither running
+echo [switch] Neither local nor remote is running.
+echo [switch] Use --local or --remote to start the bot.
+exit /b 0
+
+:execute_switch
+echo.
+echo [switch] Direction: %SYNC_DIRECTION%
+echo [switch] Fresher:   %FRESHER%
+echo.
+
+if "%SYNC_DIRECTION%"=="to-local" (
+    REM Switching TO LOCAL: pull remote DB, stop remote, start local
+
+    REM Warn if local is fresher
+    if "%FRESHER%"=="local" (
+        echo =========================================================
+        echo   WARNING: Local database appears FRESHER than remote!
+        echo   Pulling remote will overwrite local changes.
+        echo =========================================================
+        set /p CONFIRM="Continue anyway? (y/N): "
+        if /i not "!CONFIRM!"=="y" (
+            echo [switch] Cancelled.
+            exit /b 0
+        )
+    )
+
+    REM 1. Sync DB (remote - local)
+    call :sync_db_remote_preferred
+
+    REM 2. Stop remote
+    echo [switch] Stopping remote bot...
+    ssh %REMOTE_ALIAS% "bash -lc 'pm2 stop %PM2_NAME%'"
+
+    REM 3. Start local
+    echo [switch] Starting local bot...
+    call npm run dev
+    exit /b !errorlevel!
+
+) else if "%SYNC_DIRECTION%"=="to-remote" (
+    REM Switching TO REMOTE: push local DB, stop local, start remote
+
+    REM Warn if remote is fresher
+    if "%FRESHER%"=="remote" (
+        echo =========================================================
+        echo   WARNING: Remote database appears FRESHER than local!
+        echo   Pushing local will overwrite remote changes.
+        echo =========================================================
+        set /p CONFIRM="Continue anyway? (y/N): "
+        if /i not "!CONFIRM!"=="y" (
+            echo [switch] Cancelled.
+            exit /b 0
+        )
+    )
+
+    REM 1. Stop local first (to checkpoint WAL)
+    echo [switch] Stopping local processes...
+    taskkill /F /IM node.exe >nul 2>&1
+    where pm2 >nul 2>&1
+    if not errorlevel 1 pm2 stop %PM2_NAME% >nul 2>&1
+
+    REM 2. Push DB (local - remote)
+    call :push_db_to_remote
+
+    REM 3. Start remote
+    echo [switch] Starting remote bot...
+    ssh %REMOTE_ALIAS% "bash -lc 'pm2 restart %PM2_NAME%'"
+)
+
+echo.
+echo [switch] Switch complete!
+exit /b 0
+
+REM ============================================================================
 REM INTERACTIVE RECOVERY
 REM ============================================================================
 :interactive_recovery
@@ -761,6 +961,7 @@ echo   --local              Start bot locally using npm run dev
 echo   --local --fresh      Clean install, rebuild, and start locally
 echo   --remote             Restart bot on remote server ^(PM2^)
 echo   --remote --fresh     Full deploy: build + upload + restart
+echo   --switch             Intelligent switch: detects running bot, syncs DB, switches location
 echo   --stop               Stop all local and remote processes
 echo   --push-remote        Push local database to remote ^(explicit only^)
 echo   --recover            Interactive DB recovery ^(evaluate and restore from any backup^)
@@ -772,6 +973,7 @@ echo   start.cmd --local                  # Dev mode with hot reload ^(pulls rem
 echo   start.cmd --local --fresh          # Full rebuild and start
 echo   start.cmd --remote                 # Quick restart on server
 echo   start.cmd --remote --fresh         # Deploy latest code to server
+echo   start.cmd --switch                 # Auto-detect and switch between local/remote
 echo   start.cmd --stop                   # Stop everything
 echo   start.cmd --push-remote            # Push local DB to remote ^(after backups^)
 echo   start.cmd --recover                # Interactive DB recovery with integrity checks

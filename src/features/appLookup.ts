@@ -12,8 +12,9 @@
 import { db } from "../db/db.js";
 import { shortCode } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
+import type { ApplicationRow } from "./review/types.js";
 
-/** Internal type for application row from database */
+/** Internal type for application row from database (extended for optional fields) */
 type AppRow = {
   id: string;
   user_id: string;
@@ -52,7 +53,7 @@ export function normalizeCode(raw: string): string {
  *  - code: HEX6 short code (normalized)
  * RETURNS: Application record or null
  */
-export function findAppByShortCode(guildId: string, code: string) {
+export function findAppByShortCode(guildId: string, code: string): ApplicationRow | null {
   const normalized = normalizeCode(code);
   if (normalized.length !== 6) {
     logger.debug({ code, normalized }, "[appLookup] invalid short code length");
@@ -73,9 +74,11 @@ export function findAppByShortCode(guildId: string, code: string) {
       .get(guildId, normalized) as { app_id: string } | undefined;
 
     if (row && row.app_id) {
-      const app = db.prepare("SELECT * FROM application WHERE id=?").get(row.app_id);
-      logger.debug({ code: normalized, appId: row.app_id }, "[appLookup] found via mapping table");
-      return app;
+      const app = db.prepare("SELECT * FROM application WHERE id=?").get(row.app_id) as ApplicationRow | undefined;
+      if (app) {
+        logger.debug({ code: normalized, appId: row.app_id }, "[appLookup] found via mapping table");
+        return app;
+      }
     }
   }
 
@@ -95,7 +98,8 @@ export function findAppByShortCode(guildId: string, code: string) {
     try {
       if (shortCode(r.id) === normalized) {
         logger.debug({ code: normalized, appId: r.id }, "[appLookup] found via full scan");
-        return r;
+        // Cast AppRow to ApplicationRow (compatible types)
+        return r as ApplicationRow;
       }
     } catch (e) {
       logger.warn({ err: e, appId: r.id }, "[appLookup] shortCode generation failed");

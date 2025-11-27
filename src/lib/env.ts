@@ -69,6 +69,9 @@ const raw = {
   QUEUE_BACKLOG_ALERT: process.env.QUEUE_BACKLOG_ALERT?.trim(),
   P95_RESPONSE_MS_ALERT: process.env.P95_RESPONSE_MS_ALERT?.trim(),
   WS_PING_MS_ALERT: process.env.WS_PING_MS_ALERT?.trim(),
+
+  // Sync marker for local/remote database switching
+  BOT_LOCATION: process.env.BOT_LOCATION?.trim(),
 };
 
 /**
@@ -127,6 +130,10 @@ const schema = z.object({
   QUEUE_BACKLOG_ALERT: z.string().optional(),
   P95_RESPONSE_MS_ALERT: z.string().optional(),
   WS_PING_MS_ALERT: z.string().optional(),
+
+  // Sync marker for local/remote database switching
+  // Values: 'local', 'remote', or custom hostname
+  BOT_LOCATION: z.string().default("unknown"),
 });
 
 /**
@@ -151,3 +158,6 @@ const truthyPattern = /^(1|true|yes|on)$/i;
 
 // Controls whether avatar risk warnings appear in review UI. Defaults ON.
 export const GATE_SHOW_AVATAR_RISK = truthyPattern.test(process.env.GATE_SHOW_AVATAR_RISK ?? "1");
+
+// Bot location identifier for sync marker tracking
+export const BOT_LOCATION = env.BOT_LOCATION;

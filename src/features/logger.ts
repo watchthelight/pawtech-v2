@@ -15,6 +15,7 @@ import type { Guild, TextChannel } from "discord.js";
 import { ChannelType, PermissionFlagsBits } from "discord.js";
 import { getLoggingChannelId } from "../config/loggingStore.js";
 import { logger } from "../lib/logger.js";
+import { touchSyncMarker } from "../lib/syncMarker.js";
 
 /**
  * WHAT: Resolve and validate logging channel for a guild.
@@ -159,6 +160,9 @@ export function logActionJSON(params: {
     },
     "[logger] action logged as JSON (embed unavailable)"
   );
+
+  // Update sync marker for database freshness tracking
+  touchSyncMarker(`action_${params.action}`);
 }
 
 /**

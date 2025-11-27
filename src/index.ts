@@ -42,7 +42,6 @@ import {
   Events,
 } from "discord.js";
 import { logger } from "./lib/logger.js";
-import { captureException } from "./lib/sentry.js";
 
 // ===== Global Error Handlers =====
 // WHAT: Catch unhandled rejections and exceptions at process level
@@ -409,7 +408,16 @@ client.once(Events.ClientReady, async () => {
         logger.debug("[shutdown] Ops health scheduler stopped");
       }
 
-      // 2. Cleanup banner sync listeners
+      // 2. Flush message activity buffer before shutdown
+      try {
+        const { flushOnShutdown } = await import("./features/messageActivityLogger.js");
+        flushOnShutdown();
+        logger.debug("[shutdown] Message activity buffer flushed");
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Message activity flush failed (non-fatal)");
+      }
+
+      // 3. Cleanup banner sync listeners
       try {
         const { cleanupBannerSync } = await import("./features/bannerSync.js");
         cleanupBannerSync(client);
@@ -418,7 +426,7 @@ client.once(Events.ClientReady, async () => {
         logger.warn({ err }, "[shutdown] Banner sync cleanup failed (non-fatal)");
       }
 
-      // 3. Cleanup notify limiter (stops cleanup interval)
+      // 4. Cleanup notify limiter (stops cleanup interval)
       try {
         const { notifyLimiter } = await import("./lib/notifyLimiter.js");
         if ("destroy" in notifyLimiter && typeof notifyLimiter.destroy === "function") {
@@ -429,11 +437,11 @@ client.once(Events.ClientReady, async () => {
         logger.warn({ err }, "[shutdown] Notify limiter cleanup failed (non-fatal)");
       }
 
-      // 4. Destroy Discord client (closes WebSocket connection)
+      // 5. Destroy Discord client (closes WebSocket connection)
       client.destroy();
       logger.debug("[shutdown] Discord client destroyed");
 
-      // 5. Close database
+      // 6. Close database
       try {
         db.close();
         logger.debug("[shutdown] Database closed");

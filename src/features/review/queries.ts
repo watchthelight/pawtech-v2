@@ -10,6 +10,7 @@
 
 import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
+import type { ApplicationRow, ApplicationStatus } from "./types.js";
 
 /**
  * WHAT: Row structure for recent review actions.
@@ -21,6 +22,71 @@ export type RecentAction = {
   reason: string | null;
   created_at: number; // Unix epoch seconds
 };
+
+// ===== Application Queries =====
+
+/**
+ * loadApplication
+ * WHAT: Fetch an application by ID.
+ * WHY: Core query used throughout review flows.
+ * @param appId - The application ID
+ * @returns ApplicationRow or undefined if not found
+ */
+export function loadApplication(appId: string): ApplicationRow | undefined {
+  return db
+    .prepare(
+      `
+    SELECT id, guild_id, user_id, status
+    FROM application
+    WHERE id = ?
+  `
+    )
+    .get(appId) as ApplicationRow | undefined;
+}
+
+/**
+ * findPendingAppByUserId
+ * WHAT: Finds a pending (submitted or needs_info) application for a user in a guild.
+ * WHY: Enables UID-based targeting for /accept and /reject slash commands.
+ * @param guildId - The guild ID
+ * @param userId - The user ID
+ * @returns ApplicationRow or null if not found
+ */
+export function findPendingAppByUserId(guildId: string, userId: string): ApplicationRow | null {
+  return db
+    .prepare(
+      `
+    SELECT id, guild_id, user_id, status
+    FROM application
+    WHERE guild_id = ? AND user_id = ? AND status IN ('submitted', 'needs_info')
+    ORDER BY created_at DESC
+    LIMIT 1
+  `
+    )
+    .get(guildId, userId) as ApplicationRow | null;
+}
+
+/**
+ * updateReviewActionMeta
+ * WHAT: Update the meta JSON field on a review_action row.
+ * WHY: Store additional context (dmDelivered, roleApplied, etc.) for auditing.
+ * @param id - The review_action row ID
+ * @param meta - JSON-serializable object
+ */
+export function updateReviewActionMeta(id: number, meta: unknown) {
+  db.prepare(`UPDATE review_action SET meta = json(?) WHERE id = ?`).run(JSON.stringify(meta), id);
+}
+
+/**
+ * isClaimable
+ * WHAT: Helper to determine if an application is in a claimable state.
+ * WHY: Prevents claim attempts on terminal states (kicked, approved, rejected).
+ * @param status - The application status
+ * @returns true if the application can be claimed
+ */
+export function isClaimable(status: ApplicationStatus): boolean {
+  return status === "submitted" || status === "needs_info";
+}
 
 /**
  * WHAT: Fetch recent review actions for an application.

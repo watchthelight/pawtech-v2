@@ -265,6 +265,29 @@ try {
   // Table may not exist yet if action_log schema hasn't been created
 }
 
+// Sync marker table for local/remote database switching
+// Singleton row tracks database freshness via monotonic action_count
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS sync_marker (
+    id INTEGER PRIMARY KEY CHECK (id = 1),
+    last_modified_at INTEGER NOT NULL,
+    last_modified_by TEXT NOT NULL,
+    action_count INTEGER NOT NULL DEFAULT 0,
+    last_action_type TEXT,
+    updated_at TEXT DEFAULT (datetime('now'))
+  )
+`
+).run();
+
+// Insert initial marker if not exists
+db.prepare(
+  `
+  INSERT OR IGNORE INTO sync_marker (id, last_modified_at, last_modified_by, action_count)
+  VALUES (1, strftime('%s', 'now'), 'unknown', 0)
+`
+).run();
+
 // NOTE: Database shutdown is handled by the coordinated graceful shutdown in index.ts
 // which ensures proper ordering (stop schedulers → cleanup features → close DB)
 // Do NOT add SIGTERM/SIGINT handlers here - they would conflict with the coordinated shutdown

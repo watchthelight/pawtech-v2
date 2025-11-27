@@ -147,7 +147,7 @@ describe("review card UI", () => {
 
       const expectedLink = googleReverseImageUrl(app.avatarUrl);
       expect(riskField?.value).toContain(
-        `NSFW Avatar Chance: **${avatarScan.finalPct}%**  [Reverse Search Avatar](${expectedLink})`
+        `NSFW Avatar Chance: **${avatarScan.finalPct}%**  [Reverse Search Avatar](${expectedLink})`
       );
 
       // Account field shows when the Discord account was created.

@@ -412,6 +412,13 @@ export function buildReviewEmbedV3(
   } else if (app.status === "approved") {
     lines.push("**Decision**");
     lines.push("Approved");
+    if (app.resolution_reason) {
+      lines.push("");
+      lines.push("**Note**");
+      lines.push("```");
+      lines.push(app.resolution_reason);
+      lines.push("```");
+    }
     lines.push("");
   }
 

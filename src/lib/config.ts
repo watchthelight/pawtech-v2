@@ -18,6 +18,7 @@ import { db } from "../db/db.js";
 import { logger } from "./logger.js";
 import { env } from "./env.js";
 import { isOwner } from "../utils/owner.js";
+import { touchSyncMarker } from "./syncMarker.js";
 
 export type GuildConfig = {
   guild_id: string;
@@ -345,6 +346,7 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
     db.prepare(`UPDATE guild_config SET ${sets} WHERE guild_id = ?`).run(...vals, guildId);
   }
   invalidateCache(guildId);
+  touchSyncMarker("config_upsert");
 }
 
 export function getConfig(guildId: string): GuildConfig | undefined {
