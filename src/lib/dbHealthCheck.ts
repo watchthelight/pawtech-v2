@@ -5,6 +5,7 @@
  * HOW: Runs PRAGMA integrity_check and validates critical tables
  */
 
+import { statSync } from "node:fs";
 import { logger } from "./logger.js";
 import { db } from "../db/db.js";
 
@@ -111,8 +112,7 @@ export function checkDatabaseHealth(): HealthCheckResult {
     try {
       // better-sqlite3 exposes the file path as .name (undocumented but stable)
       const dbPath = (db as any).name;
-      const fs = require("fs");
-      const stats = fs.statSync(dbPath);
+      const stats = statSync(dbPath);
       const sizeMB = (stats.size / 1024 / 1024).toFixed(2);
 
       if (stats.size < 100 * 1024) {

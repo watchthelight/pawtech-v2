@@ -893,10 +893,9 @@ async function handleClaimToggle(interaction: ButtonInteraction, app: Applicatio
     captureException(err, { area: "claim:ensureReviewMessage", appId: app.id });
   }
 
-  // Send single ephemeral feedback to confirm claim (no public message)
+  // Update the review card message content to show who claimed it
   await replyOrEdit(interaction, {
-    content: "Application claimed successfully.",
-    flags: MessageFlags.Ephemeral,
+    content: `<@${interaction.user.id}> has claimed this application.`,
   }).catch(() => undefined);
 }
 

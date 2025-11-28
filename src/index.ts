@@ -215,10 +215,6 @@ import * as getNotifyConfig from "./commands/review/getNotifyConfig.js";
 commands.set(setNotifyConfig.data.name, wrapCommand("review-set-notify-config", setNotifyConfig.execute));
 commands.set(getNotifyConfig.data.name, wrapCommand("review-get-notify-config", getNotifyConfig.execute));
 
-// Status update command (staff-only)
-import * as statusupdate from "./commands/statusupdate.js";
-commands.set(statusupdate.data.name, wrapCommand("statusupdate", statusupdate.execute));
-
 // Listopen output mode command (admin-only)
 import * as reviewSetListopenOutput from "./commands/review-set-listopen-output.js";
 commands.set(reviewSetListopenOutput.data.name, wrapCommand("review-set-listopen-output", reviewSetListopenOutput.execute));
@@ -474,7 +470,7 @@ client.once(Events.ClientReady, async () => {
   });
 
   // Restore saved bot status/presence from DB
-  // WHAT: Load last status from /statusupdate and apply it
+  // WHAT: Load last status from /update status and apply it
   // WHY: Keeps status consistent across restarts
   // DOCS: See src/features/statusStore.ts
   try {

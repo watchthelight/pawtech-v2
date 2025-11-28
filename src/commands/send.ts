@@ -252,6 +252,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     messagePayload.files = [attachment];
   }
 
+  // Defer reply immediately - message fetch and send can be slow
+  await interaction.deferReply({ ephemeral: true });
+
   // Reply threading: if reply_to is specified, we try to make this message
   // a reply to that message. This preserves context in conversations.
   let replyToMessage: Message | null = null;
@@ -274,19 +277,17 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     await (interaction.channel as TextChannel).send(messagePayload);
 
     // Acknowledge to invoker ephemerally (never reveals identity in public)
-    await interaction.reply({
+    await interaction.editReply({
       content: "Sent ✅",
-      ephemeral: true,
     });
 
     // Best-effort audit logging (non-blocking)
-    await sendAuditLog(interaction, sanitizedMessage, useEmbed, silent);
+    sendAuditLog(interaction, sanitizedMessage, useEmbed, silent).catch(() => {});
   } catch (err) {
     // Handle send failures (permissions, channel issues, etc.)
     console.error(`[send] Failed to send message: ${err}`);
-    await interaction.reply({
+    await interaction.editReply({
       content: "❌ Failed to send message. Check bot permissions in this channel.",
-      ephemeral: true,
     });
   }
 }

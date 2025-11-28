@@ -48,7 +48,7 @@ vi.mock("../../src/lib/errorCard.js", () => ({
 const reqCtxState = {
   traceId: "trace-fixed",
   kind: "button" as const,
-  cmd: "statusupdate",
+  cmd: "health",
   userId: "user-1",
   guildId: "guild-1",
   channelId: "chan-1",
@@ -90,7 +90,7 @@ beforeEach(() => {
   Object.assign(reqCtxState, {
     traceId: "trace-fixed",
     kind: "button" as const,
-    cmd: "statusupdate",
+    cmd: "health",
     userId: "user-1",
     guildId: "guild-1",
     channelId: "chan-1",
@@ -105,7 +105,7 @@ describe("wrapCommand", () => {
    */
   it("logs start, step, and completion on success", async () => {
     const interaction = createInteraction();
-    const handler = wrapCommand("statusupdate", async (ctx) => {
+    const handler = wrapCommand("health", async (ctx) => {
       // withStep wraps a logical phase of the command for observability.
       // Each step gets its own log entry with timing data.
       await withStep(ctx, "validate_input", async () => undefined);
@@ -115,14 +115,14 @@ describe("wrapCommand", () => {
 
     // Verify the three expected log calls in order: start, step, completion.
     expect(loggerMock.info).toHaveBeenCalledWith(
-      expect.objectContaining({ evt: "cmd_start", traceId: "trace-fixed", cmd: "statusupdate" }),
+      expect.objectContaining({ evt: "cmd_start", traceId: "trace-fixed", cmd: "health" }),
       "command start"
     );
     expect(loggerMock.info).toHaveBeenCalledWith(
       expect.objectContaining({ evt: "cmd_step", phase: "validate_input" })
     );
     expect(loggerMock.info).toHaveBeenCalledWith(
-      expect.objectContaining({ evt: "cmd_ok", cmd: "statusupdate" }),
+      expect.objectContaining({ evt: "cmd_ok", cmd: "health" }),
       "command ok"
     );
     // No error card on success—don't spam users with "everything is fine" messages.

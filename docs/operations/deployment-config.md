@@ -198,12 +198,6 @@ const commands = [
   },
   { name: "health", description: "Bot health check" },
   {
-    name: "statusupdate",
-    description: "Post status update",
-    defaultMemberPermissions: "8", // Administrator
-    options: [{ name: "message", type: 3, description: "Status message", required: true }],
-  },
-  {
     name: "config",
     description: "Manage guild configuration",
     defaultMemberPermissions: "8",

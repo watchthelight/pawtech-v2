@@ -31,7 +31,6 @@ import { data as pokeData } from "./poke.js";
 import { data as unblockData } from "./unblock.js";
 import { data as activityData } from "./activity.js";
 import { data as backfillData } from "./backfill.js";
-import { data as statusupdateData } from "./statusupdate.js";
 import { data as reviewSetListopenOutputData } from "./review-set-listopen-output.js";
 import { data as movieData } from "./movie.js";
 import { data as rolesData } from "./roles.js";
@@ -73,7 +72,6 @@ export function buildCommands() {
     unblockData.toJSON(),
     activityData.toJSON(),
     backfillData.toJSON(),
-    statusupdateData.toJSON(),
     reviewSetListopenOutputData.toJSON(),
     movieData.toJSON(),
     rolesData.toJSON(),

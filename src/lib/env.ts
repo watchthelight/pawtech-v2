@@ -72,6 +72,10 @@ const raw = {
 
   // Sync marker for local/remote database switching
   BOT_LOCATION: process.env.BOT_LOCATION?.trim(),
+
+  // Linked Roles OAuth2 (for Server Developer badge)
+  LINKED_ROLES_PORT: process.env.LINKED_ROLES_PORT?.trim(),
+  LINKED_ROLES_REDIRECT_URI: process.env.LINKED_ROLES_REDIRECT_URI?.trim(),
 };
 
 /**
@@ -134,6 +138,10 @@ const schema = z.object({
   // Sync marker for local/remote database switching
   // Values: 'local', 'remote', or custom hostname
   BOT_LOCATION: z.string().default("unknown"),
+
+  // Linked Roles OAuth2 (for Server Developer badge)
+  LINKED_ROLES_PORT: z.string().optional(),
+  LINKED_ROLES_REDIRECT_URI: z.string().optional(),
 });
 
 /**

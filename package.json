@@ -39,6 +39,8 @@
     "db:recover": "dotenvx run -- tsx src/ops/dbRecoverCli.ts",
     "db:scan-backups": "dotenvx run -- tsx scripts/scan-db-backups.ts",
     "env:check": "dotenvx run -- node -e \"console.log('DISCORD_TOKEN?', (process.env.DISCORD_TOKEN||'').slice(0,10)+'...')\"",
+    "linked-roles:register": "dotenvx run -- tsx scripts/register-role-metadata.ts",
+    "linked-roles:server": "dotenvx run -- tsx src/web/linkedRoles.ts",
     "lint": "eslint .",
     "format": "prettier --write .",
     "format:check": "prettier --check .",

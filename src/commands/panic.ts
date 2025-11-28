@@ -89,6 +89,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
   switch (subcommand) {
     case "on": {
+      // Reply immediately, then do audit logging in background
+      await interaction.reply({
+        content: "🚨 **PANIC MODE ENABLED**\n\nAll automatic role grants are now **stopped**.\nUse `/panic off` to resume normal operation.",
+        ephemeral: false,
+      });
+
       setPanicMode(guildId, true, interaction.user.id);
       /*
        * Log level is WARN, not INFO, because enabling panic mode is an
@@ -103,7 +109,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       }, `Panic mode enabled by ${interaction.user.tag}`);
 
       // Log to Discord channel - non-fatal if it fails (still log warning)
-      await logActionPretty(interaction.guild, {
+      logActionPretty(interaction.guild, {
         actorId: interaction.user.id,
         action: "panic_enabled",
         reason: "Manual activation via /panic on",
@@ -111,15 +117,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
         logger.warn({ err, guildId, action: "panic_enabled" },
           "[panic] Failed to log action - audit trail incomplete");
       });
-
-      await interaction.reply({
-        content: "🚨 **PANIC MODE ENABLED**\n\nAll automatic role grants are now **stopped**.\nUse `/panic off` to resume normal operation.",
-        ephemeral: false,
-      });
       break;
     }
 
     case "off": {
+      // Reply immediately, then do audit logging in background
+      await interaction.reply({
+        content: "✅ **Panic mode disabled**\n\nRole automation has resumed normal operation.",
+        ephemeral: false,
+      });
+
       setPanicMode(guildId, false, interaction.user.id);
       logger.info({
         evt: "panic_command",
@@ -128,19 +135,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
         action: "off",
       }, `Panic mode disabled by ${interaction.user.tag}`);
 
-      // Log to Discord channel
-      await logActionPretty(interaction.guild, {
+      // Log to Discord channel (non-blocking)
+      logActionPretty(interaction.guild, {
         actorId: interaction.user.id,
         action: "panic_disabled",
         reason: "Manual deactivation via /panic off",
       }).catch((err) => {
         logger.warn({ err, guildId, action: "panic_disabled" },
           "[panic] Failed to log action - audit trail incomplete");
-      });
-
-      await interaction.reply({
-        content: "✅ **Panic mode disabled**\n\nRole automation has resumed normal operation.",
-        ephemeral: false,
       });
       break;
     }

@@ -355,6 +355,58 @@ function estimateEmbedSize(embed: EmbedBuilder): number {
 }
 
 // ============================================================================
+// Visual Design Constants
+// ============================================================================
+
+// Use heavy box-drawing character to avoid Discord hyphen rendering bug
+const DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
+// Zero-width space for empty lines (prevents Discord auto-hyphen)
+const EMPTY = "\u200b";
+
+// Status badges with emoji
+const STATUS_BADGE = {
+  approved: "✅ **Approved**",
+  rejected: "❌ **Rejected**",
+  kicked: "🚫 **Kicked**",
+  submitted: "⏳ **Pending Review**",
+  draft: "📝 **Draft**",
+  needs_info: "❓ **Needs Info**",
+} as const;
+
+// Action icons for history timeline
+const ACTION_ICONS = {
+  approve: "✅",
+  reject: "❌",
+  kick: "🚫",
+  claim: "📋",
+  unclaim: "📤",
+  perm_reject: "⛔",
+  copy_uid: "📎",
+  ping: "🔔",
+  modmail: "✉️",
+} as const;
+
+/**
+ * Get risk badge with color indicator
+ */
+function getRiskBadge(pct: number): string {
+  if (pct >= 50) return `🔴 **${pct}%** High Risk`;
+  if (pct >= 25) return `🟡 **${pct}%** Medium Risk`;
+  if (pct > 0) return `🟢 **${pct}%** Low Risk`;
+  return `✅ **${pct}%** Clean`;
+}
+
+/**
+ * Format action verb with icon
+ */
+function formatActionWithIcon(action: string): string {
+  const normalized = action.toLowerCase().replace(/\s+/g, "_");
+  const icon = ACTION_ICONS[normalized as keyof typeof ACTION_ICONS] || "•";
+  const verb = action.replace(/_/g, " ");
+  return `${icon} ${verb}`;
+}
+
+// ============================================================================
 // Mobile-first builder (V3) — consolidates all content into description
 // ============================================================================
 
@@ -385,118 +437,160 @@ export function buildReviewEmbedV3(
 
   const lines: string[] = [];
 
-  // Show prominent notice if member has left
-  if (member === null) {
-    lines.push("⚠️ **Member left server.**");
-    lines.push("");
-  }
-
-  // Show flags (important warnings for moderators)
-  if (flags.length > 0) {
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: Alerts & Flags (if any)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (member === null || flags.length > 0) {
+    if (member === null) {
+      lines.push("⚠️ **ALERT: Member has left the server**");
+    }
     for (const flag of flags) {
       lines.push(flag);
     }
-    lines.push("");
+    lines.push(EMPTY);
+    lines.push(DIVIDER);
+    lines.push(EMPTY);
   }
 
-  // Decision + Reason
-  if (app.status === "rejected" && app.resolution_reason) {
-    lines.push("**Decision**");
-    lines.push("Rejected");
-    lines.push("");
-    lines.push("**Reason**");
-    lines.push("```");
-    lines.push(app.resolution_reason);
-    lines.push("```");
-    lines.push("");
-  } else if (app.status === "approved") {
-    lines.push("**Decision**");
-    lines.push("Approved");
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: Decision (only for resolved applications)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (app.status === "approved" || app.status === "rejected" || app.status === "kicked") {
+    const badge = STATUS_BADGE[app.status] || app.status;
+    lines.push(`**Decision**`);
+    lines.push(badge);
+
     if (app.resolution_reason) {
-      lines.push("");
-      lines.push("**Note**");
-      lines.push("```");
-      lines.push(app.resolution_reason);
-      lines.push("```");
+      const label = app.status === "approved" ? "Note" : "Reason";
+      lines.push(EMPTY);
+      lines.push(`**${label}**`);
+      // Use quote block instead of code block for cleaner look
+      const reasonLines = app.resolution_reason.split("\n");
+      for (const line of reasonLines) {
+        lines.push(`> ${line}`);
+      }
     }
-    lines.push("");
+    lines.push(EMPTY);
+    lines.push(DIVIDER);
+    lines.push(EMPTY);
   }
 
-  // Application
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: Application Info (grouped metadata)
+  // ═══════════════════════════════════════════════════════════════════════════
   lines.push("**Application**");
-  lines.push(`Applicant: <@${app.user_id}>`);
-  lines.push(`Submitted: ${ts(submittedDate, 'f')} • ${ts(submittedDate, 'R')}`);
-  const claimedText = claim ? `<@${claim.reviewer_id}>` : "Unclaimed";
+  lines.push(`**Applicant:**  <@${app.user_id}>`);
+  lines.push(`**Submitted:**  ${ts(submittedDate, 'f')} • ${ts(submittedDate, 'R')}`);
+
+  // Claim status
   if (claim) {
     const claimEpoch = parseClaimedAt(claim.claimed_at);
     if (claimEpoch) {
-      const claimTs = claimEpoch * 1000;  // Convert seconds to milliseconds
-      lines.push(`Claimed by: ${claimedText} • ${ts(claimTs, 'f')}`);
+      const claimTs = claimEpoch * 1000;
+      lines.push(`**Claimed by:**  <@${claim.reviewer_id}> • ${ts(claimTs, 'R')}`);
     } else {
-      lines.push(`Claimed by: ${claimedText} • (timestamp parse error)`);
+      lines.push(`**Claimed by:**  <@${claim.reviewer_id}>`);
     }
   } else {
-    lines.push(`Claimed by: ${claimedText}`);
+    lines.push(`**Claimed by:** Unclaimed`);
   }
-  if (typeof accountCreatedAt === 'number' && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
-    lines.push(`Account created: ${ts(accountCreatedAt, 'f')} • ${ts(accountCreatedAt, 'R')}`);
-  }
-  lines.push("");
 
-  // Status
+  // Account age
+  if (typeof accountCreatedAt === 'number' && Number.isFinite(accountCreatedAt) && accountCreatedAt > 0) {
+    lines.push(`**Account created:**  ${ts(accountCreatedAt, 'f')} • ${ts(accountCreatedAt, 'R')}`);
+  }
+
+  lines.push(EMPTY);
+  lines.push(DIVIDER);
+  lines.push(EMPTY);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: Status (modmail, member, avatar)
+  // ═══════════════════════════════════════════════════════════════════════════
   lines.push("**Status**");
+
+  // Modmail status with icon
   if (modmailTicket) {
     if (modmailTicket.status === "open" && modmailTicket.thread_id) {
-      lines.push(`Modmail: [Open Thread](https://discord.com/channels/${app.guild_id}/${modmailTicket.thread_id})`);
+      lines.push(`✉️ **Modmail:** [Open Thread](https://discord.com/channels/${app.guild_id}/${modmailTicket.thread_id})`);
     } else if (modmailTicket.status === "closed" && modmailTicket.log_channel_id && modmailTicket.log_message_id) {
-      lines.push(`Modmail: [View Log](https://discord.com/channels/${app.guild_id}/${modmailTicket.log_channel_id}/${modmailTicket.log_message_id})`);
+      lines.push(`📨 **Modmail:** [View Log](https://discord.com/channels/${app.guild_id}/${modmailTicket.log_channel_id}/${modmailTicket.log_message_id})`);
     } else if (modmailTicket.status === "closed") {
-      lines.push("Modmail: Closed");
+      lines.push("📨 **Modmail:** Closed");
     } else {
-      lines.push("Modmail: Open");
+      lines.push("✉️ **Modmail:** Open");
     }
   } else {
-    lines.push("Modmail: None");
+    lines.push("📭 **Modmail:** None");
   }
-  lines.push(member === null ? "Member status: Left server" : "Member status: In server");
+
+  // Member status with icon
+  const memberIcon = member === null ? "🚪" : "✅";
+  const memberStatus = member === null ? "Left server" : "In server";
+  lines.push(`${memberIcon} **Member status:** ${memberStatus}`);
+
+  // Avatar risk with colored badge
   if (avatarScan) {
     const pct = avatarScan.finalPct ?? 0;
     const reverse = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
-    lines.push(`Avatar risk: ${pct}% • [Reverse Search](${reverse})`);
-    lines.push("*NSFW Detection API is ~75% Accurate. Always manually verify.*");
+    const riskBadge = getRiskBadge(pct);
+    lines.push(`🖼️ **Avatar risk:** ${riskBadge} • [Reverse Search](${reverse})`);
+    lines.push("-# *NSFW Detection API is ~75% Accurate. Always manually verify.*");
   }
-  lines.push("");
 
-  // History
+  lines.push(EMPTY);
+  lines.push(DIVIDER);
+  lines.push(EMPTY);
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: History Timeline
+  // ═══════════════════════════════════════════════════════════════════════════
   if (recentActions && recentActions.length > 0) {
     lines.push("**History (Last 3)**");
     for (const a of recentActions.slice(0, 3)) {
-      const verb = a.action.replace(/_/g, " ");
-      lines.push(`• ${verb} by <@${a.moderator_id}> — ${ts(a.created_at * 1000, 'f')}`);
+      const actionDisplay = formatActionWithIcon(a.action);
+      lines.push(`${actionDisplay} by <@${a.moderator_id}> — ${ts(a.created_at * 1000, 'R')}`);
     }
-    lines.push("");
+    lines.push(EMPTY);
+    lines.push(DIVIDER);
+    lines.push(EMPTY);
   }
 
-  // Answers at bottom
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: Answers (clean arrow format)
+  // ═══════════════════════════════════════════════════════════════════════════
   const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
   lines.push("**Answers:**");
+  lines.push(EMPTY);
+
   if (orderedAnswers.length > 0) {
     for (let i = 0; i < orderedAnswers.length; i++) {
       const qa = orderedAnswers[i];
       const qNum = i + 1;
       const question = qa.question || `Question ${qNum}`;
-      lines.push(`Q${qNum}: ${question}`);
-      lines.push("```");
-      lines.push(qa.answer || "");
-      lines.push("```");
-      lines.push("");
+      const answer = qa.answer?.trim() || "*(no response)*";
+
+      // Question label
+      lines.push(`**Q${qNum}: ${question}**`);
+
+      // Answer with arrow format and quote styling
+      const answerLines = answer.split("\n");
+      for (const line of answerLines) {
+        lines.push(`> ${line}`);
+      }
+
+      // Add spacing between questions (except last)
+      if (i < orderedAnswers.length - 1) {
+        lines.push(EMPTY);
+      }
     }
   } else {
-    lines.push("(no answers)");
-    lines.push("");
+    lines.push("*(no answers recorded)*");
   }
 
-  // Footer: no submitted in footer
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Footer
+  // ═══════════════════════════════════════════════════════════════════════════
   const footerText = isSample ? `Sample Preview • App ID: ${app.id.slice(0, 8)}` : `App ID: ${app.id.slice(0, 8)}`;
   embed.setFooter({ text: footerText });
   embed.setTimestamp(submittedDate.getTime());
@@ -510,7 +604,7 @@ export function buildReviewEmbedV3(
     const historyEnd = description.indexOf("**Answers:**");
     if (historyStart !== -1 && historyEnd !== -1) {
       description = description.slice(0, historyStart) + description.slice(historyEnd);
-      description = description.replace(/\n{3,}/g, "\n\n"); // Clean up extra newlines
+      description = description.replace(/\n{3,}/g, "\n\n");
     }
   }
 

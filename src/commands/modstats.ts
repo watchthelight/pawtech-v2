@@ -290,6 +290,10 @@ async function handleLeaderboard(interaction: ChatInputCommandInteraction): Prom
     return;
   }
 
+  // Defer reply immediately - this command does heavy async work (DB queries, member fetches, image generation)
+  // Discord times out interactions after 3 seconds without a response
+  await interaction.deferReply();
+
   const days = interaction.options.getInteger("days") ?? 30;
   const exportCsv = interaction.options.getBoolean("export") ?? false;
   const windowStartS = nowUtc() - days * 86400;
@@ -336,9 +340,8 @@ async function handleLeaderboard(interaction: ChatInputCommandInteraction): Prom
   }>;
 
   if (rows.length === 0) {
-    await interaction.reply({
+    await interaction.editReply({
       content: `📊 No decisions found in the last ${days} days.`,
-      ephemeral: true,
     });
     return;
   }
@@ -361,10 +364,9 @@ async function handleLeaderboard(interaction: ChatInputCommandInteraction): Prom
       name: `modstats-leaderboard-${days}d-${Date.now()}.csv`,
     });
 
-    await interaction.reply({
+    await interaction.editReply({
       content: `📊 **Moderator Leaderboard Export** (last ${days} days)\n${rows.length} moderators`,
       files: [attachment],
-      ephemeral: true,
     });
 
     logger.info(
@@ -429,10 +431,9 @@ async function handleLeaderboard(interaction: ChatInputCommandInteraction): Prom
     });
   }
 
-  await interaction.reply({
+  await interaction.editReply({
     embeds: [embed],
     files: [attachment],
-    ephemeral: false,
   });
 
   logger.info(
@@ -453,6 +454,9 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
     });
     return;
   }
+
+  // Defer reply - DB queries can take time
+  await interaction.deferReply();
 
   const moderator = interaction.options.getUser("moderator", true);
   const days = interaction.options.getInteger("days") ?? 30;
@@ -488,9 +492,8 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
     | undefined;
 
   if (!row || row.total === 0) {
-    await interaction.reply({
+    await interaction.editReply({
       content: `📊 ${moderator.tag} has no decisions in the last ${days} days.`,
-      ephemeral: true,
     });
     return;
   }
@@ -524,9 +527,8 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
       }
     );
 
-  await interaction.reply({
+  await interaction.editReply({
     embeds: [embed],
-    ephemeral: false,
     allowedMentions: { parse: [] }, // Suppress mentions
   });
 
@@ -689,6 +691,9 @@ async function handleExport(interaction: ChatInputCommandInteraction): Promise<v
     return;
   }
 
+  // Defer reply - DB queries can take time
+  await interaction.deferReply({ ephemeral: true });
+
   const days = interaction.options.getInteger("days") ?? 30;
   const windowStartS = nowUtc() - days * 86400;
 
@@ -723,9 +728,8 @@ async function handleExport(interaction: ChatInputCommandInteraction): Promise<v
   }>;
 
   if (rows.length === 0) {
-    await interaction.reply({
+    await interaction.editReply({
       content: `📊 No decisions found in the last ${days} days.`,
-      ephemeral: true,
     });
     return;
   }
@@ -747,10 +751,9 @@ async function handleExport(interaction: ChatInputCommandInteraction): Promise<v
     name: `modstats-full-export-${days}d-${Date.now()}.csv`,
   });
 
-  await interaction.reply({
+  await interaction.editReply({
     content: `📊 **Full Moderator Stats Export** (last ${days} days)\n✅ ${rows.length} moderators included`,
     files: [attachment],
-    ephemeral: true,
   });
 
   logger.info(

@@ -205,6 +205,17 @@ export async function handleLevelRoleAdded(
     // Log consolidated results to Discord channel (one embed for all rewards)
     // This bunches together multiple rewards at the same level into a single log entry
     if (grantedRewards.length > 0) {
+      // DM the user about their rewards first, so we can log the status
+      const rewardList = grantedRewards.map(r => `<@&${r.id}>`).join(", ");
+      let dmStatus = "✅ DM Sent";
+      await member.send({
+        content: `Thanks for being a part of our community! We slid ya ${rewardList} for reaching **Level ${level}**! 🎉`,
+      }).catch((err) => {
+        dmStatus = "❌ DM Failed (closed)";
+        logger.debug({ err, guildId: guild.id, userId: member.id },
+          "[levelRewards] Could not DM user about rewards");
+      });
+
       await logActionPretty(guild, {
         actorId: botId,
         subjectId: member.id,
@@ -217,6 +228,7 @@ export async function handleLevelRoleAdded(
           // Include all granted rewards as arrays
           rewardRoles: grantedRewards.map(r => `${r.name} (<@&${r.id}>)`),
           rewardCount: grantedRewards.length,
+          dmStatus,
         },
       }).catch((err) => {
         logger.warn({ err, guildId: guild.id, userId: member.id },
@@ -225,6 +237,16 @@ export async function handleLevelRoleAdded(
     }
 
     if (skippedRewards.length > 0) {
+      // DM the user about skipped rewards (they already have them)
+      let skippedDmStatus = "✅ DM Sent";
+      await member.send({
+        content: `Thanks for being a part of our community! We tried to give you your rewards, but you never redeemed your last ones, and we can't give you them twice! Open a support ticket to resolve this issue: https://discord.com/channels/896070888594759740/1103728856294236160/1243749041062547591`,
+      }).catch((err) => {
+        skippedDmStatus = "❌ DM Failed (closed)";
+        logger.debug({ err, guildId: guild.id, userId: member.id },
+          "[levelRewards] Could not DM user about skipped rewards");
+      });
+
       await logActionPretty(guild, {
         actorId: botId,
         subjectId: member.id,
@@ -236,6 +258,7 @@ export async function handleLevelRoleAdded(
           levelRoleId: tier.role_id,
           rewardRoles: skippedRewards.map(r => `${r.name} (<@&${r.id}>)`),
           rewardCount: skippedRewards.length,
+          dmStatus: skippedDmStatus,
         },
       }).catch((err) => {
         logger.warn({ err, guildId: guild.id, userId: member.id },

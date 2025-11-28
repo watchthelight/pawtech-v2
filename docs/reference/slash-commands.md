@@ -14,7 +14,6 @@ All commands are guild-scoped and registered via `scripts/commands.ts` on deploy
 | `/kick`             | `user_id` (user), `reason` (string, optional) | KickMembers    | Yes       | Remove member; log action.                        |
 | `/unclaim`          | `app_id` (int)                                | ManageMessages | Yes       | Release claimed application back to queue.        |
 | `/health`           | _(none)_                                      | Public         | Yes       | Bot uptime, DB stats, last event timestamp.       |
-| `/statusupdate`     | `message` (string)                            | Administrator  | No        | Post incident/status message to announcements.    |
 | `/config`           | `action` (get/set), `key`, `value`            | Administrator  | Yes       | Manage guild config (e.g., logging channel).      |
 | `/modmail`          | `action` (close/reopen), `thread_id`          | ManageMessages | Yes       | Close or reopen modmail thread.                   |
 | `/analytics`        | `start_date`, `end_date`, `format` (text/csv) | ManageMessages | No        | Generate review/modmail analytics report.         |
@@ -195,7 +194,6 @@ if (interaction.commandName === 'accept') {
 
 **Public (visible to channel)**:
 
-- `/statusupdate` (intentional broadcast)
 - `/modstats` leaderboard (transparency)
 - `/analytics` summary (team visibility)
 

@@ -799,6 +799,13 @@ export function ensurePanicModeColumn() {
       return;
     }
 
+    // Ensure updated_at_s column exists (needed for upserts)
+    if (!hasColumn("guild_config", "updated_at_s")) {
+      logger.info("[ensure] adding updated_at_s column to guild_config");
+      // Unix timestamp for last update; nullable for backwards compat
+      db.exec(`ALTER TABLE guild_config ADD COLUMN updated_at_s INTEGER`);
+    }
+
     if (!hasColumn("guild_config", "panic_mode")) {
       logger.info("[ensure] adding panic_mode column to guild_config");
       // INTEGER 0/1 for boolean; default 0 (panic mode off)
@@ -823,3 +830,4 @@ export function ensurePanicModeColumn() {
     throw err;
   }
 }
+

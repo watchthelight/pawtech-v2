@@ -14,6 +14,20 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { assignRole, getRoleTiers, removeRole, type RoleAssignmentResult } from "./roleAutomation.js";
 import { isPanicMode } from "./panicStore.js";
+import { logActionPretty } from "../logging/pretty.js";
+
+// ============================================================================
+// Helpers
+// ============================================================================
+
+/**
+ * Get ordinal suffix for a number (1st, 2nd, 3rd, 4th, etc.)
+ */
+function getOrdinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
 
 // ============================================================================
 // Types
@@ -360,6 +374,65 @@ export async function updateMovieTierRole(guild: Guild, userId: string): Promise
     tierName: targetTier.tier_name,
     tierThreshold: targetTier.threshold,
   }, `Movie tier updated: ${targetTier.tier_name}`);
+
+  // DM the user about their movie progress and track status for logging
+  let dmStatus = "⏭️ No DM";
+  let dmMessage = "";
+  try {
+    const member = await guild.members.fetch(userId).catch(() => null);
+    if (member) {
+      // Find the next tier they're working towards
+      const nextTier = sortedTiers
+        .filter(t => t.threshold > qualifiedCount)
+        .sort((a, b) => a.threshold - b.threshold)[0];
+
+      dmMessage = `Thanks for joining us in the movie! This is your **${getOrdinal(qualifiedCount)}** movie`;
+
+      if (addResult.action === "add") {
+        // They just earned a new tier role
+        dmMessage += `, so you got the <@&${targetTier.role_id}> role! 🎬`;
+      } else if (nextTier) {
+        // They didn't get a new role, show progress to next tier
+        const needed = nextTier.threshold - qualifiedCount;
+        dmMessage += `, you need **${needed}** more movie${needed > 1 ? "s" : ""} to get <@&${nextTier.role_id}>!`;
+      } else {
+        // They have the highest tier already
+        dmMessage += `! You've reached the highest movie tier! 🏆`;
+      }
+
+      dmStatus = "✅ DM Sent";
+      await member.send({ content: dmMessage }).catch((err) => {
+        dmStatus = "❌ DM Failed (closed)";
+        logger.debug({ err, guildId: guild.id, userId },
+          "[movieNight] Could not DM user about movie progress");
+      });
+    }
+  } catch (err) {
+    dmStatus = "❌ DM Failed (error)";
+    logger.debug({ err, guildId: guild.id, userId },
+      "[movieNight] Error sending movie progress DM");
+  }
+
+  // Log to audit channel with DM status
+  const botId = guild.client.user?.id ?? "system";
+  await logActionPretty(guild, {
+    actorId: botId,
+    subjectId: userId,
+    action: addResult.action === "add" ? "movie_tier_granted" : "movie_tier_progress",
+    reason: addResult.action === "add"
+      ? `Earned ${targetTier.tier_name} (${qualifiedCount} movies)`
+      : `Progress update (${qualifiedCount} movies)`,
+    meta: {
+      qualifiedMovies: qualifiedCount,
+      currentTier: targetTier.tier_name,
+      tierRole: `<@&${targetTier.role_id}>`,
+      roleAction: addResult.action === "add" ? "✅ Role Granted" : "⏭️ Already Has Role",
+      dmStatus,
+    },
+  }).catch((err) => {
+    logger.warn({ err, guildId: guild.id, userId },
+      "[movieNight] Failed to log action - audit trail incomplete");
+  });
 
   return results;
 }

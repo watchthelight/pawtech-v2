@@ -87,6 +87,8 @@ function createMockInteraction(
       getAttachment: vi.fn(() => null),
     } as any,
     reply: vi.fn().mockResolvedValue({}),
+    deferReply: vi.fn().mockResolvedValue({}),
+    editReply: vi.fn().mockResolvedValue({}),
     ...overrides,
   } as ChatInputCommandInteraction;
 }
@@ -131,6 +133,7 @@ describe("/send command", () => {
 
     await wrappedExecute(interaction);
 
+    expect(interaction.deferReply).toHaveBeenCalledWith({ ephemeral: true });
     expect(interaction.channel?.send).toHaveBeenCalledWith(
       expect.objectContaining({
         content: "Test message",
@@ -138,9 +141,8 @@ describe("/send command", () => {
       })
     );
 
-    expect(interaction.reply).toHaveBeenCalledWith({
+    expect(interaction.editReply).toHaveBeenCalledWith({
       content: "Sent ✅",
-      ephemeral: true,
     });
   });
 
@@ -334,9 +336,8 @@ describe("/send command", () => {
     await wrappedExecute(interaction);
 
     expect(interaction.channel?.send).toHaveBeenCalled();
-    expect(interaction.reply).toHaveBeenCalledWith({
+    expect(interaction.editReply).toHaveBeenCalledWith({
       content: "Sent ✅",
-      ephemeral: true,
     });
   });
 
@@ -398,9 +399,8 @@ describe("/send command", () => {
 
     // Should still send message despite fetch failure
     expect(interaction.channel?.send).toHaveBeenCalled();
-    expect(interaction.reply).toHaveBeenCalledWith({
+    expect(interaction.editReply).toHaveBeenCalledWith({
       content: "Sent ✅",
-      ephemeral: true,
     });
   });
 

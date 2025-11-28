@@ -1,7 +1,7 @@
 /**
  * Pawtropolis Tech — src/features/statusStore.ts
  * WHAT: Bot status persistence helpers (save/load presence across restarts)
- * WHY: Allows /statusupdate changes to survive bot restarts
+ * WHY: Allows /update status changes to survive bot restarts
  * FLOWS:
  *  - upsertStatus: Save current status to DB
  *  - getStatus: Load saved status from DB
@@ -35,7 +35,7 @@ export type SavedStatus = {
  * THROWS: Propagates SQLite errors
  */
 // UPSERT pattern: INSERT with ON CONFLICT ensures exactly one row per scopeKey.
-// This is called after every /statusupdate command and should be fast.
+// This is called after every /update status command and should be fast.
 // Re-throws SQLite errors since a failed status save is recoverable (bot still works, just won't persist).
 export function upsertStatus(status: SavedStatus): void {
   try {

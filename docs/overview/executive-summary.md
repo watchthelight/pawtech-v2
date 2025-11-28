@@ -33,7 +33,6 @@ Guild-specific settings via `/config` (logging channels, custom messages, toggle
 
 - **`/send`**: Anonymous staff broadcast relay.
 - **`/health`**: Uptime and system health checks.
-- **`/statusupdate`**: Incident communication tool.
 
 ## Current State (P1r–P3r Complete)
 

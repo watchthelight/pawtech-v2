@@ -239,7 +239,7 @@ async function handleAttendance(interaction: ChatInputCommandInteraction): Promi
   const guild = interaction.guild!;
   const user = interaction.options.getUser("user");
 
-  await interaction.deferReply({ ephemeral: true });
+  await interaction.deferReply({ ephemeral: false });
 
   // If no user specified, show all attendees from the most recent event
   if (!user) {
