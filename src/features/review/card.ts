@@ -801,9 +801,27 @@ export async function ensureReviewMessage(
       .prepare(`SELECT channel_id, message_id FROM review_card WHERE app_id = ?`)
       .get(appId) as ReviewCardRow | undefined;
 
-    // Fetch recent action history for the card
+    // Fetch recent action history for the card (show last 7)
     const { getRecentActionsForApp } = await import("./queries.js");
-    const recentActions = getRecentActionsForApp(appId, 4);
+    const recentActions = getRecentActionsForApp(appId, 7);
+
+    // Fetch all previous applications from this user for history display
+    const previousApps = db.prepare(`
+      SELECT id, status, submitted_at, resolved_at, resolution_reason
+      FROM application
+      WHERE guild_id = ? AND user_id = ?
+      ORDER BY submitted_at DESC
+    `).all(appRow.guild_id, appRow.user_id) as Array<{
+      id: string;
+      status: string;
+      submitted_at: string | null;
+      resolved_at: string | null;
+      resolution_reason: string | null;
+    }>;
+
+    // Calculate which number application this is (1st, 2nd, etc.)
+    const appIndex = previousApps.findIndex(a => a.id === appId);
+    const appNumber = previousApps.length - appIndex; // Oldest is #1
 
     // Defensive logging: warn if history is unexpectedly empty
     if (recentActions.length === 0) {
@@ -827,6 +845,8 @@ export async function ensureReviewMessage(
         modmailTicket,
         member,
         recentActions,
+        previousApps,
+        appNumber,
       });
     });
 

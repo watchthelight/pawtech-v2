@@ -75,6 +75,14 @@ export interface ReviewAction {
   created_at: number;
 }
 
+export interface PreviousApplication {
+  id: string;
+  status: string;
+  submitted_at: string | null;
+  resolved_at: string | null;
+  resolution_reason: string | null;
+}
+
 export interface BuildEmbedOptions {
   answers?: ReviewAnswer[];
   flags?: string[];
@@ -84,6 +92,8 @@ export interface BuildEmbedOptions {
   modmailTicket?: ModmailTicket | null;
   member?: GuildMember | null;
   recentActions?: ReviewAction[] | null;
+  previousApps?: PreviousApplication[] | null;
+  appNumber?: number | null;
   isSample?: boolean;
   reasonAttachment?: AttachmentBuilder | null;
 }
@@ -406,6 +416,15 @@ function formatActionWithIcon(action: string): string {
   return `${icon} ${verb}`;
 }
 
+/**
+ * Get ordinal suffix for a number (1st, 2nd, 3rd, 4th, etc.)
+ */
+function getOrdinal(n: number): string {
+  const s = ["th", "st", "nd", "rd"];
+  const v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
 // ============================================================================
 // Mobile-first builder (V3) — consolidates all content into description
 // ============================================================================
@@ -423,6 +442,8 @@ export function buildReviewEmbedV3(
     modmailTicket = null,
     member = null,
     recentActions = null,
+    previousApps = null,
+    appNumber = null,
     isSample = false,
   } = opts;
 
@@ -430,8 +451,10 @@ export function buildReviewEmbedV3(
   const username = app.userTag.replace(/@/g, "@\u200b");
   const submittedDate = app.submitted_at ? new Date(app.submitted_at) : new Date(app.created_at);
 
+  // Format title with application number if available
+  const appNumStr = appNumber ? ` (${getOrdinal(appNumber)} Application)` : "";
   const embed = new EmbedBuilder()
-    .setTitle(`New Application • ${username} • App #${code}`)
+    .setTitle(`New Application • ${username} • App #${code}${appNumStr}`)
     .setColor(getEmbedColor(app.status, member === null));
   if (app.avatarUrl) embed.setThumbnail(app.avatarUrl);
 
@@ -543,11 +566,42 @@ export function buildReviewEmbedV3(
   lines.push(EMPTY);
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION: History Timeline
+  // SECTION: Application History (all past applications from this user)
+  // ═══════════════════════════════════════════════════════════════════════════
+  if (previousApps && previousApps.length > 1) {
+    // Only show if there are other applications besides this one
+    const otherApps = previousApps.filter(a => a.id !== app.id);
+    if (otherApps.length > 0) {
+      lines.push(`**Application History** (${previousApps.length} total)`);
+      for (const pastApp of otherApps) {
+        const statusIcon = pastApp.status === 'approved' ? '✅' :
+                          pastApp.status === 'rejected' ? '❌' :
+                          pastApp.status === 'kicked' ? '🚫' :
+                          pastApp.status === 'submitted' ? '⏳' : '📝';
+        const appCode = shortCode(pastApp.id);
+        const submittedTs = pastApp.submitted_at ? new Date(pastApp.submitted_at) : null;
+        const timeStr = submittedTs ? ts(submittedTs, 'R') : 'unknown';
+        let line = `${statusIcon} #${appCode} • ${pastApp.status} • ${timeStr}`;
+        if (pastApp.resolution_reason) {
+          const truncatedReason = pastApp.resolution_reason.length > 50
+            ? pastApp.resolution_reason.slice(0, 47) + '...'
+            : pastApp.resolution_reason;
+          line += ` — "${truncatedReason}"`;
+        }
+        lines.push(line);
+      }
+      lines.push(EMPTY);
+      lines.push(DIVIDER);
+      lines.push(EMPTY);
+    }
+  }
+
+  // ═══════════════════════════════════════════════════════════════════════════
+  // SECTION: Action History Timeline (last 7 actions on THIS application)
   // ═══════════════════════════════════════════════════════════════════════════
   if (recentActions && recentActions.length > 0) {
-    lines.push("**History (Last 3)**");
-    for (const a of recentActions.slice(0, 3)) {
+    lines.push(`**Action History (Last ${Math.min(recentActions.length, 7)})**`);
+    for (const a of recentActions.slice(0, 7)) {
       const actionDisplay = formatActionWithIcon(a.action);
       lines.push(`${actionDisplay} by <@${a.moderator_id}> — ${ts(a.created_at * 1000, 'R')}`);
     }
@@ -598,12 +652,24 @@ export function buildReviewEmbedV3(
   // Join lines and check size (Discord description limit: 4096 chars)
   let description = lines.join("\n");
 
-  // If too long, try removing history section first
-  if (description.length > 4000 && recentActions && recentActions.length > 0) {
-    const historyStart = description.indexOf("**History (Last 3)**");
-    const historyEnd = description.indexOf("**Answers:**");
-    if (historyStart !== -1 && historyEnd !== -1) {
-      description = description.slice(0, historyStart) + description.slice(historyEnd);
+  // If too long, try removing history sections first
+  if (description.length > 4000) {
+    // Try removing action history first
+    const actionHistoryStart = description.indexOf("**Action History");
+    const answersStart = description.indexOf("**Answers:**");
+    if (actionHistoryStart !== -1 && answersStart !== -1 && actionHistoryStart < answersStart) {
+      description = description.slice(0, actionHistoryStart) + description.slice(answersStart);
+      description = description.replace(/\n{3,}/g, "\n\n");
+    }
+  }
+
+  // If still too long, try removing application history
+  if (description.length > 4000) {
+    const appHistoryStart = description.indexOf("**Application History");
+    const actionHistoryStart = description.indexOf("**Action History");
+    const nextSection = actionHistoryStart !== -1 ? actionHistoryStart : description.indexOf("**Answers:**");
+    if (appHistoryStart !== -1 && nextSection !== -1 && appHistoryStart < nextSection) {
+      description = description.slice(0, appHistoryStart) + description.slice(nextSection);
       description = description.replace(/\n{3,}/g, "\n\n");
     }
   }
