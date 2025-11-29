@@ -2,22 +2,25 @@
 
 ## Reviewing Applications
 
-When a new application comes in, click the **Claim** button first so other mods know you're handling it.
+When a new application comes in, click the **Claim** button first so other mods know you're handling it. Then use the **Accept**, **Reject**, or **Kick** buttons to take action.
 
-To approve someone, use `/accept` with one of these options:
-- `app:A1B2C3` — the short code shown on the application
-- `user:@Username` — mention or pick them from the list
+If an application is bugged and you can't use the buttons, use these commands instead:
+
+- `/accept` — approve the application
+- `/reject reason:Your reason here` — reject with explanation
+- `/kick reason:Your reason here` — kick from server
+- `/unclaim` — release so someone else can review it
+
+Each command accepts one of these to identify the application:
+- `app:A1B2C3` — the short code shown on the embed
+- `user:@Username` — mention or pick from the list
 - `uid:123456789` — their Discord ID if they already left
 
-To reject, use `/reject` with the same options plus a required `reason:`. If someone should never be allowed back, add `perm:true` to permanently block them from re-applying.
+For rejections, add `perm:true` if they should never be allowed to re-apply.
 
-If you need to kick an applicant, `/kick` works the same way with a required `reason:`.
+To see what's waiting for review, run `/listopen`. Use `scope:all` to see everything or `scope:drafts` for incomplete applications.
 
-Changed your mind or need to step away? Use `/unclaim` to release the application so someone else can pick it up.
-
-To see what's waiting for review, run `/listopen`. By default it shows your claimed apps, but you can use `scope:all` to see everything or `scope:drafts` for incomplete applications.
-
-If you need to look up someone's history, `/search user:@Username` pulls up all their past applications and decisions.
+Need to look up someone's history? `/search user:@Username` pulls up all their past applications and decisions.
 
 Made a mistake with a permanent rejection? `/unblock target:@Username` lets them apply again.
 
