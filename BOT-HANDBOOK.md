@@ -136,12 +136,18 @@ Commands for managing the member application and verification process.
 
 | Option | Required | Description |
 |--------|----------|-------------|
-| `scope` | No | `mine` (default) or `all` |
+| `scope` | No | `mine` (default), `all`, or `drafts` |
+
+**Scope options:**
+- `mine` - Applications you've claimed (default)
+- `all` - All open applications (claimed + unclaimed)
+- `drafts` - Incomplete/draft applications
 
 **Example:**
 ```
 /listopen
 /listopen scope:all
+/listopen scope:drafts
 ```
 
 ---
