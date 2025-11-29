@@ -50,10 +50,10 @@ When the movie is over, make sure you end attendance tracking with `/movie end`.
 To see who attended or check someone's movie history, use `/movie attendance`. Add `user:@Username` to look up a specific person's progress toward the next tier.
 
 **Tier roles** (you need 30+ minutes per movie to count):
-- **Red Carpet Guest** — attended 1+ movie
-- **Popcorn Club** — attended 5+ movies
-- **Director's Cut** — attended 10+ movies
-- **Cinematic Royalty** — attended 20+ movies
+- <@&1388676461657063505> — attended 1+ movie
+- <@&1388676662337736804> — attended 5+ movies
+- <@&1388675577778802748> — attended 10+ movies
+- <@&1388677466993987677> — attended 20+ movies
 
 ---
 
