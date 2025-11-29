@@ -18,6 +18,7 @@ import {
   ButtonBuilder,
   ActionRowBuilder,
   ButtonStyle,
+  StringSelectMenuBuilder,
 } from "discord.js";
 import { db } from "../db/db.js";
 import { shortCode } from "../lib/ids.js";
@@ -50,6 +51,10 @@ interface OpenApplication {
   reviewer_id?: string; // Present when fetching all apps
 }
 
+// Cache for draft applications (guild_id -> { apps, count, timestamp })
+const draftsCache = new Map<string, { apps: OpenApplication[]; count: number; timestamp: number }>();
+const CACHE_TTL_MS = 60_000; // 1 minute cache
+
 interface ReviewCardMapping {
   channel_id: string;
   message_id: string;
@@ -77,7 +82,8 @@ export const data = new SlashCommandBuilder()
       .setRequired(false)
       .addChoices(
         { name: "Mine (default)", value: "mine" },
-        { name: "All moderators", value: "all" }
+        { name: "All (claimed + unclaimed)", value: "all" },
+        { name: "Drafts (incomplete)", value: "drafts" }
       )
   )
   .setDefaultMemberPermissions(null) // Make discoverable, enforce at runtime
@@ -164,8 +170,9 @@ function countOpenApplications(guildId: string, reviewerId: string): number {
 }
 
 /**
- * WHAT: Fetch ALL open applications across all moderators.
+ * WHAT: Fetch ALL open applications (both claimed and unclaimed).
  * WHY: Provides visibility into the entire review queue for coordination.
+ * NOTE: Only shows submitted/needs_info apps, NOT drafts (those have their own view)
  */
 function getAllOpenApplications(guildId: string, limit: number, offset: number): OpenApplication[] {
   const query = `
@@ -178,38 +185,98 @@ function getAllOpenApplications(guildId: string, limit: number, offset: number):
       rc.claimed_at,
       rc.reviewer_id
     FROM application a
-    INNER JOIN review_claim rc ON rc.app_id = a.id
+    LEFT JOIN review_claim rc ON rc.app_id = a.id
     WHERE a.guild_id = ?
-      AND a.status NOT IN (${FINAL_STATUSES.map(() => "?").join(", ")})
-    ORDER BY rc.claimed_at DESC
+      AND a.status IN ('submitted', 'needs_info')
+    ORDER BY a.submitted_at ASC
     LIMIT ? OFFSET ?
   `;
 
-  return db.prepare(query).all(guildId, ...FINAL_STATUSES, limit, offset) as OpenApplication[];
+  return db.prepare(query).all(guildId, limit, offset) as OpenApplication[];
 }
 
 /**
- * WHAT: Count total open applications across all moderators.
+ * WHAT: Count total open applications (both claimed and unclaimed).
  * WHY: Needed for "all" view pagination.
+ * NOTE: Only counts submitted/needs_info apps, NOT drafts
  */
 function countAllOpenApplications(guildId: string): number {
   const query = `
     SELECT COUNT(*) as count
     FROM application a
-    INNER JOIN review_claim rc ON rc.app_id = a.id
     WHERE a.guild_id = ?
-      AND a.status NOT IN (${FINAL_STATUSES.map(() => "?").join(", ")})
+      AND a.status IN ('submitted', 'needs_info')
   `;
 
-  const result = db.prepare(query).get(guildId, ...FINAL_STATUSES) as { count: number } | undefined;
+  const result = db.prepare(query).get(guildId) as { count: number } | undefined;
   return result?.count ?? 0;
+}
+
+/**
+ * WHAT: Fetch ALL draft applications with caching.
+ * WHY: Drafts change infrequently, so cache the full list for fast pagination.
+ */
+function getCachedDrafts(guildId: string): { apps: OpenApplication[]; count: number } {
+  const cached = draftsCache.get(guildId);
+  const now = Date.now();
+
+  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+    return { apps: cached.apps, count: cached.count };
+  }
+
+  // Fetch all drafts (typically small number)
+  const query = `
+    SELECT
+      a.id,
+      a.user_id,
+      a.submitted_at,
+      a.created_at,
+      a.status,
+      NULL as claimed_at
+    FROM application a
+    WHERE a.guild_id = ?
+      AND a.status = 'draft'
+    ORDER BY a.created_at DESC
+  `;
+
+  const apps = db.prepare(query).all(guildId) as OpenApplication[];
+  const result = { apps, count: apps.length, timestamp: now };
+  draftsCache.set(guildId, result);
+
+  return { apps, count: apps.length };
+}
+
+/**
+ * WHAT: Fetch DRAFT applications with pagination from cache.
+ * WHY: Fast pagination using cached data.
+ */
+function getDraftApplications(guildId: string, limit: number, offset: number): OpenApplication[] {
+  const { apps } = getCachedDrafts(guildId);
+  return apps.slice(offset, offset + limit);
+}
+
+/**
+ * WHAT: Count total draft applications from cache.
+ * WHY: Instant count using cached data.
+ */
+function countDraftApplications(guildId: string): number {
+  const { count } = getCachedDrafts(guildId);
+  return count;
+}
+
+/**
+ * WHAT: Invalidate drafts cache for a guild.
+ * WHY: Call when a draft is created/submitted/deleted.
+ */
+export function invalidateDraftsCache(guildId: string): void {
+  draftsCache.delete(guildId);
 }
 
 /**
  * WHAT: Build the main embed showing open applications with clickable links.
  * WHY: Visual display of claimed apps needing review with direct navigation to review cards.
  *
- * @param isAllView - When true, shows all moderators' apps with reviewer info
+ * @param viewMode - 'mine', 'all', or 'unclaimed'
  * @returns Object containing embed and array of app URLs for button generation
  */
 async function buildListEmbed(
@@ -217,26 +284,47 @@ async function buildListEmbed(
   apps: OpenApplication[],
   page: number,
   totalCount: number,
-  isAllView: boolean = false
+  viewMode: "mine" | "all" | "drafts" = "mine"
 ): Promise<{ embed: EmbedBuilder; appUrls: Array<{ appId: string; url: string | null }> }> {
+  const titles: Record<string, string> = {
+    mine: "📋 Your Open Applications",
+    all: "📋 All Open Applications",
+    drafts: "📋 Draft Applications",
+  };
+
+  const emptyMessages: Record<string, string> = {
+    mine: "You have no claimed applications pending review.",
+    all: "There are no open applications server-wide.",
+    drafts: "There are no draft applications.",
+  };
+
+  const descriptions: Record<string, string> = {
+    mine: `Showing ${apps.length} claimed application${apps.length === 1 ? "" : "s"} that need your decision.`,
+    all: `Showing ${apps.length} open application${apps.length === 1 ? "" : "s"} (claimed and unclaimed).`,
+    drafts: `Showing ${apps.length} incomplete application${apps.length === 1 ? "" : "s"} not yet submitted.`,
+  };
+
+  const colors: Record<string, number> = {
+    mine: 0x5865f2,    // Discord blurple
+    all: 0xeb459e,     // Pink
+    drafts: 0x99aab5,  // Gray
+  };
+
   const embed = new EmbedBuilder()
-    .setTitle(isAllView ? "📋 All Open Applications" : "📋 Your Open Applications")
-    .setDescription(
-      apps.length === 0
-        ? isAllView
-          ? "There are no open applications server-wide."
-          : "You have no claimed applications pending review."
-        : isAllView
-          ? `Showing ${apps.length} claimed application${apps.length === 1 ? "" : "s"} across all moderators.`
-          : `Showing ${apps.length} claimed application${apps.length === 1 ? "" : "s"} that need your decision.`
-    )
-    .setColor(isAllView ? 0xeb459e : 0x5865f2) // Pink for all view, Discord blurple for personal
+    .setTitle(titles[viewMode])
+    .setDescription(apps.length === 0 ? emptyMessages[viewMode] : descriptions[viewMode])
+    .setColor(colors[viewMode])
     .setTimestamp();
 
   const appUrls: Array<{ appId: string; url: string | null }> = [];
 
   if (apps.length === 0) {
-    embed.setFooter({ text: isAllView ? "No open applications server-wide" : "No open applications" });
+    const emptyFooters: Record<string, string> = {
+      mine: "No open applications",
+      all: "No open applications server-wide",
+      drafts: "No draft applications",
+    };
+    embed.setFooter({ text: emptyFooters[viewMode] });
     return { embed, appUrls };
   }
 
@@ -283,33 +371,39 @@ async function buildListEmbed(
       displayName = `User ${app.user_id}`;
     }
 
-    // Fetch reviewer info for "all" view
-    let reviewerDisplay = "";
-    if (isAllView && app.reviewer_id) {
-      try {
-        const reviewerMember = await guild.members.fetch(app.reviewer_id).catch(() => null);
-        if (reviewerMember) {
-          reviewerDisplay = `\n**Claimed by:** <@${app.reviewer_id}>`;
-        } else {
-          const reviewerUser = await interaction.client.users.fetch(app.reviewer_id).catch(() => null);
-          if (reviewerUser) {
-            reviewerDisplay = `\n**Claimed by:** ${reviewerUser.tag}`;
+    // Fetch reviewer info for "all" view, or show "Unclaimed" if no claim
+    let claimInfo = "";
+    if (viewMode === "all") {
+      if (app.reviewer_id) {
+        try {
+          const reviewerMember = await guild.members.fetch(app.reviewer_id).catch(() => null);
+          if (reviewerMember) {
+            claimInfo = `\n**Claimed by:** <@${app.reviewer_id}>`;
           } else {
-            reviewerDisplay = `\n**Claimed by:** User ${app.reviewer_id}`;
+            const reviewerUser = await interaction.client.users.fetch(app.reviewer_id).catch(() => null);
+            if (reviewerUser) {
+              claimInfo = `\n**Claimed by:** ${reviewerUser.tag}`;
+            } else {
+              claimInfo = `\n**Claimed by:** User ${app.reviewer_id}`;
+            }
           }
+        } catch {
+          claimInfo = `\n**Claimed by:** User ${app.reviewer_id}`;
         }
-      } catch {
-        reviewerDisplay = `\n**Claimed by:** User ${app.reviewer_id}`;
+      } else {
+        claimInfo = `\n⚠️ **Unclaimed**`;
       }
+    } else if (viewMode === "mine") {
+      claimInfo = `\n**Claimed:** ${claimedDisplay}`;
     }
+    // drafts view: no claim info needed (drafts aren't claimed)
 
     // Build field value with link indicator
     const linkIndicator = appUrl ? "🔗 " : "";
     const fieldValue =
       `**Status:** \`${app.status}\`\n` +
-      `**Submitted:** ${submittedDisplay}\n` +
-      `**Claimed:** ${claimedDisplay}` +
-      reviewerDisplay +
+      `**Submitted:** ${submittedDisplay}` +
+      claimInfo +
       (appUrl ? `\n${linkIndicator}[Open Application](${appUrl})` : "");
 
     embed.addFields({
@@ -322,40 +416,71 @@ async function buildListEmbed(
   // Footer with pagination info
   const startIdx = page * PAGE_SIZE + 1;
   const endIdx = Math.min(startIdx + apps.length - 1, totalCount);
+  const footerSuffixes: Record<string, string> = {
+    mine: "",
+    all: " (All)",
+    drafts: " (Drafts)",
+  };
   embed.setFooter({
-    text: `Showing ${startIdx}-${endIdx} of ${totalCount} • Page ${page + 1}${isAllView ? " (All Mods)" : ""}`,
+    text: `Showing ${startIdx}-${endIdx} of ${totalCount} • Page ${page + 1}${footerSuffixes[viewMode]}`,
   });
 
   return { embed, appUrls };
 }
 
 /**
- * WHAT: Build pagination buttons (Prev/Next).
+ * WHAT: Build pagination controls (buttons or select menu).
  * WHY: Allow moderators to navigate through multiple pages of applications.
+ *      Drafts view uses a page select menu for faster navigation.
  *
- * @param isAllView - When true, includes 'all' flag in custom IDs for pagination state
+ * @param viewMode - 'mine', 'all', or 'drafts' - included in custom IDs for pagination state
  */
 function buildPaginationButtons(
   page: number,
   totalCount: number,
   nonce: string,
-  isAllView: boolean = false
-): ActionRowBuilder<ButtonBuilder>[] {
-  const hasPrev = page > 0;
-  const hasNext = (page + 1) * PAGE_SIZE < totalCount;
+  viewMode: "mine" | "all" | "drafts" = "mine"
+): ActionRowBuilder<ButtonBuilder | StringSelectMenuBuilder>[] {
+  const totalPages = Math.ceil(totalCount / PAGE_SIZE);
 
-  if (!hasPrev && !hasNext) {
+  if (totalPages <= 1) {
     // No pagination needed
     return [];
   }
 
+  // For drafts view, use a page select menu for faster navigation
+  if (viewMode === "drafts" && totalPages > 1) {
+    const options = [];
+    for (let i = 0; i < Math.min(totalPages, 25); i++) {
+      const startItem = i * PAGE_SIZE + 1;
+      const endItem = Math.min((i + 1) * PAGE_SIZE, totalCount);
+      options.push({
+        label: `Page ${i + 1}`,
+        description: `Items ${startItem}-${endItem}`,
+        value: `${i}`,
+        default: i === page,
+      });
+    }
+
+    const selectMenu = new StringSelectMenuBuilder()
+      .setCustomId(`listopen:${nonce}:page:drafts`)
+      .setPlaceholder(`Page ${page + 1} of ${totalPages}`)
+      .addOptions(options);
+
+    return [new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(selectMenu)];
+  }
+
+  // For other views, use prev/next buttons
+  const hasPrev = page > 0;
+  const hasNext = (page + 1) * PAGE_SIZE < totalCount;
+
   const row = new ActionRowBuilder<ButtonBuilder>();
-  const allFlag = isAllView ? ":all" : "";
+  const modeFlag = viewMode === "mine" ? "" : `:${viewMode}`;
 
   if (hasPrev) {
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(`listopen:${nonce}:prev:${page}${allFlag}`)
+        .setCustomId(`listopen:${nonce}:prev:${page}${modeFlag}`)
         .setLabel("◀ Previous")
         .setStyle(ButtonStyle.Secondary)
     );
@@ -364,7 +489,7 @@ function buildPaginationButtons(
   if (hasNext) {
     row.addComponents(
       new ButtonBuilder()
-        .setCustomId(`listopen:${nonce}:next:${page}${allFlag}`)
+        .setCustomId(`listopen:${nonce}:next:${page}${modeFlag}`)
         .setLabel("Next ▶")
         .setStyle(ButtonStyle.Secondary)
     );
@@ -414,27 +539,33 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   // Check scope option (default to "mine")
-  const scope = interaction.options.getString("scope") ?? "mine";
-  const isAllView = scope === "all";
+  const scope = (interaction.options.getString("scope") ?? "mine") as "mine" | "all" | "drafts";
 
   // Always defer publicly (ephemeral toggle removed)
   await interaction.deferReply({ ephemeral: false });
 
   try {
     // Fetch applications based on view mode
-    const totalCount = isAllView
-      ? countAllOpenApplications(guildId)
-      : countOpenApplications(guildId, reviewerId);
-    const apps = isAllView
-      ? getAllOpenApplications(guildId, PAGE_SIZE, 0)
-      : getOpenApplications(guildId, reviewerId, PAGE_SIZE, 0);
+    let totalCount: number;
+    let apps: OpenApplication[];
+
+    if (scope === "all") {
+      totalCount = countAllOpenApplications(guildId);
+      apps = getAllOpenApplications(guildId, PAGE_SIZE, 0);
+    } else if (scope === "drafts") {
+      totalCount = countDraftApplications(guildId);
+      apps = getDraftApplications(guildId, PAGE_SIZE, 0);
+    } else {
+      totalCount = countOpenApplications(guildId, reviewerId);
+      apps = getOpenApplications(guildId, reviewerId, PAGE_SIZE, 0);
+    }
 
     // Build embed with clickable links
-    const { embed, appUrls } = await buildListEmbed(interaction, apps, 0, totalCount, isAllView);
+    const { embed, appUrls } = await buildListEmbed(interaction, apps, 0, totalCount, scope);
 
     // Build pagination buttons
     const nonce = generateNonce();
-    const components = buildPaginationButtons(0, totalCount, nonce, isAllView);
+    const components = buildPaginationButtons(0, totalCount, nonce, scope);
 
     // Reply
     await interaction.editReply({
@@ -443,19 +574,24 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     });
 
     // Log action with appLink metadata
+    const actionNames: Record<string, string> = {
+      mine: "listopen_view",
+      all: "listopen_view_all",
+      drafts: "listopen_view_drafts",
+    };
     await logActionPretty(interaction.guild, {
       actorId: reviewerId,
-      action: isAllView ? "listopen_view_all" : "listopen_view",
+      action: actionNames[scope],
       meta: {
         count: totalCount,
         page: 1,
         appLink: true,
-        allView: isAllView,
+        viewMode: scope,
       },
     });
 
     logger.info(
-      { guildId, reviewerId, totalCount, isAllView },
+      { guildId, reviewerId, totalCount, viewMode: scope },
       "[listopen] moderator viewed open applications"
     );
   } catch (err) {
@@ -479,23 +615,23 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
  * Pagination button handler for /listopen.
  *
  * REGISTRATION: Add this to your button handler router in src/index.ts:
- *   if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+(:(all))?$/)) {
+ *   if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+(:(all|drafts))?$/)) {
  *     await handleListOpenPagination(interaction);
  *   }
  *
- * CUSTOM ID FORMAT: listopen:{nonce}:{direction}:{currentPage}[:all]
+ * CUSTOM ID FORMAT: listopen:{nonce}:{direction}:{currentPage}[:viewMode]
  *   - nonce: 8-char hex, prevents button ID collisions across messages
  *   - direction: "prev" or "next"
  *   - currentPage: 0-indexed page number before navigation
- *   - :all: optional suffix indicating "all moderators" view
+ *   - :viewMode: optional suffix - "all" or "drafts" (default is "mine")
  *
  * EDGE CASE: If a user clicks "Next" but all remaining apps were resolved
  * since the embed was rendered, they'll see "No more pages available."
  */
 export async function handleListOpenPagination(interaction: any): Promise<void> {
   const customId = interaction.customId;
-  // Match with optional :all suffix
-  const match = customId.match(/^listopen:([a-f0-9]{8}):(prev|next):(\d+)(:all)?$/);
+  // Match with optional view mode suffix (:all or :drafts)
+  const match = customId.match(/^listopen:([a-f0-9]{8}):(prev|next):(\d+)(:(all|drafts))?$/);
 
   if (!match) {
     await interaction.reply({
@@ -505,10 +641,10 @@ export async function handleListOpenPagination(interaction: any): Promise<void> 
     return;
   }
 
-  const [, nonce, direction, currentPageStr, allFlag] = match;
+  const [, nonce, direction, currentPageStr, , modeValue] = match;
   const currentPage = parseInt(currentPageStr, 10);
   const newPage = direction === "next" ? currentPage + 1 : currentPage - 1;
-  const isAllView = allFlag === ":all";
+  const viewMode: "mine" | "all" | "drafts" = (modeValue as "all" | "drafts") ?? "mine";
 
   if (newPage < 0) {
     await interaction.reply({
@@ -525,12 +661,19 @@ export async function handleListOpenPagination(interaction: any): Promise<void> 
 
   try {
     // Fetch applications for new page based on view mode
-    const totalCount = isAllView
-      ? countAllOpenApplications(guildId)
-      : countOpenApplications(guildId, reviewerId);
-    const apps = isAllView
-      ? getAllOpenApplications(guildId, PAGE_SIZE, newPage * PAGE_SIZE)
-      : getOpenApplications(guildId, reviewerId, PAGE_SIZE, newPage * PAGE_SIZE);
+    let totalCount: number;
+    let apps: OpenApplication[];
+
+    if (viewMode === "all") {
+      totalCount = countAllOpenApplications(guildId);
+      apps = getAllOpenApplications(guildId, PAGE_SIZE, newPage * PAGE_SIZE);
+    } else if (viewMode === "drafts") {
+      totalCount = countDraftApplications(guildId);
+      apps = getDraftApplications(guildId, PAGE_SIZE, newPage * PAGE_SIZE);
+    } else {
+      totalCount = countOpenApplications(guildId, reviewerId);
+      apps = getOpenApplications(guildId, reviewerId, PAGE_SIZE, newPage * PAGE_SIZE);
+    }
 
     if (apps.length === 0 && newPage > 0) {
       await interaction.followUp({
@@ -541,10 +684,10 @@ export async function handleListOpenPagination(interaction: any): Promise<void> 
     }
 
     // Build embed for new page with clickable links
-    const { embed, appUrls } = await buildListEmbed(interaction, apps, newPage, totalCount, isAllView);
+    const { embed, appUrls } = await buildListEmbed(interaction, apps, newPage, totalCount, viewMode);
 
-    // Build pagination buttons (reuse same nonce, preserve all flag)
-    const components = buildPaginationButtons(newPage, totalCount, nonce, isAllView);
+    // Build pagination buttons (reuse same nonce, preserve view mode)
+    const components = buildPaginationButtons(newPage, totalCount, nonce, viewMode);
 
     // Update message
     await interaction.editReply({
@@ -553,7 +696,7 @@ export async function handleListOpenPagination(interaction: any): Promise<void> 
     });
 
     logger.info(
-      { guildId, reviewerId, page: newPage + 1, totalCount, isAllView },
+      { guildId, reviewerId, page: newPage + 1, totalCount, viewMode },
       "[listopen] moderator navigated to page"
     );
   } catch (err) {
@@ -565,5 +708,64 @@ export async function handleListOpenPagination(interaction: any): Promise<void> 
     }).catch(() => {
       // Silently fail if we can't communicate with Discord
     });
+  }
+}
+
+/**
+ * Select menu handler for /listopen drafts page selection.
+ *
+ * REGISTRATION: Add this to your select menu handler router in src/index.ts:
+ *   if (customId.match(/^listopen:[a-f0-9]{8}:page:drafts$/)) {
+ *     await handleListOpenPageSelect(interaction);
+ *   }
+ *
+ * CUSTOM ID FORMAT: listopen:{nonce}:page:drafts
+ */
+export async function handleListOpenPageSelect(interaction: any): Promise<void> {
+  const customId = interaction.customId;
+  const match = customId.match(/^listopen:([a-f0-9]{8}):page:drafts$/);
+
+  if (!match) {
+    await interaction.reply({
+      content: "❌ Invalid page selector.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const [, nonce] = match;
+  const selectedPage = parseInt(interaction.values[0], 10);
+  const guildId = interaction.guildId!;
+  const reviewerId = interaction.user.id;
+
+  await interaction.deferUpdate();
+
+  try {
+    // Get drafts from cache (instant)
+    const totalCount = countDraftApplications(guildId);
+    const apps = getDraftApplications(guildId, PAGE_SIZE, selectedPage * PAGE_SIZE);
+
+    // Build embed for selected page
+    const { embed } = await buildListEmbed(interaction, apps, selectedPage, totalCount, "drafts");
+
+    // Build pagination with new page selected
+    const components = buildPaginationButtons(selectedPage, totalCount, nonce, "drafts");
+
+    await interaction.editReply({
+      embeds: [embed],
+      components,
+    });
+
+    logger.info(
+      { guildId, reviewerId, page: selectedPage + 1, totalCount },
+      "[listopen] moderator jumped to drafts page via select menu"
+    );
+  } catch (err) {
+    logger.error({ err, guildId, reviewerId, page: selectedPage }, "[listopen] page select failed");
+
+    await interaction.followUp({
+      content: "❌ Failed to load page. Please try again.",
+      ephemeral: true,
+    }).catch(() => {});
   }
 }

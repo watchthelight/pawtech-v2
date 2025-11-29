@@ -831,3 +831,47 @@ export function ensurePanicModeColumn() {
   }
 }
 
+/**
+ * ensureApplicationStaleAlertColumns
+ * WHAT: Adds stale_alert_sent and stale_alert_sent_at columns to application table if missing.
+ * WHY: Supports 24-hour unclaimed application alert feature that pings Gatekeeper role.
+ * DOCS:
+ *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
+ *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
+ */
+export function ensureApplicationStaleAlertColumns() {
+  try {
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='application'`)
+      .get();
+
+    if (!tableExists) {
+      logger.warn("[ensure] application table does not exist, skipping stale alert columns");
+      return;
+    }
+
+    const cols = db.prepare(`PRAGMA table_info(application)`).all() as Array<{ name: string }>;
+    const colNames = cols.map((c) => c.name);
+
+    if (!colNames.includes("stale_alert_sent")) {
+      logger.info("[ensure] adding stale_alert_sent column to application table");
+      // INTEGER 0/1 for boolean; default 0 (no alert sent yet)
+      // WHY: Tracks whether we've already pinged Gatekeeper for this stale application
+      db.prepare(
+        `ALTER TABLE application ADD COLUMN stale_alert_sent INTEGER NOT NULL DEFAULT 0`
+      ).run();
+    }
+
+    if (!colNames.includes("stale_alert_sent_at")) {
+      logger.info("[ensure] adding stale_alert_sent_at column to application table");
+      // TEXT for ISO8601 timestamp; nullable (only set when stale_alert_sent = 1)
+      db.prepare(`ALTER TABLE application ADD COLUMN stale_alert_sent_at TEXT`).run();
+    }
+
+    logger.info("[ensure] application stale alert columns ensured");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure stale alert columns");
+    throw err;
+  }
+}
+

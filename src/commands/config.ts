@@ -146,6 +146,27 @@ export const data = new SlashCommandBuilder()
               .setRequired(true)
           )
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("suggestion_channel")
+          .setDescription("Set the channel for bot feature suggestions")
+          .addChannelOption((o) =>
+            o.setName("channel").setDescription("Suggestions channel").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("suggestion_cooldown")
+          .setDescription("Set cooldown between suggestions (in minutes)")
+          .addIntegerOption((o) =>
+            o
+              .setName("minutes")
+              .setDescription("Cooldown in minutes (1-1440, default: 60)")
+              .setRequired(true)
+              .setMinValue(1)
+              .setMaxValue(1440)
+          )
+      )
   )
   .addSubcommandGroup((group) =>
     group
@@ -776,6 +797,79 @@ async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction
   );
 }
 
+async function executeSetSuggestionChannel(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executeSetSuggestionChannel
+   * WHAT: Sets the suggestion channel for bot feature ideas.
+   * WHY: Configures where suggestion embeds will be posted.
+   * PARAMS: ctx — command context; extracts channel option from interaction.
+   * RETURNS: Promise<void> after confirming update.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_channel");
+  const channel = interaction.options.getChannel("channel", true);
+
+  if (!/^\d{17,20}$/.test(channel.id)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid channel ID format. Please try again.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  ctx.step("persist_channel");
+  upsertConfig(interaction.guildId!, { suggestion_channel_id: channel.id });
+
+  logger.info(
+    { evt: "config_set_suggestion_channel", guildId: interaction.guildId, channelId: channel.id },
+    "[config] suggestion channel updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Suggestion channel set to <#${channel.id}>\n\nUsers can now submit bot feature suggestions with \`/suggest\`.`,
+  });
+}
+
+async function executeSetSuggestionCooldown(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executeSetSuggestionCooldown
+   * WHAT: Sets the cooldown between user suggestions.
+   * WHY: Prevents spam and encourages thoughtful suggestions.
+   * PARAMS: ctx — command context; extracts minutes option from interaction.
+   * RETURNS: Promise<void> after confirming update.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_cooldown");
+  const minutes = interaction.options.getInteger("minutes", true);
+
+  if (minutes < 1 || minutes > 1440 || !Number.isInteger(minutes)) {
+    await replyOrEdit(interaction, {
+      content: '❌ Invalid cooldown value. Must be an integer between 1 and 1440 minutes.',
+      flags: MessageFlags.Ephemeral
+    });
+    return;
+  }
+
+  ctx.step("persist_cooldown");
+  const cooldownSeconds = minutes * 60;
+  upsertConfig(interaction.guildId!, { suggestion_cooldown: cooldownSeconds });
+
+  logger.info(
+    { evt: "config_set_suggestion_cooldown", guildId: interaction.guildId, cooldownSeconds },
+    "[config] suggestion cooldown updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Suggestion cooldown set to **${minutes} minute${minutes === 1 ? "" : "s"}**\n\nUsers must wait this long between submitting suggestions.`,
+  });
+}
+
 async function executeSetPingDevOnApp(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * executeSetPingDevOnApp
@@ -852,6 +946,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetDadMode(ctx);
     } else if (subcommand === "pingdevonapp") {
       await executeSetPingDevOnApp(ctx);
+    } else if (subcommand === "suggestion_channel") {
+      await executeSetSuggestionChannel(ctx);
+    } else if (subcommand === "suggestion_cooldown") {
+      await executeSetSuggestionCooldown(ctx);
     }
   } else if (subcommandGroup === "get") {
     if (subcommand === "logging") {

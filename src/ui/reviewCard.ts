@@ -259,11 +259,11 @@ export function getStatusColor(status: ApplicationStatus): number {
 
 /**
  * Get embed color considering both status and member presence
- * Returns orange if member has left for pending apps
+ * Returns orange if member has left (regardless of status)
  */
 export function getEmbedColor(status: ApplicationStatus, memberHasLeft: boolean): number {
-  // If member has left and app is still pending, show orange warning
-  if (memberHasLeft && (status === "draft" || status === "submitted")) {
+  // If member has left, always show orange warning
+  if (memberHasLeft) {
     return COLORS.warning;
   }
   return getStatusColor(status);

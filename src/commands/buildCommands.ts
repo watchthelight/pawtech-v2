@@ -35,6 +35,11 @@ import { data as reviewSetListopenOutputData } from "./review-set-listopen-outpu
 import { data as movieData } from "./movie.js";
 import { data as rolesData } from "./roles.js";
 import { data as panicData } from "./panic.js";
+import { data as searchData } from "./search.js";
+import { data as approvalRateData } from "./approvalRate.js";
+import { data as suggestData } from "./suggest.js";
+import { data as suggestionsData } from "./suggestions.js";
+import { data as suggestionData } from "./suggestion.js";
 
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
@@ -76,6 +81,13 @@ export function buildCommands() {
     movieData.toJSON(),
     rolesData.toJSON(),
     panicData.toJSON(),
+    searchData.toJSON(),
+    approvalRateData.toJSON(),
+
+    // Suggestion box commands
+    suggestData.toJSON(),
+    suggestionsData.toJSON(),
+    suggestionData.toJSON(),
 
     // Context menu commands use a different registration endpoint (ApplicationCommandType.User/Message)
     // and aren't included here. See Discord docs on context menus if you need to add them.

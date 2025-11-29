@@ -227,6 +227,23 @@ commands.set(movie.data.name, wrapCommand("movie", movie.execute));
 commands.set(roles.data.name, wrapCommand("roles", roles.execute));
 commands.set(panic.data.name, wrapCommand("panic", panic.execute));
 
+// Search command (user application history lookup)
+import * as search from "./commands/search.js";
+commands.set(search.data.name, wrapCommand("search", search.execute));
+
+// Approval rate analytics command
+import * as approvalRate from "./commands/approvalRate.js";
+import { executeApprovalRateCommand } from "./features/analytics/approvalRateCommand.js";
+commands.set(approvalRate.data.name, wrapCommand("approval-rate", executeApprovalRateCommand));
+
+// Suggestion box commands
+import * as suggest from "./commands/suggest.js";
+import * as suggestions from "./commands/suggestions.js";
+import * as suggestion from "./commands/suggestion.js";
+commands.set(suggest.data.name, wrapCommand("suggest", suggest.execute));
+commands.set(suggestions.data.name, wrapCommand("suggestions", suggestions.execute));
+commands.set(suggestion.data.name, wrapCommand("suggestion", suggestion.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work
@@ -242,8 +259,10 @@ client.once(Events.ClientReady, async () => {
       ensureManualFlagColumns,
       ensureSearchIndexes,
       ensurePanicModeColumn,
+      ensureApplicationStaleAlertColumns,
     } = await import("./db/ensure.js");
     const { ensureBotStatusSchema } = await import("./features/statusStore.js");
+    const { ensureSuggestionSchema, ensureSuggestionConfigColumns } = await import("./features/suggestions/store.js");
     ensureAvatarScanSchema();
     ensureApplicationPermaRejectColumn();
     ensureOpenModmailTable();
@@ -254,7 +273,10 @@ client.once(Events.ClientReady, async () => {
     ensureManualFlagColumns();
     ensureSearchIndexes();
     ensurePanicModeColumn();
+    ensureApplicationStaleAlertColumns();
     ensureBotStatusSchema();
+    ensureSuggestionSchema();
+    ensureSuggestionConfigColumns();
   } catch (err) {
     logger.error({ err }, "[startup] schema ensure failed");
   }
@@ -335,6 +357,7 @@ client.once(Events.ClientReady, async () => {
   // Store interval handles for coordinated shutdown
   let metricsInterval: NodeJS.Timeout | null = null;
   let healthInterval: NodeJS.Timeout | null = null;
+  let staleAppInterval: NodeJS.Timeout | null = null;
 
   // Start mod metrics periodic refresh scheduler
   // WHAT: Recalculates mod_metrics table every 15 minutes
@@ -363,6 +386,20 @@ client.once(Events.ClientReady, async () => {
     logger.warn(
       { err },
       "[startup] ops health scheduler failed to start - continuing without health monitoring"
+    );
+  }
+
+  // Start stale application alert scheduler
+  // WHAT: Checks for unclaimed applications every 30 minutes
+  // WHY: Alerts Gatekeepers when applications have been waiting 24+ hours
+  // DOCS: See src/scheduler/staleApplicationCheck.ts
+  try {
+    const { startStaleApplicationScheduler } = await import("./scheduler/staleApplicationCheck.js");
+    staleAppInterval = startStaleApplicationScheduler(client);
+  } catch (err) {
+    logger.warn(
+      { err },
+      "[startup] stale application scheduler failed to start - continuing without stale alerts"
     );
   }
 
@@ -402,6 +439,11 @@ client.once(Events.ClientReady, async () => {
         const { stopOpsHealthScheduler } = await import("./scheduler/opsHealthScheduler.js");
         stopOpsHealthScheduler(healthInterval);
         logger.debug("[shutdown] Ops health scheduler stopped");
+      }
+      if (staleAppInterval) {
+        const { stopStaleApplicationScheduler } = await import("./scheduler/staleApplicationCheck.js");
+        stopStaleApplicationScheduler(staleAppInterval);
+        logger.debug("[shutdown] Stale application scheduler stopped");
       }
 
       // 2. Flush message activity buffer before shutdown
@@ -1020,8 +1062,8 @@ client.on("interactionCreate", async (interaction) => {
             return;
           }
 
-          // Listopen pagination buttons
-          if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+$/)) {
+          // Listopen pagination buttons (with optional view mode: :all or :drafts)
+          if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+(:(all|drafts))?$/)) {
             logger.info(
               {
                 evt: "ix_route_match",
@@ -1100,6 +1142,67 @@ client.on("interactionCreate", async (interaction) => {
             succeeded = true;
             return;
           }
+
+          // Suggestion box voting buttons
+          if (customId.startsWith("suggestion:vote:")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "suggestion_vote",
+                id: customId,
+                traceId,
+              },
+              "route: suggestion vote"
+            );
+            const { handleSuggestionVote } = await import("./features/suggestions/voting.js");
+            await handleSuggestionVote(interaction);
+            succeeded = true;
+            return;
+          }
+
+          // Suggestion box list pagination buttons
+          if (customId.startsWith("suggestion:list:")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "suggestion_list",
+                id: customId,
+                traceId,
+              },
+              "route: suggestion list pagination"
+            );
+            const { handleSuggestionsListPagination } = await import("./commands/suggestions.js");
+            await handleSuggestionsListPagination(interaction);
+            succeeded = true;
+            return;
+          }
+          succeeded = true;
+          return;
+        }
+
+        // Select menu interactions
+        if (interaction.isStringSelectMenu()) {
+          const { customId } = interaction;
+
+          // Listopen drafts page select menu
+          if (customId.match(/^listopen:[a-f0-9]{8}:page:drafts$/)) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "select_menu",
+                route: "listopen_page_select",
+                id: customId,
+                traceId,
+              },
+              "route: listopen page select"
+            );
+            await listopen.handleListOpenPageSelect(interaction);
+            succeeded = true;
+            return;
+          }
+
           succeeded = true;
           return;
         }

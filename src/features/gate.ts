@@ -199,6 +199,22 @@ function getOrCreateDraft(db: BetterSqliteDatabase, guildId: string, userId: str
   }
 
   const id = randomUUID();
+  const code = shortCode(id);
+
+  // Delete any resolved application with the same shortCode to allow reuse
+  // Only deletes terminal statuses (approved, rejected, kicked, perm_rejected)
+  // Active apps (draft, submitted, needs_info) are never deleted
+  const resolvedApps = db.prepare(
+    `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+  ).all() as Array<{ id: string }>;
+
+  for (const app of resolvedApps) {
+    if (shortCode(app.id) === code) {
+      db.prepare(`DELETE FROM application WHERE id = ?`).run(app.id);
+      break; // Only one collision possible per code
+    }
+  }
+
   db.prepare(
     `
       INSERT INTO application (id, guild_id, user_id, status)

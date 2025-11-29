@@ -326,7 +326,7 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
       "avatar_scan_weight_model", "avatar_scan_weight_edge", "flags_channel_id",
       "silent_first_msg_days", "logging_channel_id", "notify_mode", "notify_role_id",
       "forum_channel_id", "notification_channel_id", "notify_cooldown_seconds",
-      "notify_max_per_hour",
+      "notify_max_per_hour", "suggestion_channel_id", "suggestion_cooldown",
     ]);
 
     const validKeys = keys.filter((k) => ALLOWED_CONFIG_COLUMNS.has(k as string));
