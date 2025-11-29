@@ -288,6 +288,56 @@ db.prepare(
 `
 ).run();
 
+// Artist rotation queue: tracks Server Artists and their position in the assignment queue
+// Used by /redeemreward and /artistqueue commands
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS artist_queue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    user_id TEXT NOT NULL,
+    position INTEGER NOT NULL,
+    added_at TEXT DEFAULT (datetime('now')),
+    assignments_count INTEGER DEFAULT 0,
+    last_assigned_at TEXT,
+    skipped INTEGER DEFAULT 0,
+    skip_reason TEXT,
+    UNIQUE(guild_id, user_id)
+  )
+`
+).run();
+
+// Index for efficient queue lookups by guild and position
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_artist_queue_guild_position ON artist_queue(guild_id, position)`
+).run();
+
+// Artist assignment log: audit trail for all art reward assignments
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS artist_assignment_log (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    artist_id TEXT NOT NULL,
+    recipient_id TEXT NOT NULL,
+    ticket_type TEXT NOT NULL,
+    ticket_role_id TEXT,
+    assigned_by TEXT NOT NULL,
+    assigned_at TEXT DEFAULT (datetime('now')),
+    channel_id TEXT,
+    override INTEGER DEFAULT 0
+  )
+`
+).run();
+
+// Indexes for assignment log queries
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_artist_assignment_log_guild ON artist_assignment_log(guild_id)`
+).run();
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_artist_assignment_log_artist ON artist_assignment_log(artist_id)`
+).run();
+
 // NOTE: Database shutdown is handled by the coordinated graceful shutdown in index.ts
 // which ensures proper ordering (stop schedulers → cleanup features → close DB)
 // Do NOT add SIGTERM/SIGINT handlers here - they would conflict with the coordinated shutdown

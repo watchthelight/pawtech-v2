@@ -894,7 +894,7 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
     roleApplied = flow.roleApplied;
     roleError = flow.roleError ?? null;
   }
-  clearClaim(resolvedApp.id);
+  // Note: Claim preserved for review card display
 
   ctx.step("close_modmail");
   const code = shortCode(resolvedApp.id);
@@ -1112,7 +1112,7 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     });
   }
 
-  clearClaim(resolvedApp.id);
+  // Note: Claim preserved for review card display
 
   ctx.step("close_modmail");
   const code = shortCode(resolvedApp.id);
@@ -1206,7 +1206,7 @@ export async function executeKick(ctx: CommandContext<ChatInputCommandInteractio
   const flow = await kickFlow(interaction.guild, app.user_id, reason.length > 0 ? reason : null);
   updateReviewActionMeta(tx.reviewActionId, flow);
 
-  clearClaim(app.id);
+  // Note: Claim preserved for review card display
 
   ctx.step("refresh_review");
   try {

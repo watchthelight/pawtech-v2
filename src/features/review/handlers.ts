@@ -321,7 +321,8 @@ async function runApproveAction(
     roleError = flow.roleError ?? null;
   }
 
-  clearClaim(app.id);
+  // Note: We intentionally preserve the claim record after resolution
+  // so the review card continues to show who handled the application
 
   // Log approve action to action_log (analytics + pretty embed to logging channel)
   // Non-blocking: .catch() prevents logging failures from affecting approval flow
@@ -493,7 +494,7 @@ async function runRejectAction(
     updateReviewActionMeta(tx.reviewActionId, { dmDelivered });
   }
 
-  clearClaim(app.id);
+  // Note: Claim preserved for review card display
 
   // Auto-close modmail on rejection
   const guild = interaction.guild;
@@ -626,7 +627,7 @@ async function runPermRejectAction(
     "[review] Permanent rejection applied"
   );
 
-  clearClaim(app.id);
+  // Note: Claim preserved for review card display
 
   const guild = interaction.guild;
   const code = shortCode(app.id);
@@ -735,7 +736,7 @@ async function runKickAction(
   const flow = await kickFlow(guild, app.user_id, reason ?? undefined);
   updateReviewActionMeta(tx.reviewActionId, flow);
 
-  clearClaim(app.id);
+  // Note: Claim preserved for review card display
 
   const code = shortCode(app.id);
 

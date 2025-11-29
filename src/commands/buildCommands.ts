@@ -40,6 +40,8 @@ import { data as approvalRateData } from "./approvalRate.js";
 import { data as suggestData } from "./suggest.js";
 import { data as suggestionsData } from "./suggestions.js";
 import { data as suggestionData } from "./suggestion.js";
+import { data as artistqueueData } from "./artistqueue.js";
+import { data as redeemrewardData } from "./redeemreward.js";
 
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
@@ -88,6 +90,10 @@ export function buildCommands() {
     suggestData.toJSON(),
     suggestionsData.toJSON(),
     suggestionData.toJSON(),
+
+    // Artist rotation commands
+    artistqueueData.toJSON(),
+    redeemrewardData.toJSON(),
 
     // Context menu commands use a different registration endpoint (ApplicationCommandType.User/Message)
     // and aren't included here. See Discord docs on context menus if you need to add them.

@@ -244,6 +244,12 @@ commands.set(suggest.data.name, wrapCommand("suggest", suggest.execute));
 commands.set(suggestions.data.name, wrapCommand("suggestions", suggestions.execute));
 commands.set(suggestion.data.name, wrapCommand("suggestion", suggestion.execute));
 
+// Artist rotation commands
+import * as artistqueue from "./commands/artistqueue.js";
+import * as redeemreward from "./commands/redeemreward.js";
+commands.set(artistqueue.data.name, wrapCommand("artistqueue", artistqueue.execute));
+commands.set(redeemreward.data.name, wrapCommand("redeemreward", redeemreward.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work
@@ -708,9 +714,13 @@ client.on("threadDelete", wrapEvent("threadDelete", async (thread) => {
 // WHY: Automatically grant token/ticket rewards when users level up
 // DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildMemberUpdate
 import { handleLevelRoleAdded } from "./features/levelRewards.js";
+import { handleArtistRoleChange } from "./features/artistRotation/index.js";
 
 client.on("guildMemberUpdate", wrapEvent("guildMemberUpdate", async (oldMember, newMember) => {
-  // Detect newly added roles
+  // Server Artist role detection (handles both add and remove)
+  await handleArtistRoleChange(oldMember, newMember);
+
+  // Detect newly added roles for level rewards
   const addedRoles = newMember.roles.cache.filter(
     (role) => !oldMember.roles.cache.has(role.id)
   );
@@ -1175,6 +1185,24 @@ client.on("interactionCreate", async (interaction) => {
             );
             const { handleSuggestionsListPagination } = await import("./commands/suggestions.js");
             await handleSuggestionsListPagination(interaction);
+            succeeded = true;
+            return;
+          }
+
+          // Art reward redemption buttons
+          if (customId.startsWith("redeemreward:")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "redeemreward",
+                id: customId,
+                traceId,
+              },
+              "route: redeem reward"
+            );
+            const { handleRedeemRewardButton } = await import("./features/artistRotation/index.js");
+            await handleRedeemRewardButton(interaction);
             succeeded = true;
             return;
           }

@@ -128,8 +128,8 @@ describe("postErrorCard", () => {
     expect(reply).toHaveBeenCalledTimes(1);
     const payload = reply.mock.calls[0][0];
 
-    // Error cards are ephemeral (flags: 64)—only the user who triggered the error sees it.
-    expect(payload).toMatchObject({ flags: 64 });
+    // Error cards are public (flags: 0) so everyone can see errors.
+    expect(payload).toMatchObject({ flags: 0 });
 
     const embed = payload.embeds?.[0];
     expect(embed).toBeDefined();

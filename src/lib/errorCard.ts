@@ -160,7 +160,7 @@ export async function postErrorCard(
   try {
     // Ephemeral so only the actor sees it; avoids channel spam and doesn't
     // expose internal details (trace IDs, SQL) to other users.
-    await replyOrEdit(interaction, { embeds: [embed], flags: MessageFlags.Ephemeral });
+    await replyOrEdit(interaction, { embeds: [embed], flags: 0 });
   } catch (err) {
     const code = (err as { code?: unknown })?.code;
     // 10062 = interaction already expired. This is expected in race conditions
