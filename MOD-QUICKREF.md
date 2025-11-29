@@ -1,115 +1,84 @@
 # Pawtech Handbook
 
-## Application Review
+## Reviewing Applications
 
-**`/accept`** — Approve an application
-- `app:A1B2C3` — By short code
-- `user:@Username` — By mention/picker
-- `uid:123456789` — By user ID (if they left the server)
+When a new application comes in, click the **Claim** button first so other mods know you're handling it.
 
-**`/reject`** — Reject an application
-- Same options as accept, plus:
-- `reason:` — Required rejection reason (max 500 chars)
-- `perm:true` — Permanently block re-application
+To approve someone, use `/accept` with one of these options:
+- `app:A1B2C3` — the short code shown on the application
+- `user:@Username` — mention or pick them from the list
+- `uid:123456789` — their Discord ID if they already left
 
-**`/kick`** — Kick an applicant from the server
-- Same options as accept/reject
-- `reason:` — Required kick reason
+To reject, use `/reject` with the same options plus a required `reason:`. If someone should never be allowed back, add `perm:true` to permanently block them from re-applying.
 
-**`/unclaim`** — Release your claim on an app so others can review it
-- Same identifier options (app/user/uid)
+If you need to kick an applicant, `/kick` works the same way with a required `reason:`.
 
-**`/listopen`** — View pending applications
-- `scope:mine` — Your claimed apps (default)
-- `scope:all` — All open applications (claimed + unclaimed)
-- `scope:drafts` — Incomplete/in-progress applications
+Changed your mind or need to step away? Use `/unclaim` to release the application so someone else can pick it up.
 
-**`/search user:@Username`** — Find a user's full application history including past decisions and notes
+To see what's waiting for review, run `/listopen`. By default it shows your claimed apps, but you can use `scope:all` to see everything or `scope:drafts` for incomplete applications.
 
-**`/unblock target:@Username`** — Remove permanent rejection so user can re-apply
-- Also accepts `user_id:` for users who left
+If you need to look up someone's history, `/search user:@Username` pulls up all their past applications and decisions.
+
+Made a mistake with a permanent rejection? `/unblock target:@Username` lets them apply again.
 
 ---
 
-## Mod Stats & Leaderboards
+## Checking Your Stats
 
-**`/modstats leaderboard`** — Rankings by review count
-- `days:7` — Time period (default: 30)
-- Shows approvals, rejections, and total decisions
+Curious how you're doing? Run `/modstats user moderator:@YourName` to see your approval rate, response times, and activity breakdown. You can adjust the time range with `days:30` or whatever period you want.
 
-**`/modstats user moderator:@You`** — Your detailed personal stats
-- Response times, approval rate, activity breakdown
-- `days:30` — Customize time range
+To see how everyone's doing, `/modstats leaderboard` shows rankings by review count. Great for friendly competition or seeing who's been most active.
 
-**`/approval-rate`** — Server-wide approval vs rejection rates
-- `days:7` — See trends over time
-
-**`/analytics`** — Visual activity charts
-- `bucket:hourly` / `daily` / `weekly` — Change grouping
-- Great for spotting peak review times
+For server-wide trends, `/approval-rate` shows the overall approve vs reject breakdown, and `/analytics` gives you visual charts of activity patterns — helpful for spotting when reviews tend to pile up.
 
 ---
 
 ## Server Activity
 
-**`/activity`** — Server message activity heatmap
-- `weeks:4` — Show up to 8 weeks of history
-- Visual breakdown by day and hour
-- Identifies when the server is most active
+Want to know when the server is busiest? `/activity` shows a heatmap of message activity by day and hour. You can look back up to 8 weeks with `weeks:8`.
 
-**`/health`** — Bot uptime, latency, and system status
+To check if the bot is running smoothly, `/health` shows uptime and response latency.
 
 ---
 
 ## Movie Night
 
-**`/movie start channel:#movie-vc`** — Begin tracking voice attendance
+When a movie event starts, use `/movie start channel:#movie-vc` to begin tracking who's in the voice channel.
 
-**`/movie end`** — Finalize and assign tier roles to qualified attendees
+When the movie is over, make sure you end attendance tracking with `/movie end`. This finalizes everyone's time and automatically assigns tier roles to anyone who stayed 30+ minutes.
 
-**`/movie attendance`** — View all attendees from the latest event
-- `user:@Username` — Check someone's movie history and tier progress
+To see who attended or check someone's movie history, use `/movie attendance`. Add `user:@Username` to look up a specific person's progress toward the next tier.
 
-**Tier Progression** (must stay 30+ min to qualify):
-- **Red Carpet Guest** — 1+ movies
-- **Popcorn Club** — 5+ movies
-- **Director's Cut** — 10+ movies
-- **Cinematic Royalty** — 20+ movies
-
----
-
-## Suggestions
-
-**`/suggestions`** — Browse community suggestions
-- `status:open` — Filter: open, approved, denied, implemented, all
-
-**`/suggestion approve id:42`** — Approve with optional response
-**`/suggestion deny id:42 reason:Out of scope`** — Deny with reason
-**`/suggestion implement id:42`** — Mark as shipped
+**Tier roles** (you need 30+ minutes per movie to count):
+- **Red Carpet Guest** — attended 1+ movie
+- **Popcorn Club** — attended 5+ movies
+- **Director's Cut** — attended 10+ movies
+- **Cinematic Royalty** — attended 20+ movies
 
 ---
 
-## Utility
+## Managing Suggestions
 
-**`/send message:Your text`** — Post as the bot
-- `embed:true` — Rich embed format
-- `reply_to:123456789` — Reply to specific message
-- `attachment:` — Include image or file
+Community members can submit feature ideas, and you can browse them with `/suggestions`. Filter by status using `status:open`, `status:approved`, etc.
 
-**`/flag user:@Suspicious`** — Flag a user for staff attention
-- `reason:` — Add context for other mods
-
----
-
-## Quick Tips
-
-- **One identifier only**: For accept/reject/kick/unclaim, use exactly ONE of `app`, `user`, or `uid`
-- **Short codes**: The 6-character code on app embeds (e.g., `A1B2C3`)
-- **Claim first**: Always click Claim before reviewing to avoid duplicate work
-- **User left?**: Use `uid:` with their Discord ID — works even after they leave
-- **Perm reject**: Use sparingly — permanently blocks someone from ever re-applying
-- **Check your stats**: Run `/modstats user moderator:@YourName` to see your activity
+When reviewing suggestions:
+- `/suggestion approve id:42` — marks it approved (add `response:` to send feedback)
+- `/suggestion deny id:42 reason:Outside scope` — denies with an explanation
+- `/suggestion implement id:42` — marks it as shipped
 
 ---
 
-*Full docs: BOT-HANDBOOK.md • Questions? Ask leadership*
+## Utility Commands
+
+Need to post something as the bot? `/send message:Your text here` does the trick. Add `embed:true` for a nicer format, or `reply_to:` with a message ID to reply to something specific.
+
+If someone seems suspicious, `/flag user:@Username reason:Alt account` flags them for other staff to see.
+
+---
+
+## Tips
+
+- Only use ONE identifier per command (app code, user mention, OR user ID — not multiple)
+- Always claim before reviewing to avoid stepping on someone else's work
+- The `perm:true` option is permanent — use it sparingly
+- User left the server? Their Discord ID still works with the `uid:` option
