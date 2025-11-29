@@ -6,16 +6,113 @@ Everything you need to know about the bot — what it does, who can use it, and 
 
 ## Table of Contents
 
-1. [Gate System (Application Review)](#gate-system-application-review)
-2. [Moderator Tools](#moderator-tools)
-3. [Suggestion System](#suggestion-system)
-4. [Artist Rotation](#artist-rotation)
-5. [Movie Night](#movie-night)
-6. [Role Automation](#role-automation)
-7. [Configuration](#configuration)
-8. [Utility & Admin](#utility--admin)
-9. [Permission Reference](#permission-reference)
-10. [Troubleshooting](#troubleshooting)
+### 1. [Gate System (Application Review)](#gate-system-application-review)
+- [How Applications Work](#how-applications-work)
+- [What the Claim System Does](#what-the-claim-system-does)
+- [/gate](#gate) — Setup and configure the application system
+- [/accept](#accept) — Approve an application
+- [/reject](#reject) — Reject an application
+- [/kick](#kick) — Kick an applicant
+- [/unclaim](#unclaim) — Release a claimed application
+- [/listopen](#listopen) — View pending applications
+- [/search](#search) — Look up application history
+- [/unblock](#unblock) — Remove permanent rejection
+
+### 2. [Moderator Tools](#moderator-tools)
+- [How the Stats System Works](#how-the-stats-system-works)
+- [Understanding Response Times](#understanding-response-times)
+- [/modstats](#modstats) — View moderator analytics and leaderboards
+- [Anomaly Detection: What It Means](#anomaly-detection-what-it-means)
+- [/modhistory](#modhistory) — Detailed mod action history (leadership)
+- [/analytics](#analytics) — Visual activity charts
+- [/analytics-export](#analytics-export) — Export data as CSV
+- [/flag](#flag) — Flag suspicious users
+- [/approval-rate](#approval-rate) — Server-wide approval stats
+
+### 3. [Suggestion System](#suggestion-system)
+- [How It Works](#how-it-works)
+- [How Voting Works](#how-voting-works)
+- [Cooldown System](#cooldown-system)
+- [/suggest](#suggest) — Submit a feature idea
+- [/suggestions](#suggestions) — Browse suggestions
+- [/suggestion](#suggestion) — Manage suggestions (staff)
+
+### 4. [Artist Rotation](#artist-rotation)
+- [How the Queue Works](#how-the-queue-works)
+- [How Skipping Works](#how-skipping-works)
+- [Sync System](#sync-system)
+- [/artistqueue](#artistqueue) — Manage the artist queue
+- [/redeemreward](#redeemreward) — Assign art rewards
+
+### 5. [Movie Night](#movie-night)
+- [How It Works](#how-it-works-1)
+- [How Time Tracking Works](#how-time-tracking-works)
+- [Tier Roles](#tier-roles)
+- [/movie](#movie) — Movie night attendance commands
+
+### 6. [Role Automation](#role-automation)
+- [How Role Automation Works](#how-role-automation-works)
+- [How It Integrates with Amaribot](#how-it-integrates-with-amaribot)
+- [Level Tiers vs Level Rewards](#level-tiers-vs-level-rewards)
+- [/roles](#roles) — Configure role mappings
+- [/panic](#panic) — Emergency role automation shutoff
+
+### 7. [Configuration](#configuration)
+- [How Configuration Works](#how-configuration-works)
+- [/config](#config) — Server-wide settings
+- [Understanding Each Setting](#understanding-each-setting)
+  - [Logging Channel](#logging-channel)
+  - [Flags Channel and Threshold](#flags-channel-and-threshold)
+  - [Dad Mode](#dad-mode)
+  - [Ping Dev on App](#ping-dev-on-app)
+  - [Suggestion Channel and Cooldown](#suggestion-channel-and-cooldown)
+  - [Mod Roles](#mod-roles)
+  - [Review Roles Mode](#review-roles-mode)
+- [/review-set-notify-config](#review-set-notify-config) — Forum notifications
+- [/review-get-notify-config](#review-get-notify-config) — View notification settings
+- [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
+
+### 8. [Utility & Admin](#utility--admin)
+- [/update](#update) — Bot presence and profile
+  - [Activity Types](#activity-types)
+  - [Banner Updates](#banner-updates)
+  - [Avatar Updates](#avatar-updates)
+- [/send](#send) — Post messages as the bot
+  - [Understanding the Silent Option](#understanding-the-silent-option)
+- [/purge](#purge) — Bulk delete messages
+  - [How Purge Works](#how-purge-works)
+  - [Important Limitations](#important-limitations)
+- [/health](#health) — Bot status check
+- [/activity](#activity) — Server activity heatmap
+  - [What the Heatmap Shows](#what-the-heatmap-shows)
+- [/backfill](#backfill) — Rebuild activity data
+  - [When to Use Backfill](#when-to-use-backfill)
+  - [How It Works](#how-it-works-2)
+- [/poke](#poke) — Multi-channel ping (owner)
+- [/database](#database) — Database management
+  - [Database Check](#database-check)
+  - [Database Recover](#database-recover)
+
+### 9. [Permission Reference](#permission-reference)
+- [What counts as "Staff"?](#what-counts-as-staff)
+
+### 10. [Troubleshooting](#troubleshooting)
+- [Quick Troubleshooting Decision Tree](#quick-troubleshooting-decision-tree)
+- [Common Problems and Solutions](#common-problems-and-solutions)
+  - [Buttons not working](#the-buttons-on-applications-arent-working)
+  - [User left before review](#someone-left-before-i-could-acceptreject-them)
+  - [Accidental permanent rejection](#i-accidentally-permanently-rejected-someone)
+  - [Role automation issues](#role-automation-is-doing-something-weird)
+  - [Bot not responding](#the-bot-isnt-responding-at-all)
+  - [Config changes not taking effect](#config-changes-arent-taking-effect)
+  - [Logging not working](#logging-isnt-working)
+  - [Stats or history wrong](#application-stats-or-history-are-wrong)
+- [When to Ask for Help](#when-to-ask-for-help)
+- [Information to Include When Asking for Help](#information-to-include-when-asking-for-help)
+
+### 11. [Quick Reference](#quick-reference)
+- [Commands you'll use all the time](#commands-youll-use-all-the-time)
+- [Emergency commands](#emergency-commands)
 
 ---
 
@@ -2186,4 +2283,4 @@ The more details you provide, the faster support can help you.
 
 ---
 
-*Last updated: November 2025*
+*Last revised: November 29, 2025*
