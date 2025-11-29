@@ -778,12 +778,15 @@ async function executeWelcomeRole(ctx: CommandContext<ChatInputCommandInteractio
  */
 export const acceptData = new SlashCommandBuilder()
   .setName("accept")
-  .setDescription("Approve an application by short code or Discord user ID")
+  .setDescription("Approve an application by short code, user mention, or user ID")
   .addStringOption((option) =>
     option.setName("app").setDescription("Application short code (e.g., A1B2C3)").setRequired(false)
   )
+  .addUserOption((option) =>
+    option.setName("user").setDescription("User to accept (@mention or select)").setRequired(false)
+  )
   .addStringOption((option) =>
-    option.setName("uid").setDescription("Discord User ID to accept").setRequired(false)
+    option.setName("uid").setDescription("Discord User ID (if user not in server)").setRequired(false)
   )
   .setDMPermission(false);
 
@@ -806,18 +809,20 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
   await ensureDeferred(interaction);
 
   const codeRaw = interaction.options.getString("app", false);
+  const userOption = interaction.options.getUser("user", false);
   const uidRaw = interaction.options.getString("uid", false);
 
-  // Validate: exactly one must be provided
-  if (!codeRaw && !uidRaw) {
+  // Count how many options were provided
+  const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;
+  if (providedCount === 0) {
     await replyOrEdit(interaction, {
-      content: "Please provide either `app` (short code) or `uid` (Discord User ID).",
+      content: "Please provide one of: `app` (short code), `user` (@mention), or `uid` (user ID).",
     });
     return;
   }
-  if (codeRaw && uidRaw) {
+  if (providedCount > 1) {
     await replyOrEdit(interaction, {
-      content: "Please provide only one: either `app` or `uid`, not both.",
+      content: "Please provide only one option: `app`, `user`, or `uid`.",
     });
     return;
   }
@@ -829,6 +834,15 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
     app = findAppByShortCode(interaction.guildId, code);
     if (!app) {
       await replyOrEdit(interaction, { content: `No application with code ${code}.` });
+      return;
+    }
+  } else if (userOption) {
+    // User mention/picker - get their ID
+    app = findPendingAppByUserId(interaction.guildId, userOption.id);
+    if (!app) {
+      await replyOrEdit(interaction, {
+        content: `No pending application found for ${userOption}.`,
+      });
       return;
     }
   } else if (uidRaw) {
@@ -977,7 +991,7 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
 
 export const rejectData = new SlashCommandBuilder()
   .setName("reject")
-  .setDescription("Reject an application by short code or Discord user ID")
+  .setDescription("Reject an application by short code, user mention, or user ID")
   .addStringOption((option) =>
     option
       .setName("reason")
@@ -987,8 +1001,11 @@ export const rejectData = new SlashCommandBuilder()
   .addStringOption((option) =>
     option.setName("app").setDescription("Application short code (e.g., A1B2C3)").setRequired(false)
   )
+  .addUserOption((option) =>
+    option.setName("user").setDescription("User to reject (@mention or select)").setRequired(false)
+  )
   .addStringOption((option) =>
-    option.setName("uid").setDescription("Discord User ID to reject").setRequired(false)
+    option.setName("uid").setDescription("Discord User ID (if user not in server)").setRequired(false)
   )
   .addBooleanOption((option) =>
     option.setName("perm").setDescription("Permanently reject (can't re-apply)").setRequired(false)
@@ -1013,20 +1030,22 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
   await ensureDeferred(interaction);
 
   const codeRaw = interaction.options.getString("app", false);
+  const userOption = interaction.options.getUser("user", false);
   const uidRaw = interaction.options.getString("uid", false);
   const reasonRaw = interaction.options.getString("reason", true);
   const permanent = interaction.options.getBoolean("perm", false) ?? false;
 
-  // Validate: exactly one of app or uid must be provided
-  if (!codeRaw && !uidRaw) {
+  // Count how many identifier options were provided
+  const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;
+  if (providedCount === 0) {
     await replyOrEdit(interaction, {
-      content: "Please provide either `app` (short code) or `uid` (Discord User ID).",
+      content: "Please provide one of: `app` (short code), `user` (@mention), or `uid` (user ID).",
     });
     return;
   }
-  if (codeRaw && uidRaw) {
+  if (providedCount > 1) {
     await replyOrEdit(interaction, {
-      content: "Please provide only one: either `app` or `uid`, not both.",
+      content: "Please provide only one option: `app`, `user`, or `uid`.",
     });
     return;
   }
@@ -1044,6 +1063,15 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     app = findAppByShortCode(interaction.guildId, code);
     if (!app) {
       await replyOrEdit(interaction, { content: `No application with code ${code}.` });
+      return;
+    }
+  } else if (userOption) {
+    // User mention/picker - get their ID
+    app = findPendingAppByUserId(interaction.guildId, userOption.id);
+    if (!app) {
+      await replyOrEdit(interaction, {
+        content: `No pending application found for ${userOption}.`,
+      });
       return;
     }
   } else if (uidRaw) {
@@ -1144,12 +1172,18 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
 
 export const kickData = new SlashCommandBuilder()
   .setName("kick")
-  .setDescription("Kick an applicant by short code")
-  .addStringOption((option) =>
-    option.setName("app").setDescription("Application short code (e.g., A1B2C3)").setRequired(true)
-  )
+  .setDescription("Kick an applicant by short code, user mention, or user ID")
   .addStringOption((option) =>
     option.setName("reason").setDescription("Reason for kick").setRequired(true)
+  )
+  .addStringOption((option) =>
+    option.setName("app").setDescription("Application short code (e.g., A1B2C3)").setRequired(false)
+  )
+  .addUserOption((option) =>
+    option.setName("user").setDescription("User to kick (@mention or select)").setRequired(false)
+  )
+  .addStringOption((option) =>
+    option.setName("uid").setDescription("Discord User ID (if user not in server)").setRequired(false)
   )
   .setDMPermission(false);
 
@@ -1169,13 +1203,60 @@ export async function executeKick(ctx: CommandContext<ChatInputCommandInteractio
   ctx.step("defer");
   await ensureDeferred(interaction);
 
-  const code = interaction.options.getString("app", true).trim().toUpperCase();
+  const codeRaw = interaction.options.getString("app", false);
+  const userOption = interaction.options.getUser("user", false);
+  const uidRaw = interaction.options.getString("uid", false);
   const reason = interaction.options.getString("reason", true).trim();
 
+  // Count how many identifier options were provided
+  const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;
+  if (providedCount === 0) {
+    await replyOrEdit(interaction, {
+      content: "Please provide one of: `app` (short code), `user` (@mention), or `uid` (user ID).",
+    });
+    return;
+  }
+  if (providedCount > 1) {
+    await replyOrEdit(interaction, {
+      content: "Please provide only one option: `app`, `user`, or `uid`.",
+    });
+    return;
+  }
+
   ctx.step("lookup_app");
-  const app = findAppByShortCode(interaction.guildId, code);
+  let app: ApplicationRow | null = null;
+  if (codeRaw) {
+    const code = codeRaw.trim().toUpperCase();
+    app = findAppByShortCode(interaction.guildId, code);
+    if (!app) {
+      await replyOrEdit(interaction, { content: `No application with code ${code}.` });
+      return;
+    }
+  } else if (userOption) {
+    app = findPendingAppByUserId(interaction.guildId, userOption.id);
+    if (!app) {
+      await replyOrEdit(interaction, {
+        content: `No pending application found for ${userOption}.`,
+      });
+      return;
+    }
+  } else if (uidRaw) {
+    const uid = uidRaw.trim();
+    if (!/^[0-9]{5,20}$/.test(uid)) {
+      await replyOrEdit(interaction, { content: "Invalid user ID. Must be 5-20 digits." });
+      return;
+    }
+    app = findPendingAppByUserId(interaction.guildId, uid);
+    if (!app) {
+      await replyOrEdit(interaction, {
+        content: `No pending application found for user ID ${uid}.`,
+      });
+      return;
+    }
+  }
+
   if (!app) {
-    await replyOrEdit(interaction, { content: `No application with code ${code}.` });
+    await replyOrEdit(interaction, { content: "Could not find application." });
     return;
   }
 
@@ -1236,7 +1317,13 @@ export const unclaimData = new SlashCommandBuilder()
   .setName("unclaim")
   .setDescription("Release a claim on an application")
   .addStringOption((option) =>
-    option.setName("app").setDescription("Application short code (e.g., A1B2C3)").setRequired(true)
+    option.setName("app").setDescription("Application short code (e.g., A1B2C3)").setRequired(false)
+  )
+  .addUserOption((option) =>
+    option.setName("user").setDescription("User whose app to unclaim (@mention or select)").setRequired(false)
+  )
+  .addStringOption((option) =>
+    option.setName("uid").setDescription("Discord User ID (if user not in server)").setRequired(false)
   )
   .setDMPermission(false);
 
@@ -1256,12 +1343,59 @@ export async function executeUnclaim(ctx: CommandContext<ChatInputCommandInterac
   ctx.step("defer");
   await ensureDeferred(interaction);
 
-  const code = interaction.options.getString("app", true).trim().toUpperCase();
+  const codeRaw = interaction.options.getString("app", false);
+  const userOption = interaction.options.getUser("user", false);
+  const uidRaw = interaction.options.getString("uid", false);
+
+  // Count how many identifier options were provided
+  const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;
+  if (providedCount === 0) {
+    await replyOrEdit(interaction, {
+      content: "Please provide one of: `app` (short code), `user` (@mention), or `uid` (user ID).",
+    });
+    return;
+  }
+  if (providedCount > 1) {
+    await replyOrEdit(interaction, {
+      content: "Please provide only one option: `app`, `user`, or `uid`.",
+    });
+    return;
+  }
 
   ctx.step("lookup_app");
-  const app = findAppByShortCode(interaction.guildId, code);
+  let app: ApplicationRow | null = null;
+  if (codeRaw) {
+    const code = codeRaw.trim().toUpperCase();
+    app = findAppByShortCode(interaction.guildId, code);
+    if (!app) {
+      await replyOrEdit(interaction, { content: `No application with code ${code}.` });
+      return;
+    }
+  } else if (userOption) {
+    app = findPendingAppByUserId(interaction.guildId, userOption.id);
+    if (!app) {
+      await replyOrEdit(interaction, {
+        content: `No pending application found for ${userOption}.`,
+      });
+      return;
+    }
+  } else if (uidRaw) {
+    const uid = uidRaw.trim();
+    if (!/^[0-9]{5,20}$/.test(uid)) {
+      await replyOrEdit(interaction, { content: "Invalid user ID. Must be 5-20 digits." });
+      return;
+    }
+    app = findPendingAppByUserId(interaction.guildId, uid);
+    if (!app) {
+      await replyOrEdit(interaction, {
+        content: `No pending application found for user ID ${uid}.`,
+      });
+      return;
+    }
+  }
+
   if (!app) {
-    await replyOrEdit(interaction, { content: `No application with code ${code}.` });
+    await replyOrEdit(interaction, { content: "Could not find application." });
     return;
   }
 
