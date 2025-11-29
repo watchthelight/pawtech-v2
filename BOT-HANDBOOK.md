@@ -7,112 +7,121 @@ Everything you need to know about the bot — what it does, who can use it, and 
 ## Table of Contents
 
 ### 1. [Gate System (Application Review)](#gate-system-application-review)
-- [How Applications Work](#how-applications-work)
-- [What the Claim System Does](#what-the-claim-system-does)
-- [/gate](#gate) — Setup and configure the application system
-- [/accept](#accept) — Approve an application
-- [/reject](#reject) — Reject an application
-- [/kick](#kick) — Kick an applicant
-- [/unclaim](#unclaim) — Release a claimed application
-- [/listopen](#listopen) — View pending applications
-- [/search](#search) — Look up application history
-- [/unblock](#unblock) — Remove permanent rejection
+- 1.1 [How Applications Work](#how-applications-work)
+- 1.2 [What the Claim System Does](#what-the-claim-system-does)
+- 1.3 [/gate](#gate) — Setup and configure the application system
+- 1.4 [/accept](#accept) — Approve an application
+- 1.5 [/reject](#reject) — Reject an application
+- 1.6 [/kick](#kick) — Kick an applicant
+- 1.7 [/unclaim](#unclaim) — Release a claimed application
+- 1.8 [/listopen](#listopen) — View pending applications
+- 1.9 [/search](#search) — Look up application history
+- 1.10 [/unblock](#unblock) — Remove permanent rejection
 
 ### 2. [Moderator Tools](#moderator-tools)
-- [How the Stats System Works](#how-the-stats-system-works)
-- [Understanding Response Times](#understanding-response-times)
-- [/modstats](#modstats) — View moderator analytics and leaderboards
-- [Anomaly Detection: What It Means](#anomaly-detection-what-it-means)
-- [/modhistory](#modhistory) — Detailed mod action history (leadership)
-- [/analytics](#analytics) — Visual activity charts
-- [/analytics-export](#analytics-export) — Export data as CSV
-- [/flag](#flag) — Flag suspicious users
-- [/approval-rate](#approval-rate) — Server-wide approval stats
+- 2.1 [How the Stats System Works](#how-the-stats-system-works)
+- 2.2 [Understanding Response Times](#understanding-response-times)
+- 2.3 [/modstats](#modstats) — View moderator analytics and leaderboards
+- 2.4 [Anomaly Detection: What It Means](#anomaly-detection-what-it-means)
+- 2.5 [/modhistory](#modhistory) — Detailed mod action history (leadership)
+- 2.6 [/analytics](#analytics) — Visual activity charts
+- 2.7 [/analytics-export](#analytics-export) — Export data as CSV
+- 2.8 [/flag](#flag) — Flag suspicious users
+- 2.9 [/approval-rate](#approval-rate) — Server-wide approval stats
+- 2.10 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
+  - 2.10.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
+  - 2.10.2 [What Gets Reset](#what-gets-reset)
+  - 2.10.3 [How the Epoch System Works](#how-the-epoch-system-works)
+  - 2.10.4 [Security Measures](#security-measures)
+- 2.11 [/sample](#sample) — Preview UI components for training
+  - 2.11.1 [/sample reviewcard](#sample-reviewcard)
+  - 2.11.2 [The Different Statuses](#the-different-statuses)
+  - 2.11.3 [Using Real Users in Samples](#using-real-users-in-samples)
 
 ### 3. [Suggestion System](#suggestion-system)
-- [How It Works](#how-it-works)
-- [How Voting Works](#how-voting-works)
-- [Cooldown System](#cooldown-system)
-- [/suggest](#suggest) — Submit a feature idea
-- [/suggestions](#suggestions) — Browse suggestions
-- [/suggestion](#suggestion) — Manage suggestions (staff)
+- 3.1 [How It Works](#how-it-works)
+- 3.2 [How Voting Works](#how-voting-works)
+- 3.3 [Cooldown System](#cooldown-system)
+- 3.4 [/suggest](#suggest) — Submit a feature idea
+- 3.5 [/suggestions](#suggestions) — Browse suggestions
+- 3.6 [/suggestion](#suggestion) — Manage suggestions (staff)
 
 ### 4. [Artist Rotation](#artist-rotation)
-- [How the Queue Works](#how-the-queue-works)
-- [How Skipping Works](#how-skipping-works)
-- [Sync System](#sync-system)
-- [/artistqueue](#artistqueue) — Manage the artist queue
-- [/redeemreward](#redeemreward) — Assign art rewards
+- 4.1 [How the Queue Works](#how-the-queue-works)
+- 4.2 [How Skipping Works](#how-skipping-works)
+- 4.3 [Sync System](#sync-system)
+- 4.4 [/artistqueue](#artistqueue) — Manage the artist queue
+- 4.5 [/redeemreward](#redeemreward) — Assign art rewards
 
 ### 5. [Movie Night](#movie-night)
-- [How It Works](#how-it-works-1)
-- [How Time Tracking Works](#how-time-tracking-works)
-- [Tier Roles](#tier-roles)
-- [/movie](#movie) — Movie night attendance commands
+- 5.1 [How It Works](#how-it-works-1)
+- 5.2 [How Time Tracking Works](#how-time-tracking-works)
+- 5.3 [Tier Roles](#tier-roles)
+- 5.4 [/movie](#movie) — Movie night attendance commands
 
 ### 6. [Role Automation](#role-automation)
-- [How Role Automation Works](#how-role-automation-works)
-- [How It Integrates with Amaribot](#how-it-integrates-with-amaribot)
-- [Level Tiers vs Level Rewards](#level-tiers-vs-level-rewards)
-- [/roles](#roles) — Configure role mappings
-- [/panic](#panic) — Emergency role automation shutoff
+- 6.1 [How Role Automation Works](#how-role-automation-works)
+- 6.2 [How It Integrates with Amaribot](#how-it-integrates-with-amaribot)
+- 6.3 [Level Tiers vs Level Rewards](#level-tiers-vs-level-rewards)
+- 6.4 [/roles](#roles) — Configure role mappings
+- 6.5 [/panic](#panic) — Emergency role automation shutoff
 
 ### 7. [Configuration](#configuration)
-- [How Configuration Works](#how-configuration-works)
-- [/config](#config) — Server-wide settings
-- [Understanding Each Setting](#understanding-each-setting)
-  - [Logging Channel](#logging-channel)
-  - [Flags Channel and Threshold](#flags-channel-and-threshold)
-  - [Dad Mode](#dad-mode)
-  - [Ping Dev on App](#ping-dev-on-app)
-  - [Suggestion Channel and Cooldown](#suggestion-channel-and-cooldown)
-  - [Mod Roles](#mod-roles)
-  - [Review Roles Mode](#review-roles-mode)
-- [/review-set-notify-config](#review-set-notify-config) — Forum notifications
-- [/review-get-notify-config](#review-get-notify-config) — View notification settings
-- [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
+- 7.1 [How Configuration Works](#how-configuration-works)
+- 7.2 [/config](#config) — Server-wide settings
+- 7.3 [Understanding Each Setting](#understanding-each-setting)
+  - 7.3.1 [Logging Channel](#logging-channel)
+  - 7.3.2 [Flags Channel and Threshold](#flags-channel-and-threshold)
+  - 7.3.3 [Dad Mode](#dad-mode)
+  - 7.3.4 [Ping Dev on App](#ping-dev-on-app)
+  - 7.3.5 [Suggestion Channel and Cooldown](#suggestion-channel-and-cooldown)
+  - 7.3.6 [Mod Roles](#mod-roles)
+  - 7.3.7 [Review Roles Mode](#review-roles-mode)
+- 7.4 [/review-set-notify-config](#review-set-notify-config) — Forum notifications
+- 7.5 [/review-get-notify-config](#review-get-notify-config) — View notification settings
+- 7.6 [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
 
 ### 8. [Utility & Admin](#utility--admin)
-- [/update](#update) — Bot presence and profile
-  - [Activity Types](#activity-types)
-  - [Banner Updates](#banner-updates)
-  - [Avatar Updates](#avatar-updates)
-- [/send](#send) — Post messages as the bot
-  - [Understanding the Silent Option](#understanding-the-silent-option)
-- [/purge](#purge) — Bulk delete messages
-  - [How Purge Works](#how-purge-works)
-  - [Important Limitations](#important-limitations)
-- [/health](#health) — Bot status check
-- [/activity](#activity) — Server activity heatmap
-  - [What the Heatmap Shows](#what-the-heatmap-shows)
-- [/backfill](#backfill) — Rebuild activity data
-  - [When to Use Backfill](#when-to-use-backfill)
-  - [How It Works](#how-it-works-2)
-- [/poke](#poke) — Multi-channel ping (owner)
-- [/database](#database) — Database management
-  - [Database Check](#database-check)
-  - [Database Recover](#database-recover)
+- 8.1 [/update](#update) — Bot presence and profile
+  - 8.1.1 [Activity Types](#activity-types)
+  - 8.1.2 [Banner Updates](#banner-updates)
+  - 8.1.3 [Avatar Updates](#avatar-updates)
+- 8.2 [/send](#send) — Post messages as the bot
+  - 8.2.1 [Understanding the Silent Option](#understanding-the-silent-option)
+- 8.3 [/purge](#purge) — Bulk delete messages
+  - 8.3.1 [How Purge Works](#how-purge-works)
+  - 8.3.2 [Important Limitations](#important-limitations)
+- 8.4 [/health](#health) — Bot status check
+- 8.5 [/activity](#activity) — Server activity heatmap
+  - 8.5.1 [What the Heatmap Shows](#what-the-heatmap-shows)
+- 8.6 [/backfill](#backfill) — Rebuild activity data
+  - 8.6.1 [When to Use Backfill](#when-to-use-backfill)
+  - 8.6.2 [How It Works](#how-it-works-2)
+- 8.7 [/poke](#poke) — Multi-channel ping (owner)
+- 8.8 [/database](#database) — Database management
+  - 8.8.1 [Database Check](#database-check)
+  - 8.8.2 [Database Recover](#database-recover)
 
 ### 9. [Permission Reference](#permission-reference)
-- [What counts as "Staff"?](#what-counts-as-staff)
+- 9.1 [What counts as "Staff"?](#what-counts-as-staff)
 
 ### 10. [Troubleshooting](#troubleshooting)
-- [Quick Troubleshooting Decision Tree](#quick-troubleshooting-decision-tree)
-- [Common Problems and Solutions](#common-problems-and-solutions)
-  - [Buttons not working](#the-buttons-on-applications-arent-working)
-  - [User left before review](#someone-left-before-i-could-acceptreject-them)
-  - [Accidental permanent rejection](#i-accidentally-permanently-rejected-someone)
-  - [Role automation issues](#role-automation-is-doing-something-weird)
-  - [Bot not responding](#the-bot-isnt-responding-at-all)
-  - [Config changes not taking effect](#config-changes-arent-taking-effect)
-  - [Logging not working](#logging-isnt-working)
-  - [Stats or history wrong](#application-stats-or-history-are-wrong)
-- [When to Ask for Help](#when-to-ask-for-help)
-- [Information to Include When Asking for Help](#information-to-include-when-asking-for-help)
+- 10.1 [Quick Troubleshooting Decision Tree](#quick-troubleshooting-decision-tree)
+- 10.2 [Common Problems and Solutions](#common-problems-and-solutions)
+  - 10.2.1 [Buttons not working](#the-buttons-on-applications-arent-working)
+  - 10.2.2 [User left before review](#someone-left-before-i-could-acceptreject-them)
+  - 10.2.3 [Accidental permanent rejection](#i-accidentally-permanently-rejected-someone)
+  - 10.2.4 [Role automation issues](#role-automation-is-doing-something-weird)
+  - 10.2.5 [Bot not responding](#the-bot-isnt-responding-at-all)
+  - 10.2.6 [Config changes not taking effect](#config-changes-arent-taking-effect)
+  - 10.2.7 [Logging not working](#logging-isnt-working)
+  - 10.2.8 [Stats or history wrong](#application-stats-or-history-are-wrong)
+- 10.3 [When to Ask for Help](#when-to-ask-for-help)
+- 10.4 [Information to Include When Asking for Help](#information-to-include-when-asking-for-help)
 
 ### 11. [Quick Reference](#quick-reference)
-- [Commands you'll use all the time](#commands-youll-use-all-the-time)
-- [Emergency commands](#emergency-commands)
+- 11.1 [Commands you'll use all the time](#commands-youll-use-all-the-time)
+- 11.2 [Emergency commands](#emergency-commands)
 
 ---
 
@@ -772,6 +781,181 @@ A declining approval rate might mean:
 /approval-rate days:90
 ```
 
+---
+
+### `/resetdata`
+**Who can use it:** Manage Guild permission + Password
+
+This is the nuclear option for metrics. It resets all moderator statistics, leaderboards, and analytics to start fresh from the moment you run the command. Historical data in the action log is preserved, but all the calculated metrics start over from zero.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `password` | **Yes** | The reset password (same as gate reset password) |
+
+#### Why Would You Reset Metrics?
+
+There are several situations where starting fresh makes sense:
+
+- **New moderation team** — If you've replaced most of your mod team, old stats aren't relevant anymore
+- **Policy changes** — If you changed your acceptance criteria significantly, old approval rates don't compare fairly
+- **Testing cleanup** — If you were testing the bot and generated fake data, reset before going live
+- **Fresh start** — Sometimes you just want a clean slate for a new year or season
+
+#### What Gets Reset
+
+When you run `/resetdata`, here's exactly what happens:
+
+```mermaid
+flowchart TD
+    A[Run /resetdata with password] --> B{Password correct?}
+    B -->|No| C[Access denied]
+    B -->|Yes| D[Set new metrics epoch]
+    D --> E[Clear in-memory cache]
+    E --> F[Delete pre-computed metrics]
+    F --> G[Log action to audit trail]
+    G --> H[Show confirmation]
+```
+
+**What resets:**
+- Moderator leaderboards — Everyone starts at 0 decisions
+- Individual mod stats — Response times, approval rates, all reset
+- Approval rate calculations — Server-wide stats start fresh
+- Analytics charts — Historical charts only show data after the reset
+- Anomaly detection baselines — Z-scores recalculate from new data
+
+**What stays:**
+- The action log — Every accept, reject, kick is still recorded forever
+- Application history — `/search` still shows all past applications
+- User flags — Flagged users stay flagged
+- Permanent rejections — Blocked users stay blocked
+- Configuration — All your settings remain unchanged
+
+#### How the Epoch System Works
+
+Rather than deleting historical data (which would be bad for auditing), the bot uses an "epoch" system. Think of the epoch as a "start counting from here" marker.
+
+When you reset metrics:
+1. The bot saves the current timestamp as your guild's "metrics epoch"
+2. All future metrics queries add a filter: "only count actions after the epoch"
+3. Historical data before the epoch is ignored in calculations but still exists
+
+This means if you ever need to see old data for legal or audit reasons, it's still in the database. The reset just tells the stats system to ignore it.
+
+#### Security Measures
+
+This command has multiple layers of protection:
+
+1. **Permission check** — You need Manage Guild permission or an admin role
+2. **Password required** — Same password used for `/gate reset` and `/purge`
+3. **Constant-time comparison** — Password checking is timing-attack resistant
+4. **Audit logging** — The reset is logged with who did it and when
+5. **Ephemeral response** — The confirmation only shows to you, not the whole channel
+
+#### After You Reset
+
+Once you reset, give the system time to accumulate new data. Your leaderboards will look empty for a few days until moderators start processing applications again. The anomaly detection needs about 2 weeks of data to establish baselines.
+
+**Example:**
+```
+/resetdata password:your_password_here
+```
+
+---
+
+### `/sample`
+**Who can use it:** Staff (Reviewer role or Manage Guild)
+
+This command lets you preview what review cards look like without needing a real application. It's incredibly useful for training new moderators, testing UI changes, or just seeing how different application states appear.
+
+| Subcommand | What it does |
+|------------|--------------|
+| `reviewcard` | Generate a sample review card with customizable options |
+
+#### `/sample reviewcard`
+
+Create a preview of a review card with various options to customize what it shows.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `status` | No | Application status: Pending, Accepted, or Rejected (default: Pending) |
+| `applicant` | No | Use a real user's avatar and name instead of placeholder |
+| `claimed_by` | No | Show a specific moderator as the claimer |
+| `long` | No | Show longer, multiline answers to test text wrapping |
+
+#### Why This Command Exists
+
+Training new moderators is hard when you can't show them what they'll actually see. With `/sample`, you can:
+
+- **Train new reviewers** — Show them exactly what a review card looks like before they see a real one
+- **Test different states** — See how accepted, rejected, and pending applications look different
+- **Debug UI issues** — If someone reports a display problem, recreate it with sample data
+- **Demonstrate features** — Show leadership what the review system looks like
+
+#### What the Sample Card Shows
+
+The sample review card is nearly identical to a real one. It includes:
+
+- **Header** — Applicant name, avatar, and account age indicator
+- **Status badge** — Shows the current application state (Pending, Accepted, Rejected)
+- **Application code** — A fake code starting with "SAMPLE01" so you know it's not real
+- **Answers** — Sample responses to typical gate questions
+- **Claim info** — Shows who claimed it and when
+- **Avatar scan results** — Sample scan data (always shows clean/safe)
+- **Action history** — Fake history entries showing typical actions
+- **Buttons** — All the same buttons as a real card (but they don't work)
+
+**Important:** The buttons on sample cards are intentionally non-functional. Clicking them won't do anything. This prevents accidents where someone thinks they're accepting a real application.
+
+#### The Different Statuses
+
+**Pending (default):**
+- Shows the card as a reviewer would see it
+- All action buttons are visible
+- Status shows "⏳ Pending Review"
+- Good for training new reviewers on the normal workflow
+
+**Accepted:**
+- Shows how a card looks after approval
+- Green color scheme
+- Shows who accepted it and when
+- Buttons are disabled
+- Good for showing what successful applications look like
+
+**Rejected:**
+- Shows how a card looks after rejection
+- Red color scheme
+- Includes a sample rejection reason
+- Shows who rejected it and when
+- Good for showing how rejections appear
+
+#### Using Real Users in Samples
+
+The `applicant` and `claimed_by` options let you use real Discord users instead of placeholders:
+
+- **applicant** — The sample card will show that user's real avatar and username
+- **claimed_by** — The "Claimed by" section will show that moderator's name
+
+This is useful when you want to show someone "here's what your application would look like" or when training a specific moderator.
+
+#### Long Answers Mode
+
+The `long:true` option shows sample answers that are much longer and span multiple lines. This helps you see how the review card handles:
+
+- Text wrapping in answer fields
+- Very long responses
+- Multiple paragraphs in a single answer
+
+Use this to verify the UI looks good even with verbose applicants.
+
+**Examples:**
+```
+/sample reviewcard
+/sample reviewcard status:Accepted
+/sample reviewcard status:Rejected long:true
+/sample reviewcard applicant:@SomeUser claimed_by:@SomeMod
+```
+
+---
 
 ## Suggestion System
 
