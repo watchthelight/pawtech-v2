@@ -13,6 +13,7 @@
 import type { Client } from "discord.js";
 import { recalcModMetrics } from "../features/modPerformance.js";
 import { logger } from "../lib/logger.js";
+import { recordSchedulerRun } from "../lib/schedulerHealth.js";
 
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
@@ -78,15 +79,24 @@ export function startModMetricsScheduler(client: Client): void {
   logger.info({ intervalMinutes: REFRESH_INTERVAL_MS / 60000 }, "[metrics] scheduler starting");
 
   // Run initial refresh immediately on startup
-  refreshAllGuildMetrics(client).catch((err) => {
-    logger.error({ err }, "[metrics] initial refresh failed");
-  });
+  refreshAllGuildMetrics(client)
+    .then(() => {
+      recordSchedulerRun("modMetrics", true);
+    })
+    .catch((err) => {
+      recordSchedulerRun("modMetrics", false);
+      logger.error({ err }, "[metrics] initial refresh failed");
+    });
 
   // Set up periodic refresh
-  const interval = setInterval(() => {
-    refreshAllGuildMetrics(client).catch((err) => {
+  const interval = setInterval(async () => {
+    try {
+      await refreshAllGuildMetrics(client);
+      recordSchedulerRun("modMetrics", true);
+    } catch (err) {
+      recordSchedulerRun("modMetrics", false);
       logger.error({ err }, "[metrics] scheduled refresh failed");
-    });
+    }
   }, REFRESH_INTERVAL_MS);
 
   // Prevent interval from keeping process alive during shutdown

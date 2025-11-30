@@ -41,7 +41,7 @@ export async function postGateConfigCard(
   const targetChannelId = postChannelId ?? cfg.reviewChannelId;
 
   // Defensive fetch - guild.channels.cache might be stale if channel was just created
-  const channel = await guild.channels.fetch(targetChannelId);
+  const channel = await guild.channels.fetch(targetChannelId).catch(() => null);
   if (!channel || !channel.isTextBased() || channel.isDMBased()) {
     throw new Error(`Channel ${targetChannelId} is not a valid text channel`);
   }

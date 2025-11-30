@@ -21,7 +21,7 @@
 
 import type { Database } from 'better-sqlite3';
 import { logger } from '../src/lib/logger.js';
-import { tableExists } from './lib/helpers.js';
+import { tableExists, recordMigration } from './lib/helpers.js';
 
 /**
  * Migration: Create message_activity table for heatmap data collection
@@ -73,6 +73,9 @@ export function migrate020AddMessageActivityTable(db: Database): void {
   } else {
     logger.info('[migration 020] message_activity table already exists, skipping');
   }
+
+  // Record migration
+  recordMigration(db, '020', 'add_message_activity_table');
 
   logger.info('[migration 020] ✅ Complete');
   logger.info('[migration 020] 💡 Message activity will be tracked automatically via messageCreate event');

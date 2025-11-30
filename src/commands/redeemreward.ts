@@ -23,11 +23,12 @@ import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import { randomUUID } from "node:crypto";
 import {
-  TICKET_ROLES,
+  getTicketRoles,
+  getArtistRoleId,
   TICKET_ROLE_NAMES,
   ART_TYPE_DISPLAY,
-  ARTIST_ROLE_ID,
   type ArtType,
+  type TicketRolesConfig,
   getNextArtist,
   getArtist,
 } from "../features/artistRotation/index.js";
@@ -64,13 +65,13 @@ export const data = new SlashCommandBuilder()
 /**
  * Inspect a user's ticket roles
  */
-function inspectTicketRoles(member: GuildMember, requestedType: ArtType) {
-  const hasHeadshot = member.roles.cache.has(TICKET_ROLES.headshot);
-  const hasHalfbody = member.roles.cache.has(TICKET_ROLES.halfbody);
-  const hasEmoji = member.roles.cache.has(TICKET_ROLES.emoji);
-  const hasFullbody = TICKET_ROLES.fullbody ? member.roles.cache.has(TICKET_ROLES.fullbody) : false;
+function inspectTicketRoles(member: GuildMember, requestedType: ArtType, ticketRoles: TicketRolesConfig) {
+  const hasHeadshot = ticketRoles.headshot ? member.roles.cache.has(ticketRoles.headshot) : false;
+  const hasHalfbody = ticketRoles.halfbody ? member.roles.cache.has(ticketRoles.halfbody) : false;
+  const hasEmoji = ticketRoles.emoji ? member.roles.cache.has(ticketRoles.emoji) : false;
+  const hasFullbody = ticketRoles.fullbody ? member.roles.cache.has(ticketRoles.fullbody) : false;
 
-  const requestedRoleId = TICKET_ROLES[requestedType];
+  const requestedRoleId = ticketRoles[requestedType];
   const hasRequestedType = requestedRoleId ? member.roles.cache.has(requestedRoleId) : false;
 
   const allTicketRoles: string[] = [];
@@ -88,6 +89,7 @@ function inspectTicketRoles(member: GuildMember, requestedType: ArtType) {
     requestedType,
     matchingRoleId: requestedRoleId,
     allTicketRoles,
+    ticketRoles, // Include for later use in building UI
   };
 }
 
@@ -122,8 +124,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
   ctx.step("inspect_roles");
 
+  // Get guild-specific ticket roles config
+  const ticketRoles = getTicketRoles(guild.id);
+
   // Inspect ticket roles
-  const ticketInfo = inspectTicketRoles(targetMember, artType);
+  const ticketInfo = inspectTicketRoles(targetMember, artType, ticketRoles);
 
   ctx.step("get_artist");
 
@@ -133,9 +138,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   let isOverride = false;
 
   if (overrideArtist) {
-    // Verify override artist has Server Artist role
+    // Verify override artist has Server Artist role (using guild-specific config)
+    const artistRoleId = getArtistRoleId(guild.id);
     const overrideMember = await guild.members.fetch(overrideArtist.id).catch(() => null);
-    if (!overrideMember?.roles.cache.has(ARTIST_ROLE_ID)) {
+    if (!overrideMember?.roles.cache.has(artistRoleId)) {
       await interaction.reply({
         content: `<@${overrideArtist.id}> does not have the Server Artist role.`,
         ephemeral: false,
@@ -195,7 +201,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   const otherRoles = ticketInfo.allTicketRoles.filter((r) => r !== artType);
   if (otherRoles.length > 0) {
     const otherNames = otherRoles.map((r) => {
-      const roleId = TICKET_ROLES[r as ArtType];
+      const roleId = ticketInfo.ticketRoles[r as ArtType];
       return roleId ? (TICKET_ROLE_NAMES[roleId] ?? r) : r;
     });
     descLines.push(`*User also has: ${otherNames.join(", ")}*`);

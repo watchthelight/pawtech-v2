@@ -25,7 +25,7 @@ import { PassThrough } from "stream";
 import { captureException } from "../../lib/sentry.js";
 import { logger } from "../../lib/logger.js";
 import { nowUtc, tsToIso } from "../../lib/time.js";
-import { OWNER_IDS } from "../../config.js";
+import { isOwner } from "../../utils/owner.js";
 import { hasStaffPermissions } from "../../lib/config.js";
 import {
   getActionCountsByMod,
@@ -58,18 +58,6 @@ export function parseWindow(
   const resolvedFrom = from !== undefined ? from : resolvedTo - 7 * 86400;
 
   return { from: resolvedFrom, to: resolvedTo };
-}
-
-/**
- * isOwner
- * WHAT: Checks if user is in OWNER_IDS.
- * WHY: Restricts --all-guilds flag to bot owners.
- *
- * @param userId - Discord user ID
- * @returns true if user is owner
- */
-export function isOwner(userId: string): boolean {
-  return OWNER_IDS.includes(userId);
 }
 
 /**
@@ -168,12 +156,13 @@ export async function executeAnalyticsCommand(
       },
     });
 
-    // Query analytics data in parallel
-    // These are all synchronous SQLite calls wrapped in Promise.resolve for the Promise.all pattern.
+    // Query analytics data in parallel using Promise.allSettled
+    // This allows partial results to be displayed even if some queries fail.
+    // These are all synchronous SQLite calls wrapped in Promise.resolve for the Promise.allSettled pattern.
     // We run them "in parallel" for consistency and future-proofing if any become async (e.g., remote DB).
     // In practice, better-sqlite3 is synchronous so they execute sequentially anyway.
     // The queueAge query is guild-scoped only because cross-guild queue stats don't make sense.
-    const [actionCounts, topReasons, volumeSeries, leadTimeStats, queueAge] = await Promise.all([
+    const results = await Promise.allSettled([
       Promise.resolve(getActionCountsByMod({ guildId: scope, from: window.from, to: window.to })),
       Promise.resolve(
         getTopReasons({ guildId: scope, from: window.from, to: window.to, limit: 10 })
@@ -184,6 +173,26 @@ export async function executeAnalyticsCommand(
       Promise.resolve(getLeadTimeStats({ guildId: scope, from: window.from, to: window.to })),
       scope ? Promise.resolve(getOpenQueueAge(scope)) : Promise.resolve(null),
     ]);
+
+    // Extract results, using null/defaults for failures
+    const actionCounts = results[0].status === "fulfilled" ? results[0].value : null;
+    const topReasons = results[1].status === "fulfilled" ? results[1].value : [];
+    const volumeSeries = results[2].status === "fulfilled" ? results[2].value : [];
+    const leadTimeStats = results[3].status === "fulfilled" ? results[3].value : null;
+    const queueAge = results[4].status === "fulfilled" ? results[4].value : null;
+
+    // Log any failures
+    const failures = results.filter((r) => r.status === "rejected");
+    if (failures.length > 0) {
+      logger.warn(
+        {
+          guildId: scope,
+          failedQueries: failures.length,
+          errors: failures.map((f) => (f as PromiseRejectedResult).reason?.message || "Unknown"),
+        },
+        "[analytics] Some queries failed - showing partial results"
+      );
+    }
 
     // Calculate totals from volume series
     const totals = volumeSeries.reduce(
@@ -202,16 +211,18 @@ export async function executeAnalyticsCommand(
       { approve: number; reject: number; permreject: number; other: number }
     >();
 
-    for (const { moderator_id, action, count } of actionCounts) {
-      if (!modSummary.has(moderator_id)) {
-        modSummary.set(moderator_id, { approve: 0, reject: 0, permreject: 0, other: 0 });
-      }
-      const summary = modSummary.get(moderator_id)!;
+    if (actionCounts) {
+      for (const { moderator_id, action, count } of actionCounts) {
+        if (!modSummary.has(moderator_id)) {
+          modSummary.set(moderator_id, { approve: 0, reject: 0, permreject: 0, other: 0 });
+        }
+        const summary = modSummary.get(moderator_id)!;
 
-      if (action === "approve") summary.approve += count;
-      else if (action === "reject") summary.reject += count;
-      else if (action === "perm_reject") summary.permreject += count;
-      else summary.other += count;
+        if (action === "approve") summary.approve += count;
+        else if (action === "reject") summary.reject += count;
+        else if (action === "perm_reject") summary.permreject += count;
+        else summary.other += count;
+      }
     }
 
     // Sort mods by total actions (descending)
@@ -233,10 +244,22 @@ export async function executeAnalyticsCommand(
       )
       .setTimestamp();
 
-    // Totals field
+    // Show warning if partial results due to query failures
+    if (failures.length > 0) {
+      embed.addFields({
+        name: "⚠️ Partial Results",
+        value: `${failures.length} of 5 data sources unavailable`,
+        inline: false,
+      });
+    }
+
+    // Totals field (from volumeSeries)
     embed.addFields({
       name: "📈 Totals",
-      value: `✅ Approvals: **${totals.approvals}**\n❌ Rejects: **${totals.rejects}**\n🚫 Perm Rejects: **${totals.permrejects}**\n🔢 Total Actions: **${totals.total}**`,
+      value:
+        volumeSeries.length > 0
+          ? `✅ Approvals: **${totals.approvals}**\n❌ Rejects: **${totals.rejects}**\n🚫 Perm Rejects: **${totals.permrejects}**\n🔢 Total Actions: **${totals.total}**`
+          : "Data unavailable",
       inline: false,
     });
 
@@ -273,7 +296,7 @@ export async function executeAnalyticsCommand(
     }
 
     // Lead time stats
-    if (leadTimeStats.n > 0) {
+    if (leadTimeStats && leadTimeStats.n > 0) {
       embed.addFields({
         name: "⏱️ Review Lead Time",
         value: `p50: ${formatDuration(leadTimeStats.p50)} | p90: ${formatDuration(leadTimeStats.p90)} | mean: ${formatDuration(leadTimeStats.mean)} (n=${leadTimeStats.n})`,

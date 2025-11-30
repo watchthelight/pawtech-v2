@@ -15,7 +15,6 @@
 import { logger } from "./logger.js";
 import { captureException } from "./sentry.js";
 import { classifyError, errorContext, shouldReportToSentry } from "./errors.js";
-import { SLOW_EVENT_THRESHOLD_MS } from "./constants.js";
 
 /**
  * Generic event handler type.

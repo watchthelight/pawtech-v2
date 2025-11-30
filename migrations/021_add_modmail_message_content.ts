@@ -8,6 +8,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
+import { recordMigration } from "./lib/helpers.js";
 
 export function migrate021AddModmailMessageContent(db: Database): void {
   logger.info("[migration 021] Starting: add content column to modmail_message");
@@ -18,6 +19,8 @@ export function migrate021AddModmailMessageContent(db: Database): void {
 
   if (hasContent) {
     logger.info("[migration 021] content column already exists, skipping");
+    // Record migration
+    recordMigration(db, "021", "add_modmail_message_content");
     logger.info("[migration 021] ✅ Complete");
     return;
   }
@@ -28,6 +31,10 @@ export function migrate021AddModmailMessageContent(db: Database): void {
   `);
 
   logger.info("[migration 021] Added content column to modmail_message");
+
+  // Record migration
+  recordMigration(db, "021", "add_modmail_message_content");
+
   logger.info("[migration 021] ✅ Complete");
   logger.info("[migration 021] 💡 Existing messages will have NULL content; new messages will be persisted");
 }

@@ -119,7 +119,7 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
         });
       }
       if (failureReason === "role_not_mentionable") {
-        try { await thread.send({ content: `New feedback post by ${starterMessage.author} - role <@&${roleId}> (not mentionable): ${threadUrl}`, allowedMentions: SAFE_ALLOWED_MENTIONS }); } catch {}
+        try { await thread.send({ content: `New feedback post by ${starterMessage.author} - role <@&${roleId}> (not mentionable): ${threadUrl}`, allowedMentions: SAFE_ALLOWED_MENTIONS }); } catch (err) { logger.warn({ err, threadId: thread.id, roleId }, "[forumPostNotify] fallback message failed"); }
       }
     }
   } catch (err) {

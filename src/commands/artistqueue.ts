@@ -22,9 +22,7 @@ import {
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import {
-  ARTIST_ROLE_ID,
-  AMBASSADOR_ROLE_ID,
-  SERVER_ARTIST_CHANNEL_ID,
+  getArtistConfig,
   getAllArtists,
   getArtist,
   syncWithRoleMembers,
@@ -212,10 +210,11 @@ async function handleSync(
 
   ctx.step("fetch_role_members");
 
-  // Fetch all members with Server Artist role
-  const role = await guild.roles.fetch(ARTIST_ROLE_ID);
+  // Fetch all members with Server Artist role (using guild-specific config)
+  const artistConfig = getArtistConfig(guild.id);
+  const role = await guild.roles.fetch(artistConfig.artistRoleId);
   if (!role) {
-    await interaction.editReply(`Server Artist role (${ARTIST_ROLE_ID}) not found.`);
+    await interaction.editReply(`Server Artist role (${artistConfig.artistRoleId}) not found.`);
     return;
   }
 
@@ -475,12 +474,15 @@ async function handleSetup(
 
   const results: string[] = [];
 
+  // Get guild-specific artist rotation config
+  const artistConfig = getArtistConfig(guild.id);
+
   // Step 1: Update channel permissions
   ctx.step("update_permissions");
   try {
-    const channel = await guild.channels.fetch(SERVER_ARTIST_CHANNEL_ID);
+    const channel = await guild.channels.fetch(artistConfig.serverArtistChannelId);
     if (channel && channel.isTextBased() && "permissionOverwrites" in channel) {
-      await channel.permissionOverwrites.edit(AMBASSADOR_ROLE_ID, {
+      await channel.permissionOverwrites.edit(artistConfig.ambassadorRoleId, {
         ViewChannel: true,
         SendMessages: true,
         ReadMessageHistory: true,
@@ -497,7 +499,7 @@ async function handleSetup(
   // Step 2: Sync queue with role holders
   ctx.step("sync_queue");
   try {
-    const role = await guild.roles.fetch(ARTIST_ROLE_ID);
+    const role = await guild.roles.fetch(artistConfig.artistRoleId);
     if (role) {
       await guild.members.fetch();
       const roleHolderIds = role.members.map((m) => m.id);

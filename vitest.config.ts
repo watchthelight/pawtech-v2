@@ -38,6 +38,18 @@ export default defineConfig({
     coverage: {
       provider: "v8",
       reporter: ["text", "json", "html"],
+      exclude: [
+        "tests/**",
+        "**/*.test.ts",
+        "scripts/**",
+        "dist/**",
+      ],
+      thresholds: {
+        lines: 50,
+        functions: 45,
+        branches: 40,
+        statements: 50,
+      },
     },
   },
 });

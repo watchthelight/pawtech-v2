@@ -27,6 +27,7 @@ import {
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { isOwner } from "../utils/owner.js";
 import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
+import { logger } from "../lib/logger.js";
 
 // Discord API hard limits. Exceeding these causes 400 Bad Request.
 // The embed limit is particularly useful for longer announcements.
@@ -135,10 +136,15 @@ async function sendAuditLog(
   }
 
   try {
-    const loggingChannel = await interaction.client.channels.fetch(loggingChannelId);
+    const loggingChannel = await interaction.client.channels.fetch(loggingChannelId).catch(() => null);
+    if (!loggingChannel) {
+      logger.warn({ loggingChannelId, guildId: interaction.guildId }, "[send] Logging channel not accessible");
+      return;
+    }
 
-    if (!loggingChannel || loggingChannel.type !== ChannelType.GuildText) {
-      console.warn(`[send] Logging channel ${loggingChannelId} is not a text channel`);
+    if (loggingChannel.type !== ChannelType.GuildText) {
+      logger.warn({ loggingChannelId, channelType: loggingChannel.type, guildId: interaction.guildId },
+        "[send] Logging channel is not a text channel");
       return;
     }
 
@@ -176,7 +182,8 @@ async function sendAuditLog(
     });
   } catch (err) {
     // Log error but don't fail the command - audit logging is best-effort
-    console.warn(`[send] Failed to send audit log: ${err}`);
+    logger.warn({ err, channelId: loggingChannelId, guildId: interaction.guildId },
+      "[send] Failed to send audit log");
   }
 }
 
@@ -269,7 +276,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     } catch (err) {
       // Message doesn't exist or bot can't see it. Silent fallback - don't bother
       // the user with an error for a convenience feature.
-      console.warn(`[send] Failed to fetch reply_to message ${replyToId}: ${err}`);
+      logger.warn({ err, replyToId, channelId: interaction.channelId },
+        "[send] Failed to fetch reply_to message");
     }
   }
 
@@ -283,10 +291,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     });
 
     // Best-effort audit logging (non-blocking)
-    sendAuditLog(interaction, sanitizedMessage, useEmbed, silent).catch(() => {});
+    // Log failures to detect audit trail gaps (Issue #88)
+    sendAuditLog(interaction, sanitizedMessage, useEmbed, silent).catch((err) => {
+      logger.warn({
+        err,
+        guildId: interaction.guildId,
+        userId: interaction.user.id,
+        action: "send",
+      }, "[send] Audit log failed - audit trail incomplete");
+    });
   } catch (err) {
     // Handle send failures (permissions, channel issues, etc.)
-    console.error(`[send] Failed to send message: ${err}`);
+    logger.error({ err, channelId: interaction.channelId, userId: interaction.user.id, guildId: interaction.guildId },
+      "[send] Failed to send message");
     await interaction.editReply({
       content: "❌ Failed to send message. Check bot permissions in this channel.",
     });

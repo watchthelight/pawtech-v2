@@ -11,7 +11,7 @@
 import type { Guild, GuildMember, PartialGuildMember } from "discord.js";
 import { logger } from "../../lib/logger.js";
 import { logActionPretty } from "../../logging/pretty.js";
-import { ARTIST_ROLE_ID } from "./constants.js";
+import { getArtistRoleId } from "./constants.js";
 import { addArtist, removeArtist, getArtist } from "./queue.js";
 
 /**
@@ -117,8 +117,9 @@ export function detectArtistRoleChange(
   oldMember: GuildMember | PartialGuildMember,
   newMember: GuildMember
 ): "added" | "removed" | null {
-  const hadRole = oldMember.roles.cache.has(ARTIST_ROLE_ID);
-  const hasRole = newMember.roles.cache.has(ARTIST_ROLE_ID);
+  const artistRoleId = getArtistRoleId(newMember.guild.id);
+  const hadRole = oldMember.roles.cache.has(artistRoleId);
+  const hasRole = newMember.roles.cache.has(artistRoleId);
 
   if (!hadRole && hasRole) {
     return "added";

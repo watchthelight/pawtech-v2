@@ -107,7 +107,34 @@ export function checkDatabaseHealth(): HealthCheckResult {
       }
     }
 
-    // Step 3: Sanity check file size. A production DB with real data should be
+    // Step 3: Verify critical indexes exist. Missing indexes cause silent performance
+    // degradation. This catches partial migrations or database restores without indexes.
+    const criticalIndexes = [
+      "idx_application_guild_status_created",  // Application queries by guild + status
+      "idx_review_action_app_time",            // Review action lookups
+      "idx_action_log_guild_time",             // Action log queries
+      "idx_modmail_ticket_guild_status",       // Modmail ticket lookups
+    ];
+
+    logger.info("[healthcheck] Checking critical indexes...");
+    for (const indexName of criticalIndexes) {
+      try {
+        const exists = db.prepare(
+          `SELECT name FROM sqlite_master WHERE type='index' AND name=?`
+        ).get(indexName) as { name: string } | undefined;
+
+        if (exists) {
+          logger.debug({ indexName }, "[healthcheck] ✓ Index exists");
+        } else {
+          result.warnings.push(`Critical index missing: ${indexName}`);
+          logger.warn({ indexName }, "[healthcheck] ⚠ Critical index missing - queries may be slow");
+        }
+      } catch (err) {
+        logger.warn({ err, indexName }, "[healthcheck] Could not verify index");
+      }
+    }
+
+    // Step 4: Sanity check file size. A production DB with real data should be
     // at least 100KB. Smaller usually means empty/test DB or pointing at wrong file.
     try {
       // better-sqlite3 exposes the file path as .name (undocumented but stable)

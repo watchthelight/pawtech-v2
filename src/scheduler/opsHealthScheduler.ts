@@ -14,6 +14,7 @@ import type { Client } from "discord.js";
 import { runCheck } from "../features/opsHealth.js";
 import { logger } from "../lib/logger.js";
 import { env } from "../lib/env.js";
+import { recordSchedulerRun } from "../lib/schedulerHealth.js";
 
 const DEFAULT_INTERVAL_SECONDS = 60;
 
@@ -98,17 +99,25 @@ export function startOpsHealthScheduler(client: Client): void {
   );
 
   // Run initial check immediately on startup (after short delay to let bot stabilize)
-  setTimeout(() => {
-    runHealthCheckForAllGuilds(client).catch((err) => {
+  setTimeout(async () => {
+    try {
+      await runHealthCheckForAllGuilds(client);
+      recordSchedulerRun("opsHealth", true);
+    } catch (err: any) {
+      recordSchedulerRun("opsHealth", false);
       logger.error({ err: err.message }, "[opshealth:scheduler] initial check failed");
-    });
+    }
   }, 10000); // 10s delay
 
   // Set up periodic refresh
-  const interval = setInterval(() => {
-    runHealthCheckForAllGuilds(client).catch((err) => {
+  const interval = setInterval(async () => {
+    try {
+      await runHealthCheckForAllGuilds(client);
+      recordSchedulerRun("opsHealth", true);
+    } catch (err: any) {
+      recordSchedulerRun("opsHealth", false);
       logger.error({ err: err.message }, "[opshealth:scheduler] scheduled check failed");
-    });
+    }
   }, intervalMs);
 
   // Prevent interval from keeping process alive during shutdown

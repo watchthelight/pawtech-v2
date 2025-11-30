@@ -6,7 +6,11 @@
 import Database from "better-sqlite3";
 import { join } from "node:path";
 
-const GUILD_ID = "896070888594759740";
+const GUILD_ID = process.env.GUILD_ID || "896070888594759740";
+if (!GUILD_ID) {
+  console.error("Error: GUILD_ID environment variable required");
+  process.exit(1);
+}
 
 // Level tiers (roles assigned by Amaribot)
 const LEVEL_TIERS = [

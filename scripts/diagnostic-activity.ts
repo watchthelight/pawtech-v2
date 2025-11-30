@@ -6,19 +6,38 @@
 import { db } from '../src/db/db.js';
 import { fetchActivityData } from '../src/lib/activityHeatmap.js';
 
-async function main() {
-  const guildId = process.argv[2];
-  const weeks = parseInt(process.argv[3] || '1', 10);
-
-  if (!guildId) {
+/**
+ * Validate a Discord snowflake ID (17-19 digits)
+ */
+function validateDiscordId(id: string | undefined, name: string): string {
+  if (!id) {
+    console.error(`Error: ${name} is required`);
     console.error('Usage: tsx scripts/diagnostic-activity.ts <guildId> [weeks]');
     process.exit(1);
   }
-
-  if (weeks < 1 || weeks > 8) {
-    console.error('Error: weeks parameter must be between 1 and 8');
+  if (!/^\d{17,19}$/.test(id)) {
+    console.error(`Error: ${name} must be a valid Discord snowflake (17-19 digits)`);
     process.exit(1);
   }
+  return id;
+}
+
+/**
+ * Validate a positive integer within a range
+ */
+function validatePositiveInt(value: string | undefined, name: string, min: number, max: number, defaultValue: number): number {
+  if (!value) return defaultValue;
+  const num = parseInt(value, 10);
+  if (isNaN(num) || num < min || num > max) {
+    console.error(`Error: ${name} must be between ${min} and ${max}`);
+    process.exit(1);
+  }
+  return num;
+}
+
+async function main() {
+  const guildId = validateDiscordId(process.argv[2], 'guildId');
+  const weeks = validatePositiveInt(process.argv[3], 'weeks', 1, 8, 1);
 
   console.log(`\n=== Activity Data Diagnostic for Guild ${guildId} ===\n`);
 

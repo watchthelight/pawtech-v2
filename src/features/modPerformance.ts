@@ -14,6 +14,7 @@
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { getEpochPredicate } from "./metricsEpoch.js";
+import { LRUCache } from "../lib/lruCache.js";
 
 /**
  * Actions performed by moderators (never by applicants).
@@ -63,21 +64,37 @@ interface ActionPair {
 }
 
 /**
- * In-memory cache for metrics (guild_id -> metrics[]).
+ * LRU cache for metrics (guild_id -> metrics[]) with TTL and bounded size.
  * TTL defaults to 5 minutes. This is a deliberate tradeoff: recalculating
  * metrics is expensive (full action_log scan), so we accept slightly stale
  * data for /modstats responses. For real-time needs, use forceRefresh=true.
+ * Max 1000 guilds cached to prevent unbounded memory growth.
  */
-const _metricsCache = new Map<string, { metrics: ModMetrics[]; timestamp: number }>();
 // Env var override for testing. In prod this stays at 5 minutes.
 const _getTTL = () => Number(process.env.MOD_METRICS_TTL_MS ?? 5 * 60 * 1000);
+const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory growth
+
+// Note: We create the cache lazily to allow _getTTL() to pick up env vars set during test setup.
+// The TTL is evaluated at cache creation time, not at each access.
+let _metricsCache: LRUCache<string, ModMetrics[]> | null = null;
+
+function getMetricsCache(): LRUCache<string, ModMetrics[]> {
+  if (!_metricsCache) {
+    _metricsCache = new LRUCache<string, ModMetrics[]>(CACHE_MAX_SIZE, _getTTL());
+  }
+  return _metricsCache;
+}
 
 /**
  * WHAT: Clear metrics cache (test-only).
  * WHY: Ensure test isolation without cache pollution.
  */
 export function __test__clearModMetricsCache(): void {
-  _metricsCache.clear();
+  if (_metricsCache) {
+    _metricsCache.clear();
+  }
+  // Reset the cache instance so TTL changes take effect on next access
+  _metricsCache = null;
 }
 
 /**
@@ -350,7 +367,7 @@ export async function recalcModMetrics(guildId: string): Promise<number> {
     // Invalidate cache after DB writes complete. This ordering matters:
     // if we cleared cache first, a concurrent read could re-populate with
     // stale data before our writes finish.
-    _metricsCache.delete(guildId);
+    getMetricsCache().delete(guildId);
 
     logger.info({ guildId, processed }, "[metrics] recalculation complete");
     return processed;
@@ -375,16 +392,16 @@ export async function getCachedMetrics(
   guildId: string,
   forceRefresh = false
 ): Promise<ModMetrics[]> {
-  const cached = _metricsCache.get(guildId);
-  const now = Date.now();
-  const ttl = _getTTL();
+  const cache = getMetricsCache();
+  const cached = cache.get(guildId);
 
   // Check cache validity. Note: no locking here, so two concurrent calls
   // with a stale cache will both trigger recalc. That's fine - recalc is
   // idempotent and the minor duplicate work beats adding lock complexity.
-  if (!forceRefresh && cached && now - cached.timestamp < ttl) {
-    logger.debug({ guildId, age: now - cached.timestamp }, "[metrics] cache hit");
-    return cached.metrics;
+  // LRUCache.get() already handles TTL expiration internally.
+  if (!forceRefresh && cached) {
+    logger.debug({ guildId }, "[metrics] cache hit");
+    return cached;
   }
 
   logger.debug({ guildId, reason: forceRefresh ? "forced" : "stale" }, "[metrics] cache miss");
@@ -407,8 +424,8 @@ export async function getCachedMetrics(
     throw err;
   }
 
-  // Update cache with fresh timestamp
-  _metricsCache.set(guildId, { metrics, timestamp: now });
+  // Update cache
+  cache.set(guildId, metrics);
 
   return metrics;
 }

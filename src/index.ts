@@ -39,6 +39,7 @@ import {
   Collection,
   MessageFlags,
   ChannelType,
+  Options,
   type ChatInputCommandInteraction,
   Events,
 } from "discord.js";
@@ -106,6 +107,7 @@ import {
   hydrateOpenModmailThreadsOnStartup,
   OPEN_MODMAIL_THREADS,
 } from "./features/modmail.js";
+import type { ModmailTicket } from "./features/modmail/types.js";
 import { initializeBannerSync } from "./features/bannerSync.js";
 import { forumPostNotify } from "./events/forumPostNotify.js";
 import { armWatchdog, ensureDeferred, wrapCommand } from "./lib/cmdWrap.js";
@@ -138,6 +140,23 @@ export const client = new Client({
     GatewayIntentBits.GuildVoiceStates, // For movie night attendance tracking
   ],
   partials: [Partials.Channel],
+  // Cache limits to prevent unbounded memory growth in large servers
+  // See: https://discordjs.guide/popular-topics/caching.html#limiting-cache-size
+  makeCache: Options.cacheWithLimits({
+    ...Options.DefaultMakeCacheSettings,
+    // Keep reasonable limits for commonly accessed data
+    MessageManager: 200,        // Recent messages per channel
+    GuildMemberManager: 500,    // Members per guild (we need members for role checks)
+    UserManager: 500,           // Users across all guilds
+    PresenceManager: 0,         // We don't use presence data
+    VoiceStateManager: 200,     // For movie night tracking
+    ReactionManager: 0,         // We don't use reactions
+    ReactionUserManager: 0,     // We don't use reaction users
+    GuildStickerManager: 0,     // We don't use stickers
+    GuildScheduledEventManager: 0, // We don't use scheduled events
+    StageInstanceManager: 0,    // We don't use stages
+    ThreadMemberManager: 50,    // Minimal thread member caching
+  }),
 });
 
 const commands = new Collection<
@@ -271,6 +290,7 @@ client.once(Events.ClientReady, async () => {
       ensureSearchIndexes,
       ensurePanicModeColumn,
       ensureApplicationStaleAlertColumns,
+      ensureArtistRotationConfigColumns,
     } = await import("./db/ensure.js");
     const { ensureBotStatusSchema } = await import("./features/statusStore.js");
     const { ensureSuggestionSchema, ensureSuggestionConfigColumns } = await import("./features/suggestions/store.js");
@@ -293,6 +313,7 @@ client.once(Events.ClientReady, async () => {
     ensureSearchIndexes();
     ensurePanicModeColumn();
     ensureApplicationStaleAlertColumns();
+    ensureArtistRotationConfigColumns();
     ensureBotStatusSchema();
     ensureSuggestionSchema();
     ensureSuggestionConfigColumns();
@@ -480,25 +501,42 @@ client.once(Events.ClientReady, async () => {
 
       // 4. Cleanup notify limiter (stops cleanup interval)
       try {
-        const { notifyLimiter } = await import("./lib/notifyLimiter.js");
-        if ("destroy" in notifyLimiter && typeof notifyLimiter.destroy === "function") {
-          (notifyLimiter as any).destroy();
+        const { notifyLimiter, InMemoryNotifyLimiter } = await import("./lib/notifyLimiter.js");
+        if (notifyLimiter instanceof InMemoryNotifyLimiter) {
+          notifyLimiter.destroy();
           logger.debug("[shutdown] Notify limiter cleanup interval stopped");
         }
       } catch (err) {
         logger.warn({ err }, "[shutdown] Notify limiter cleanup failed (non-fatal)");
       }
 
-      // 5. Remove all event listeners before destroying client
+      // 5. Cleanup command-level intervals (flag cooldowns, modstats rate limiter)
+      try {
+        const { cleanupFlagCooldowns } = await import("./commands/flag.js");
+        cleanupFlagCooldowns();
+        logger.debug("[shutdown] Flag cooldowns cleanup complete");
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Flag cooldowns cleanup failed (non-fatal)");
+      }
+
+      try {
+        const { cleanupModstatsRateLimiter } = await import("./commands/modstats.js");
+        cleanupModstatsRateLimiter();
+        logger.debug("[shutdown] Modstats rate limiter cleanup complete");
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Modstats rate limiter cleanup failed (non-fatal)");
+      }
+
+      // 6. Remove all event listeners before destroying client
       // WHY: Explicit cleanup prevents race conditions and makes shutdown behavior predictable
       client.removeAllListeners();
       logger.debug("[shutdown] Event listeners removed");
 
-      // 6. Destroy Discord client (closes WebSocket connection)
+      // 7. Destroy Discord client (closes WebSocket connection)
       client.destroy();
       logger.debug("[shutdown] Discord client destroyed");
 
-      // 7. Close database
+      // 8. Close database
       try {
         db.close();
         logger.debug("[shutdown] Database closed");
@@ -674,6 +712,26 @@ client.on("guildDelete", wrapEvent("guildDelete", async (guild) => {
     body: [],
   });
   logger.info({ guildId: guild.id }, "[cmdsync] cleared commands for removed guild");
+
+  // Cleanup guild-specific caches to prevent memory leaks (Issue #86)
+  // WHAT: Remove in-memory cache entries for departed guild
+  // WHY: Prevents unbounded memory growth from accumulating stale entries
+  // NOTE: DB rows are preserved in case bot rejoins the guild
+  try {
+    const { clearPanicCache } = await import("./features/panicStore.js");
+    const { clearConfigCache } = await import("./lib/config.js");
+    const { clearLoggingCache } = await import("./config/loggingStore.js");
+    const { clearFlaggerCache } = await import("./config/flaggerStore.js");
+
+    clearPanicCache(guild.id);
+    clearConfigCache(guild.id);
+    clearLoggingCache(guild.id);
+    clearFlaggerCache(guild.id);
+
+    logger.info({ guildId: guild.id }, "[guildDelete] Cleared all caches for departed guild");
+  } catch (err) {
+    logger.warn({ err, guildId: guild.id }, "[guildDelete] Cache cleanup failed (non-fatal)");
+  }
 }));
 
 // Track member joins for join→submit ratio metrics + activity tracking (PR8)
@@ -694,6 +752,42 @@ client.on("guildMemberAdd", wrapEvent("guildMemberAdd", async (member) => {
   const { trackJoin } = await import("./features/activityTracker.js");
   const joinedAt = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
   trackJoin(member.guild.id, member.id, joinedAt);
+}));
+
+// REVIEW CARD: Refresh pending apps when user leaves server
+// WHY: Shows "Left server" warning on review cards so moderators know user is no longer in server
+// DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildMemberRemove
+client.on("guildMemberRemove", wrapEvent("guildMemberRemove", async (member) => {
+  if (!member.guild) return;
+
+  // Find pending applications for this user
+  const pendingApps = db.prepare(`
+    SELECT id FROM application
+    WHERE guild_id = ? AND user_id = ? AND status = 'submitted'
+  `).all(member.guild.id, member.id) as Array<{ id: string }>;
+
+  if (pendingApps.length === 0) return;
+
+  logger.info({
+    userId: member.id,
+    guildId: member.guild.id,
+    pendingApps: pendingApps.length,
+  }, "[guildMemberRemove] refreshing review cards for departed user");
+
+  // Refresh each pending application's review card
+  const { ensureReviewMessage } = await import("./features/review/card.js");
+  for (const app of pendingApps) {
+    try {
+      await ensureReviewMessage(client, app.id);
+    } catch (err) {
+      logger.error({
+        err,
+        appId: app.id,
+        userId: member.id,
+        guildId: member.guild.id,
+      }, "[guildMemberRemove] failed to refresh review card");
+    }
+  }
 }));
 
 // Safety cleanup: Remove from open_modmail table AND OPEN_MODMAIL_THREADS set if thread is deleted
@@ -741,8 +835,19 @@ client.on("guildMemberUpdate", wrapEvent("guildMemberUpdate", async (oldMember, 
   if (addedRoles.size === 0) return;
 
   // Check each new role to see if it's a level role
+  // Process independently so one failure doesn't block others
   for (const [roleId, role] of addedRoles) {
-    await handleLevelRoleAdded(newMember.guild, newMember, roleId);
+    try {
+      await handleLevelRoleAdded(newMember.guild, newMember, roleId);
+    } catch (err) {
+      logger.error({
+        err,
+        roleId,
+        userId: newMember.id,
+        guildId: newMember.guild.id,
+      }, "[guildMemberUpdate] Failed to process level role reward");
+      // Continue to next role
+    }
   }
 }));
 
@@ -775,7 +880,7 @@ client.on("voiceStateUpdate", wrapEvent("voiceStateUpdate", async (oldState, new
   }
 }));
 
-client.on("interactionCreate", async (interaction) => {
+client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction) => {
   // Global owner override: allow owners to bypass permission checks
   if (isOwner(interaction.user.id)) {
     logger.info(
@@ -1421,10 +1526,10 @@ client.on("interactionCreate", async (interaction) => {
       }
     }
   );
-});
+}));
 
 // Modmail message routing + first-message tracking (PR8)
-client.on("messageCreate", async (message) => {
+client.on("messageCreate", wrapEvent("messageCreate", async (message) => {
   // begging Discord to send us valid messages
   // Ignore bot messages
   if (message.author.bot) return;
@@ -1498,27 +1603,17 @@ client.on("messageCreate", async (message) => {
       const tickets = db
         .prepare(
           `
-        SELECT id, guild_id, user_id, app_code, review_message_id, thread_id, status, created_at, closed_at
+        SELECT id, guild_id, user_id, app_code, review_message_id, thread_id, thread_channel_id, status, created_at, closed_at
         FROM modmail_ticket
         WHERE user_id = ? AND status = 'open'
         ORDER BY created_at DESC
         LIMIT 1
       `
         )
-        .all(message.author.id) as Array<{
-        id: number;
-        guild_id: string;
-        user_id: string;
-        app_code: string | null;
-        review_message_id: string | null;
-        thread_id: string | null;
-        status: string;
-        created_at: string;
-        closed_at: string | null;
-      }>;
+        .all(message.author.id) as Array<ModmailTicket>;
 
       if (tickets.length > 0) {
-        const ticket = tickets[0] as any; // Cast to avoid type error
+        const ticket = tickets[0];
         await routeDmToThread(message, ticket, client);
         return;
       }
@@ -1527,7 +1622,7 @@ client.on("messageCreate", async (message) => {
     logger.error({ err, traceId, messageId: message.id }, "[modmail] message routing failed");
     captureException(err, { area: "modmail:messageCreate", traceId });
   }
-});
+}));
 
 // Forum post notification: alert moderators of new forum posts (threadCreate event)
 // WHAT: Pings admin thread ONCE when a new forum thread (post) is created

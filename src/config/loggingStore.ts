@@ -12,27 +12,28 @@
 
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
+import { LRUCache } from "../lib/lruCache.js";
 
 // ============================================================================
 // Cache Layer
 // ============================================================================
-// Simple TTL cache to avoid DB round-trips on every call. getLoggingChannelId
-// is called frequently (every action log), so caching is important.
-
-interface CacheEntry {
-  value: string | null;
-  expiresAt: number;
-}
+// LRU cache with TTL and bounded size to prevent unbounded memory growth.
+// getLoggingChannelId is called frequently (every action log), so caching is important.
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL - balances freshness vs DB load
-const loggingChannelCache = new Map<string, CacheEntry>();
+const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory growth
+
+// Note: LRUCache stores values directly, but we need to distinguish between
+// "not cached" (undefined) and "cached null" (null). We use a wrapper type.
+type CachedValue = { value: string | null };
+const loggingChannelCache = new LRUCache<string, CachedValue>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 /**
  * Get from cache if not expired
  */
 function getCached(guildId: string): string | null | undefined {
   const entry = loggingChannelCache.get(guildId);
-  if (entry && Date.now() < entry.expiresAt) {
+  if (entry !== undefined) {
     return entry.value;
   }
   return undefined; // Cache miss or expired
@@ -42,10 +43,7 @@ function getCached(guildId: string): string | null | undefined {
  * Set cache entry with TTL
  */
 function setCache(guildId: string, value: string | null): void {
-  loggingChannelCache.set(guildId, {
-    value,
-    expiresAt: Date.now() + CACHE_TTL_MS,
-  });
+  loggingChannelCache.set(guildId, { value });
 }
 
 /**
@@ -53,6 +51,19 @@ function setCache(guildId: string, value: string | null): void {
  */
 function invalidateCache(guildId: string): void {
   loggingChannelCache.delete(guildId);
+}
+
+/**
+ * Clear logging cache entry for a guild (called on guildDelete).
+ * WHAT: Removes in-memory cache entry when bot leaves a guild
+ * WHY: Prevents memory leak from accumulating entries for departed guilds
+ * NOTE: Does NOT delete DB row - that data may be useful if bot rejoins
+ */
+export function clearLoggingCache(guildId: string): void {
+  const existed = loggingChannelCache.delete(guildId);
+  if (existed) {
+    logger.debug({ guildId }, "[logging] Cleared cache entry for departed guild");
+  }
 }
 
 /**

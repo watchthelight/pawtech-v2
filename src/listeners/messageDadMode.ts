@@ -61,7 +61,7 @@ export async function execute(message: Message) {
     return;
   }
 
-  logger.info({ guildId: message.guild.id, content: content.slice(0, 50), odds: cfg.dadmode_odds }, "[dadmode] checking message");
+  logger.debug({ guildId: message.guild.id, contentLength: content.length, odds: cfg.dadmode_odds }, "[dadmode] checking message");
 
   // Get odds (default 1 in 1000, clamped to valid range)
   const odds = Math.max(DADMODE_ODDS_MIN, Math.min(DADMODE_ODDS_MAX, Number(cfg.dadmode_odds || 1000)));
@@ -72,12 +72,19 @@ export async function execute(message: Message) {
     return;
   }
 
-  logger.info({ guildId: message.guild.id, content }, "[dadmode] dice roll HIT! Checking pattern...");
+  logger.debug({
+    guildId: message.guild.id,
+    contentLength: content.length,
+    contentPreview: content.slice(0, 30).replace(/\S{20,}/g, '[REDACTED]')
+  }, "[dadmode] dice roll HIT! Checking pattern...");
 
   // Match the pattern
   const match = content.match(DAD_RE);
   if (!match) {
-    logger.info({ guildId: message.guild.id, content }, "[dadmode] pattern did not match");
+    logger.debug({
+      guildId: message.guild.id,
+      contentLength: content.length
+    }, "[dadmode] pattern did not match");
     return;
   }
 

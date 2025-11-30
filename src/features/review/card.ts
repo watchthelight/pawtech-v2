@@ -455,8 +455,8 @@ export function renderReviewEmbed(
       });
     } else {
       const pct = avatarScan?.finalPct ?? 0;
-      const furryScore = avatarScan?.furry_score ?? 0;
-      const scalieScore = avatarScan?.scalie_score ?? 0;
+      const furryScore = avatarScan?.furryScore ?? 0;
+      const scalieScore = avatarScan?.scalieScore ?? 0;
       const reason = avatarScan?.reason ?? "none";
       const evidenceBuckets = avatarScan?.evidence ?? { hard: [], soft: [], safe: [] };
 

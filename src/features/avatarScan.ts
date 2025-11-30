@@ -43,11 +43,15 @@ export type ScanResult = {
   evidence: RiskSummary["evidence"];
 };
 
-export type AvatarScanRow = {
+/**
+ * Database row representation of avatar scan (snake_case, matches SQLite schema).
+ * For UI representation, see AvatarScanRow in src/features/review/types.ts
+ */
+export type AvatarScanDbRow = {
   application_id: string;
   avatar_url: string;
   nsfw_score: number | null;
-  edge_score: number | null;
+  edge_score: number;
   final_pct: number;
   furry_score: number;
   scalie_score: number;
@@ -248,7 +252,7 @@ export function getScan(applicationId: string): ScanResult {
          FROM avatar_scan
          WHERE application_id = ?`
       )
-      .get(applicationId) as Partial<AvatarScanRow> | undefined;
+      .get(applicationId) as Partial<AvatarScanDbRow> | undefined;
 
     if (!row) {
       return safeDefault;

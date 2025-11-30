@@ -18,11 +18,12 @@ import {
   ChatInputCommandInteraction,
   PermissionFlagsBits,
   EmbedBuilder,
+  Role,
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
-import { getRoleTiers, type RoleTier, type LevelReward } from "../features/roleAutomation.js";
+import { getRoleTiers, canManageRoleSync, type RoleTier, type LevelReward } from "../features/roleAutomation.js";
 
 // Note: No default permission set here because we do manual ManageRoles check in execute().
 // This allows the command to appear for everyone but gate functionality at runtime.
@@ -170,6 +171,16 @@ async function handleAddLevelTier(interaction: ChatInputCommandInteraction): Pro
   const level = interaction.options.getInteger("level", true);
   const role = interaction.options.getRole("role", true);
 
+  // Pre-flight check: verify bot can manage this role
+  const check = canManageRoleSync(guild, role as Role);
+  if (!check.canManage) {
+    await interaction.reply({
+      content: `Cannot configure this role: ${check.reason}\n\nPlease choose a role that is below the bot's highest role.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
   try {
     // INSERT OR REPLACE ensures idempotent updates - running the same command twice
     // doesn't create duplicates. The unique constraint is on (guild_id, tier_type, threshold).
@@ -207,6 +218,16 @@ async function handleAddLevelReward(interaction: ChatInputCommandInteraction): P
   const level = interaction.options.getInteger("level", true);
   const role = interaction.options.getRole("role", true);
 
+  // Pre-flight check: verify bot can manage this role
+  const check = canManageRoleSync(guild, role as Role);
+  if (!check.canManage) {
+    await interaction.reply({
+      content: `Cannot configure this role: ${check.reason}\n\nPlease choose a role that is below the bot's highest role.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
   try {
     const stmt = db.prepare(`
       INSERT OR REPLACE INTO level_rewards (guild_id, level, role_id, role_name)
@@ -241,6 +262,16 @@ async function handleAddMovieTier(interaction: ChatInputCommandInteraction): Pro
   const tierName = interaction.options.getString("tier_name", true);
   const role = interaction.options.getRole("role", true);
   const moviesRequired = interaction.options.getInteger("movies_required", true);
+
+  // Pre-flight check: verify bot can manage this role
+  const check = canManageRoleSync(guild, role as Role);
+  if (!check.canManage) {
+    await interaction.reply({
+      content: `Cannot configure this role: ${check.reason}\n\nPlease choose a role that is below the bot's highest role.`,
+      ephemeral: true,
+    });
+    return;
+  }
 
   try {
     const stmt = db.prepare(`
@@ -280,9 +311,12 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
   await interaction.deferReply({ ephemeral: true });
 
   const embed = new EmbedBuilder()
-    .setTitle("🎭 Role Automation Configuration")
+    .setTitle("Role Automation Configuration")
     .setColor(0x5865F2)
     .setTimestamp();
+
+  // Collect all configured role IDs for warning checks
+  const configuredRoleIds: Set<string> = new Set();
 
   // Level tiers - these map Amaribot level numbers to the roles our bot should assign.
   // The <@&roleId> syntax makes Discord render the role mention with proper formatting.
@@ -290,9 +324,10 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
     const levelTiers = getRoleTiers(guild.id, "level");
     if (levelTiers.length > 0) {
       const lines = levelTiers.map(t => `Level ${t.threshold}: <@&${t.role_id}>`);
-      embed.addFields({ name: "📊 Level Tiers (Amaribot Roles)", value: lines.join("\n") || "None" });
+      embed.addFields({ name: "Level Tiers (Amaribot Roles)", value: lines.join("\n") || "None" });
+      levelTiers.forEach(t => configuredRoleIds.add(t.role_id));
     } else if (!filterType) {
-      embed.addFields({ name: "📊 Level Tiers (Amaribot Roles)", value: "None configured" });
+      embed.addFields({ name: "Level Tiers (Amaribot Roles)", value: "None configured" });
     }
   }
 
@@ -304,9 +339,10 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
 
     if (rewards.length > 0) {
       const lines = rewards.map(r => `Level ${r.level}: <@&${r.role_id}>`);
-      embed.addFields({ name: "🎁 Level Rewards (Tokens/Tickets)", value: lines.join("\n") || "None" });
+      embed.addFields({ name: "Level Rewards (Tokens/Tickets)", value: lines.join("\n") || "None" });
+      rewards.forEach(r => configuredRoleIds.add(r.role_id));
     } else if (!filterType) {
-      embed.addFields({ name: "🎁 Level Rewards (Tokens/Tickets)", value: "None configured" });
+      embed.addFields({ name: "Level Rewards (Tokens/Tickets)", value: "None configured" });
     }
   }
 
@@ -315,11 +351,42 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
     const movieTiers = getRoleTiers(guild.id, "movie_night");
     if (movieTiers.length > 0) {
       const lines = movieTiers.map(t => `${t.tier_name} (${t.threshold} movies): <@&${t.role_id}>`);
-      embed.addFields({ name: "🎬 Movie Night Tiers", value: lines.join("\n") || "None" });
+      embed.addFields({ name: "Movie Night Tiers", value: lines.join("\n") || "None" });
+      movieTiers.forEach(t => configuredRoleIds.add(t.role_id));
     } else if (!filterType) {
-      embed.addFields({ name: "🎬 Movie Night Tiers", value: "None configured" });
+      embed.addFields({ name: "Movie Night Tiers", value: "None configured" });
     }
   }
+
+  // Check for misconfigured roles and collect warnings
+  const warnings: string[] = [];
+  for (const roleId of Array.from(configuredRoleIds)) {
+    const role = guild.roles.cache.get(roleId);
+    if (role) {
+      const check = canManageRoleSync(guild, role);
+      if (!check.canManage) {
+        warnings.push(`${role.name}: ${check.reason}`);
+      }
+    } else {
+      warnings.push(`<@&${roleId}>: Role not found (may have been deleted)`);
+    }
+  }
+
+  // Add warnings field if any issues found
+  if (warnings.length > 0) {
+    embed.addFields({
+      name: "Configuration Warnings",
+      value: warnings.join("\n"),
+      inline: false,
+    });
+  }
+
+  // Show bot role position info in footer for context
+  const botMember = guild.members.me;
+  const botHighestRole = botMember?.roles.highest;
+  embed.setFooter({
+    text: `Bot can manage roles below position ${botHighestRole?.position ?? 0} (${botHighestRole?.name ?? "unknown"})`,
+  });
 
   await interaction.editReply({ embeds: [embed] });
 }

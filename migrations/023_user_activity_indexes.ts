@@ -7,6 +7,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
+import { recordMigration } from "./lib/helpers.js";
 
 export function migrate023UserActivityIndexes(db: Database): void {
   logger.info("[migration 023] Starting: add user_activity indexes");
@@ -23,6 +24,9 @@ export function migrate023UserActivityIndexes(db: Database): void {
       WHERE flagged_at IS NOT NULL;
   `);
   logger.info("[migration 023] Created idx_user_activity_guild_flagged (partial)");
+
+  // Record migration
+  recordMigration(db, "023", "user_activity_indexes");
 
   logger.info("[migration 023] Complete");
 }

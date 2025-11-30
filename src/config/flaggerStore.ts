@@ -14,6 +14,7 @@
 
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
+import { LRUCache } from "../lib/lruCache.js";
 
 export interface FlaggerConfig {
   channelId: string | null;
@@ -23,36 +24,25 @@ export interface FlaggerConfig {
 // ============================================================================
 // Cache Layer
 // ============================================================================
-// Simple TTL cache to avoid DB round-trips on every call. getFlaggerConfig
-// is called on every message (for first-message detection), so caching is critical.
-
-interface CacheEntry {
-  value: FlaggerConfig;
-  expiresAt: number;
-}
+// LRU cache with TTL and bounded size to prevent unbounded memory growth.
+// getFlaggerConfig is called on every message (for first-message detection), so caching is critical.
 
 const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL - balances freshness vs DB load
-const flaggerConfigCache = new Map<string, CacheEntry>();
+const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory growth
+const flaggerConfigCache = new LRUCache<string, FlaggerConfig>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 /**
  * Get from cache if not expired
  */
 function getCached(guildId: string): FlaggerConfig | undefined {
-  const entry = flaggerConfigCache.get(guildId);
-  if (entry && Date.now() < entry.expiresAt) {
-    return entry.value;
-  }
-  return undefined; // Cache miss or expired
+  return flaggerConfigCache.get(guildId);
 }
 
 /**
  * Set cache entry with TTL
  */
 function setCache(guildId: string, value: FlaggerConfig): void {
-  flaggerConfigCache.set(guildId, {
-    value,
-    expiresAt: Date.now() + CACHE_TTL_MS,
-  });
+  flaggerConfigCache.set(guildId, value);
 }
 
 /**
@@ -60,6 +50,19 @@ function setCache(guildId: string, value: FlaggerConfig): void {
  */
 function invalidateCache(guildId: string): void {
   flaggerConfigCache.delete(guildId);
+}
+
+/**
+ * Clear flagger cache entry for a guild (called on guildDelete).
+ * WHAT: Removes in-memory cache entry when bot leaves a guild
+ * WHY: Prevents memory leak from accumulating entries for departed guilds
+ * NOTE: Does NOT delete DB row - that data may be useful if bot rejoins
+ */
+export function clearFlaggerCache(guildId: string): void {
+  const existed = flaggerConfigCache.delete(guildId);
+  if (existed) {
+    logger.debug({ guildId }, "[flagger] Cleared cache entry for departed guild");
+  }
 }
 
 /**

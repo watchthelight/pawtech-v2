@@ -285,8 +285,10 @@ incrementAssignments(guild.id, data.artistId);     // Separate operation
 **Issue:** Loading all resolved applications without guild filtering:
 
 ```sql
-SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')
+SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked')
 ```
+
+Note: `perm_rejected` was incorrectly listed here previously. Permanently rejected apps have `status='rejected'` with `permanently_rejected=1`.
 
 **Impact:** O(n) scan through all historical applications. For 100k applications, this loads all 100k IDs into memory.
 

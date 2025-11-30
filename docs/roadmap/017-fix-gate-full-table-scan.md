@@ -18,8 +18,10 @@ The `getOrCreateDraft` function in `src/features/gate.ts` performs an unfiltered
 **Current Query (lines 207-209):**
 ```sql
 SELECT id FROM application
-WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')
+WHERE status IN ('approved', 'rejected', 'kicked')
 ```
+
+Note: `perm_rejected` was incorrectly listed here. Permanently rejected apps have `status='rejected'` with `permanently_rejected=1`.
 
 This is a hot path - runs on every user clicking the "Verify" button.
 
@@ -31,7 +33,7 @@ This is a hot path - runs on every user clicking the "Verify" button.
 
 ```typescript
 const resolvedApps = db.prepare(
-  `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+  `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked')`
 ).all() as Array<{ id: string }>;
 ```
 
@@ -53,7 +55,7 @@ Update the query to scope by guild, allowing the database to use the existing co
 **Before:**
 ```typescript
 const resolvedApps = db.prepare(
-  `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+  `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked')`
 ).all() as Array<{ id: string }>;
 ```
 
@@ -62,7 +64,7 @@ const resolvedApps = db.prepare(
 const resolvedApps = db.prepare(
   `SELECT id FROM application
    WHERE guild_id = ?
-   AND status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+   AND status IN ('approved', 'rejected', 'kicked')`
 ).all(guildId) as Array<{ id: string }>;
 ```
 
@@ -135,7 +137,7 @@ No additional context passing is needed - just use the existing parameter.
 2. **Restore original query:**
    ```typescript
    const resolvedApps = db.prepare(
-     `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+     `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked')`
    ).all() as Array<{ id: string }>;
    ```
 3. **Verify:** Query returns to working state (albeit slow)

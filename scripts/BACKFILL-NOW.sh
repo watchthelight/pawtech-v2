@@ -1,7 +1,7 @@
 #!/bin/bash
 # Quick script to backfill activity data for Pawtropolis server
 
-GUILD_ID="896070888594759740"
+GUILD_ID="${GUILD_ID:-896070888594759740}"
 WEEKS=8
 
 echo "🚀 Starting Activity Backfill for Pawtropolis"

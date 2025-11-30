@@ -15,9 +15,10 @@ beforeAll(() => {
   // would fire unpredictably and cause flaky failures. Disabling entirely.
   process.env.METRICS_SCHEDULER_DISABLED = "1";
 
-  // TTL=0 means "always refetch" - prevents tests from accidentally passing
+  // TTL=1ms means "always refetch" - prevents tests from accidentally passing
   // due to stale cached data from a previous test run. We want fresh data.
-  process.env.MOD_METRICS_TTL_MS = "0";
+  // Note: LRUCache requires TTL > 0, so we use 1ms instead of 0.
+  process.env.MOD_METRICS_TTL_MS = "1";
 });
 
 afterEach(() => {

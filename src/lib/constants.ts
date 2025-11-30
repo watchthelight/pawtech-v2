@@ -64,3 +64,20 @@ export const SECONDS_PER_MINUTE = 60;
 
 /** Seconds per hour */
 export const SECONDS_PER_HOUR = 3600;
+
+// ===== Feature-Specific Constants =====
+
+/** Banner sync minimum update interval (prevents API hammering) */
+export const BANNER_SYNC_MIN_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
+
+/** OAuth rate limit: max requests per minute for general endpoints */
+export const OAUTH_RATE_LIMIT_MAX_REQUESTS = 10;
+
+/** OAuth rate limit: max requests per 5 minutes for OAuth-specific endpoints */
+export const OAUTH_RATE_LIMIT_MAX_OAUTH_REQUESTS = 5;
+
+/** State token expiry for CSRF protection */
+export const OAUTH_STATE_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+
+/** Cleanup interval for rate limit stores */
+export const RATE_LIMIT_CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute

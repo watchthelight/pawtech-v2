@@ -181,6 +181,32 @@ export const data = new SlashCommandBuilder()
               .setMaxValue(180)
           )
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("artist_rotation")
+          .setDescription("Configure artist rotation IDs (role, channel, tickets)")
+          .addRoleOption((o) =>
+            o.setName("artist_role").setDescription("Server Artist role").setRequired(false)
+          )
+          .addRoleOption((o) =>
+            o.setName("ambassador_role").setDescription("Community Ambassador role").setRequired(false)
+          )
+          .addChannelOption((o) =>
+            o.setName("artist_channel").setDescription("Server artist coordination channel").setRequired(false)
+          )
+          .addRoleOption((o) =>
+            o.setName("headshot_ticket").setDescription("Headshot ticket role").setRequired(false)
+          )
+          .addRoleOption((o) =>
+            o.setName("halfbody_ticket").setDescription("Half-body ticket role").setRequired(false)
+          )
+          .addRoleOption((o) =>
+            o.setName("emoji_ticket").setDescription("Emoji ticket role").setRequired(false)
+          )
+          .addRoleOption((o) =>
+            o.setName("fullbody_ticket").setDescription("Full-body ticket role").setRequired(false)
+          )
+      )
   )
   .addSubcommandGroup((group) =>
     group
@@ -201,8 +227,53 @@ export const data = new SlashCommandBuilder()
           .setName("movie_config")
           .setDescription("View current movie night configuration")
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("artist_rotation")
+          .setDescription("View current artist rotation configuration")
+      )
   )
-  .addSubcommand((sc) => sc.setName("view").setDescription("View current guild configuration"));
+  .addSubcommand((sc) => sc.setName("view").setDescription("View current guild configuration"))
+  .addSubcommandGroup((group) =>
+    group
+      .setName("poke")
+      .setDescription("Configure /poke command categories and excluded channels")
+      .addSubcommand((sc) =>
+        sc
+          .setName("add-category")
+          .setDescription("Add a category to poke targets")
+          .addChannelOption((o) =>
+            o.setName("category").setDescription("Category channel to add").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("remove-category")
+          .setDescription("Remove a category from poke targets")
+          .addChannelOption((o) =>
+            o.setName("category").setDescription("Category channel to remove").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("exclude-channel")
+          .setDescription("Exclude a channel from poke messages")
+          .addChannelOption((o) =>
+            o.setName("channel").setDescription("Channel to exclude").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("include-channel")
+          .setDescription("Remove a channel from the exclusion list")
+          .addChannelOption((o) =>
+            o.setName("channel").setDescription("Channel to include").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc.setName("list").setDescription("List current poke configuration")
+      )
+  );
 
 async function executeSetModRoles(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
@@ -975,6 +1046,550 @@ async function executeGetMovieConfig(ctx: CommandContext<ChatInputCommandInterac
   });
 }
 
+// ============================================================
+// ARTIST ROTATION CONFIG SUBCOMMANDS (Issue #78)
+// ============================================================
+
+async function executeSetArtistRotation(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executeSetArtistRotation
+   * WHAT: Configures artist rotation IDs (roles, channel, ticket roles).
+   * WHY: Allows per-guild configuration instead of hardcoded Discord IDs.
+   * PARAMS: ctx - command context; extracts role/channel options.
+   * RETURNS: Promise<void> after confirming update.
+   * DOCS: Issue #78 - docs/roadmap/078-move-artist-rotation-ids-to-config.md
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("gather_options");
+  const artistRole = interaction.options.getRole("artist_role");
+  const ambassadorRole = interaction.options.getRole("ambassador_role");
+  const artistChannel = interaction.options.getChannel("artist_channel");
+  const headshotTicket = interaction.options.getRole("headshot_ticket");
+  const halfbodyTicket = interaction.options.getRole("halfbody_ticket");
+  const emojiTicket = interaction.options.getRole("emoji_ticket");
+  const fullbodyTicket = interaction.options.getRole("fullbody_ticket");
+
+  // Check if any option was provided
+  const hasAnyOption = artistRole || ambassadorRole || artistChannel ||
+    headshotTicket || halfbodyTicket || emojiTicket || fullbodyTicket;
+
+  if (!hasAnyOption) {
+    await replyOrEdit(interaction, {
+      content: "Please provide at least one option to configure.\n\nUse `/config get artist_rotation` to view current settings.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+
+  // Build partial update object
+  const updates: Record<string, string | null> = {};
+  const changes: string[] = [];
+
+  if (artistRole) {
+    updates.artist_role_id = artistRole.id;
+    changes.push(`Artist Role: <@&${artistRole.id}>`);
+  }
+
+  if (ambassadorRole) {
+    updates.ambassador_role_id = ambassadorRole.id;
+    changes.push(`Ambassador Role: <@&${ambassadorRole.id}>`);
+  }
+
+  if (artistChannel) {
+    updates.server_artist_channel_id = artistChannel.id;
+    changes.push(`Artist Channel: <#${artistChannel.id}>`);
+  }
+
+  // Build ticket roles JSON if any ticket role was provided
+  const cfg = getConfig(interaction.guildId!);
+  let ticketRoles: Record<string, string | null> = {};
+
+  // Parse existing ticket roles
+  if (cfg?.artist_ticket_roles_json) {
+    try {
+      ticketRoles = JSON.parse(cfg.artist_ticket_roles_json);
+    } catch {
+      // Invalid JSON, start fresh
+    }
+  }
+
+  let ticketRolesChanged = false;
+  if (headshotTicket) {
+    ticketRoles.headshot = headshotTicket.id;
+    changes.push(`Headshot Ticket: <@&${headshotTicket.id}>`);
+    ticketRolesChanged = true;
+  }
+  if (halfbodyTicket) {
+    ticketRoles.halfbody = halfbodyTicket.id;
+    changes.push(`Half-body Ticket: <@&${halfbodyTicket.id}>`);
+    ticketRolesChanged = true;
+  }
+  if (emojiTicket) {
+    ticketRoles.emoji = emojiTicket.id;
+    changes.push(`Emoji Ticket: <@&${emojiTicket.id}>`);
+    ticketRolesChanged = true;
+  }
+  if (fullbodyTicket) {
+    ticketRoles.fullbody = fullbodyTicket.id;
+    changes.push(`Full-body Ticket: <@&${fullbodyTicket.id}>`);
+    ticketRolesChanged = true;
+  }
+
+  if (ticketRolesChanged) {
+    updates.artist_ticket_roles_json = JSON.stringify(ticketRoles);
+  }
+
+  // Apply updates
+  upsertConfig(interaction.guildId!, updates);
+
+  logger.info(
+    {
+      evt: "config_set_artist_rotation",
+      guildId: interaction.guildId,
+      updates,
+      userId: interaction.user.id,
+    },
+    "[config] artist rotation config updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `Artist rotation configuration updated:\n\n${changes.map(c => `- ${c}`).join("\n")}`,
+  });
+}
+
+async function executeGetArtistRotation(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executeGetArtistRotation
+   * WHAT: Shows current artist rotation configuration.
+   * WHY: Allows admins to view configured IDs and see fallback values.
+   * PARAMS: ctx - command context.
+   * RETURNS: Promise<void> after displaying config.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_config");
+  const cfg = getConfig(interaction.guildId!);
+
+  // Import getArtistConfig to show resolved values
+  const { getArtistConfig, ARTIST_ROLE_ID, AMBASSADOR_ROLE_ID, SERVER_ARTIST_CHANNEL_ID, TICKET_ROLES } =
+    await import("../features/artistRotation/constants.js");
+  const resolved = getArtistConfig(interaction.guildId!);
+
+  const lines: string[] = ["**Artist Rotation Configuration (Issue #78)**", ""];
+
+  // Show artist role
+  if (cfg?.artist_role_id) {
+    lines.push(`**Artist Role:** <@&${cfg.artist_role_id}> (configured)`);
+  } else {
+    lines.push(`**Artist Role:** <@&${ARTIST_ROLE_ID}> (fallback)`);
+  }
+
+  // Show ambassador role
+  if (cfg?.ambassador_role_id) {
+    lines.push(`**Ambassador Role:** <@&${cfg.ambassador_role_id}> (configured)`);
+  } else {
+    lines.push(`**Ambassador Role:** <@&${AMBASSADOR_ROLE_ID}> (fallback)`);
+  }
+
+  // Show artist channel
+  if (cfg?.server_artist_channel_id) {
+    lines.push(`**Artist Channel:** <#${cfg.server_artist_channel_id}> (configured)`);
+  } else {
+    lines.push(`**Artist Channel:** <#${SERVER_ARTIST_CHANNEL_ID}> (fallback)`);
+  }
+
+  lines.push("");
+  lines.push("**Ticket Roles:**");
+
+  // Parse configured ticket roles
+  let configuredTickets: Record<string, string | null> = {};
+  if (cfg?.artist_ticket_roles_json) {
+    try {
+      configuredTickets = JSON.parse(cfg.artist_ticket_roles_json);
+    } catch {
+      // Invalid JSON
+    }
+  }
+
+  const ticketTypes = ["headshot", "halfbody", "emoji", "fullbody"] as const;
+  for (const type of ticketTypes) {
+    const configuredId = configuredTickets[type];
+    const fallbackId = TICKET_ROLES[type];
+    const resolvedId = resolved.ticketRoles[type];
+
+    if (configuredId) {
+      lines.push(`- ${type}: <@&${configuredId}> (configured)`);
+    } else if (fallbackId) {
+      lines.push(`- ${type}: <@&${fallbackId}> (fallback)`);
+    } else {
+      lines.push(`- ${type}: *not configured*`);
+    }
+  }
+
+  lines.push("");
+  lines.push("**To configure:**");
+  lines.push("`/config set artist_rotation artist_role:@role ambassador_role:@role ...`");
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: lines.join("\n"),
+    flags: interaction.replied ? undefined : MessageFlags.Ephemeral,
+  });
+}
+
+// ============================================================
+// POKE CONFIG SUBCOMMANDS (Issue #79)
+// ============================================================
+
+async function executePokeAddCategory(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executePokeAddCategory
+   * WHAT: Adds a category to the poke target list.
+   * WHY: Allows guild admins to configure which categories /poke targets.
+   * PARAMS: ctx - command context; extracts category option from interaction.
+   * RETURNS: Promise<void> after confirming update.
+   * DOCS: Issue #79 - docs/roadmap/079-move-poke-category-ids-to-config.md
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_category");
+  const category = interaction.options.getChannel("category", true);
+
+  // Validate it's actually a category channel
+  const { ChannelType } = await import("discord.js");
+  if (category.type !== ChannelType.GuildCategory) {
+    await replyOrEdit(interaction, {
+      content: `Channel <#${category.id}> is not a category. Please select a category channel.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+  const cfg = getConfig(interaction.guildId!);
+
+  // Parse existing category IDs or start fresh
+  let categoryIds: string[] = [];
+  if (cfg?.poke_category_ids_json) {
+    try {
+      const parsed = JSON.parse(cfg.poke_category_ids_json);
+      if (Array.isArray(parsed)) {
+        categoryIds = parsed;
+      }
+    } catch {
+      // Invalid JSON, start fresh
+    }
+  }
+
+  // Check if already exists
+  if (categoryIds.includes(category.id)) {
+    await replyOrEdit(interaction, {
+      content: `Category <#${category.id}> is already in the poke target list.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Add and save
+  categoryIds.push(category.id);
+  upsertConfig(interaction.guildId!, { poke_category_ids_json: JSON.stringify(categoryIds) });
+
+  logger.info(
+    {
+      evt: "poke_category_added",
+      guildId: interaction.guildId,
+      categoryId: category.id,
+      categoryName: category.name,
+      totalCategories: categoryIds.length,
+    },
+    "[config] poke category added"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `Added category **${category.name}** to poke targets.\n\nTotal categories: ${categoryIds.length}`,
+  });
+}
+
+async function executePokeRemoveCategory(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executePokeRemoveCategory
+   * WHAT: Removes a category from the poke target list.
+   * WHY: Allows guild admins to configure which categories /poke targets.
+   * PARAMS: ctx - command context; extracts category option from interaction.
+   * RETURNS: Promise<void> after confirming update.
+   * DOCS: Issue #79 - docs/roadmap/079-move-poke-category-ids-to-config.md
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_category");
+  const category = interaction.options.getChannel("category", true);
+
+  ctx.step("update_config");
+  const cfg = getConfig(interaction.guildId!);
+
+  // Parse existing category IDs
+  let categoryIds: string[] = [];
+  if (cfg?.poke_category_ids_json) {
+    try {
+      const parsed = JSON.parse(cfg.poke_category_ids_json);
+      if (Array.isArray(parsed)) {
+        categoryIds = parsed;
+      }
+    } catch {
+      // Invalid JSON, nothing to remove
+    }
+  }
+
+  // Check if exists
+  const idx = categoryIds.indexOf(category.id);
+  if (idx === -1) {
+    await replyOrEdit(interaction, {
+      content: `Category <#${category.id}> is not in the poke target list.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Remove and save
+  categoryIds.splice(idx, 1);
+  upsertConfig(interaction.guildId!, { poke_category_ids_json: JSON.stringify(categoryIds) });
+
+  logger.info(
+    {
+      evt: "poke_category_removed",
+      guildId: interaction.guildId,
+      categoryId: category.id,
+      categoryName: category.name,
+      totalCategories: categoryIds.length,
+    },
+    "[config] poke category removed"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `Removed category **${category.name}** from poke targets.\n\nRemaining categories: ${categoryIds.length}`,
+  });
+}
+
+async function executePokeExcludeChannel(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executePokeExcludeChannel
+   * WHAT: Adds a channel to the poke exclusion list.
+   * WHY: Allows guild admins to exclude specific channels from receiving poke messages.
+   * PARAMS: ctx - command context; extracts channel option from interaction.
+   * RETURNS: Promise<void> after confirming update.
+   * DOCS: Issue #79 - docs/roadmap/079-move-poke-category-ids-to-config.md
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_channel");
+  const channel = interaction.options.getChannel("channel", true);
+
+  ctx.step("update_config");
+  const cfg = getConfig(interaction.guildId!);
+
+  // Parse existing excluded channel IDs or start fresh
+  let excludedIds: string[] = [];
+  if (cfg?.poke_excluded_channel_ids_json) {
+    try {
+      const parsed = JSON.parse(cfg.poke_excluded_channel_ids_json);
+      if (Array.isArray(parsed)) {
+        excludedIds = parsed;
+      }
+    } catch {
+      // Invalid JSON, start fresh
+    }
+  }
+
+  // Check if already excluded
+  if (excludedIds.includes(channel.id)) {
+    await replyOrEdit(interaction, {
+      content: `Channel <#${channel.id}> is already excluded from pokes.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Add and save
+  excludedIds.push(channel.id);
+  upsertConfig(interaction.guildId!, { poke_excluded_channel_ids_json: JSON.stringify(excludedIds) });
+
+  logger.info(
+    {
+      evt: "poke_channel_excluded",
+      guildId: interaction.guildId,
+      channelId: channel.id,
+      channelName: channel.name,
+      totalExcluded: excludedIds.length,
+    },
+    "[config] poke channel excluded"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `Excluded channel **${channel.name}** from poke messages.\n\nTotal excluded: ${excludedIds.length}`,
+  });
+}
+
+async function executePokeIncludeChannel(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executePokeIncludeChannel
+   * WHAT: Removes a channel from the poke exclusion list.
+   * WHY: Allows guild admins to re-include previously excluded channels.
+   * PARAMS: ctx - command context; extracts channel option from interaction.
+   * RETURNS: Promise<void> after confirming update.
+   * DOCS: Issue #79 - docs/roadmap/079-move-poke-category-ids-to-config.md
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_channel");
+  const channel = interaction.options.getChannel("channel", true);
+
+  ctx.step("update_config");
+  const cfg = getConfig(interaction.guildId!);
+
+  // Parse existing excluded channel IDs
+  let excludedIds: string[] = [];
+  if (cfg?.poke_excluded_channel_ids_json) {
+    try {
+      const parsed = JSON.parse(cfg.poke_excluded_channel_ids_json);
+      if (Array.isArray(parsed)) {
+        excludedIds = parsed;
+      }
+    } catch {
+      // Invalid JSON, nothing to remove
+    }
+  }
+
+  // Check if exists
+  const idx = excludedIds.indexOf(channel.id);
+  if (idx === -1) {
+    await replyOrEdit(interaction, {
+      content: `Channel <#${channel.id}> is not in the exclusion list.`,
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
+  // Remove and save
+  excludedIds.splice(idx, 1);
+  upsertConfig(interaction.guildId!, { poke_excluded_channel_ids_json: JSON.stringify(excludedIds) });
+
+  logger.info(
+    {
+      evt: "poke_channel_included",
+      guildId: interaction.guildId,
+      channelId: channel.id,
+      channelName: channel.name,
+      totalExcluded: excludedIds.length,
+    },
+    "[config] poke channel re-included"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `Re-included channel **${channel.name}** (removed from exclusion list).\n\nRemaining excluded: ${excludedIds.length}`,
+  });
+}
+
+async function executePokeList(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * executePokeList
+   * WHAT: Lists current poke configuration (categories and excluded channels).
+   * WHY: Allows guild admins to view current poke settings.
+   * PARAMS: ctx - command context.
+   * RETURNS: Promise<void> after displaying config.
+   * DOCS: Issue #79 - docs/roadmap/079-move-poke-category-ids-to-config.md
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_config");
+  const cfg = getConfig(interaction.guildId!);
+
+  // Parse category IDs
+  let categoryIds: string[] = [];
+  let usingFallbackCategories = true;
+  if (cfg?.poke_category_ids_json) {
+    try {
+      const parsed = JSON.parse(cfg.poke_category_ids_json);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        categoryIds = parsed;
+        usingFallbackCategories = false;
+      }
+    } catch {
+      // Invalid JSON
+    }
+  }
+
+  // Parse excluded channel IDs
+  let excludedIds: string[] = [];
+  let usingFallbackExcluded = true;
+  if (cfg?.poke_excluded_channel_ids_json) {
+    try {
+      const parsed = JSON.parse(cfg.poke_excluded_channel_ids_json);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        excludedIds = parsed;
+        usingFallbackExcluded = false;
+      }
+    } catch {
+      // Invalid JSON
+    }
+  }
+
+  ctx.step("format_display");
+  const { EmbedBuilder, Colors } = await import("discord.js");
+  const embed = new EmbedBuilder()
+    .setTitle("Poke Configuration")
+    .setColor(Colors.Blue)
+    .setTimestamp();
+
+  // Categories field
+  let categoriesValue: string;
+  if (usingFallbackCategories) {
+    categoriesValue = "*Using hardcoded defaults (10 categories)*\n\nUse `/config poke add-category` to set custom categories.";
+  } else if (categoryIds.length === 0) {
+    categoriesValue = "*None configured*\n\nUse `/config poke add-category` to add categories.";
+  } else {
+    categoriesValue = categoryIds.map((id) => `<#${id}>`).join("\n");
+    if (categoriesValue.length > 1000) {
+      categoriesValue = `${categoryIds.length} categories configured (too many to display)`;
+    }
+  }
+  embed.addFields({ name: `Target Categories (${categoryIds.length})`, value: categoriesValue, inline: false });
+
+  // Excluded channels field
+  let excludedValue: string;
+  if (usingFallbackExcluded) {
+    excludedValue = "*Using hardcoded default (1 channel)*\n\nUse `/config poke exclude-channel` to set custom exclusions.";
+  } else if (excludedIds.length === 0) {
+    excludedValue = "*None excluded*";
+  } else {
+    excludedValue = excludedIds.map((id) => `<#${id}>`).join("\n");
+    if (excludedValue.length > 1000) {
+      excludedValue = `${excludedIds.length} channels excluded (too many to display)`;
+    }
+  }
+  embed.addFields({ name: `Excluded Channels (${excludedIds.length})`, value: excludedValue, inline: false });
+
+  // Usage hint
+  embed.setFooter({ text: "Use /config poke add-category, remove-category, exclude-channel, include-channel" });
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, { embeds: [embed] });
+}
+
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * execute
@@ -1022,6 +1637,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetSuggestionCooldown(ctx);
     } else if (subcommand === "movie_threshold") {
       await executeSetMovieThreshold(ctx);
+    } else if (subcommand === "artist_rotation") {
+      await executeSetArtistRotation(ctx);
     }
   } else if (subcommandGroup === "get") {
     if (subcommand === "logging") {
@@ -1030,6 +1647,20 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeGetFlags(ctx);
     } else if (subcommand === "movie_config") {
       await executeGetMovieConfig(ctx);
+    } else if (subcommand === "artist_rotation") {
+      await executeGetArtistRotation(ctx);
+    }
+  } else if (subcommandGroup === "poke") {
+    if (subcommand === "add-category") {
+      await executePokeAddCategory(ctx);
+    } else if (subcommand === "remove-category") {
+      await executePokeRemoveCategory(ctx);
+    } else if (subcommand === "exclude-channel") {
+      await executePokeExcludeChannel(ctx);
+    } else if (subcommand === "include-channel") {
+      await executePokeIncludeChannel(ctx);
+    } else if (subcommand === "list") {
+      await executePokeList(ctx);
     }
   } else if (subcommand === "view") {
     await executeView(ctx);

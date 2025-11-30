@@ -26,10 +26,26 @@ import { syncShortCodeMappings } from "../src/features/appLookup.js";
 // Load .env for DB_PATH
 dotenv.config();
 
+/**
+ * Validate a Discord snowflake ID (17-19 digits)
+ */
+function validateDiscordId(id: string | undefined, name: string): string {
+  if (!id) {
+    console.error(`Error: ${name} is required`);
+    process.exit(1);
+  }
+  if (!/^\d{17,19}$/.test(id)) {
+    console.error(`Error: ${name} must be a valid Discord snowflake (17-19 digits)`);
+    process.exit(1);
+  }
+  return id;
+}
+
 // Parse CLI args
 const args = process.argv.slice(2);
 const dryRun = args.includes("--dry-run");
-const guildIdArg = args.find((arg) => arg.startsWith("--guild="))?.split("=")[1];
+const rawGuildId = args.find((arg) => arg.startsWith("--guild="))?.split("=")[1];
+const guildIdArg = rawGuildId ? validateDiscordId(rawGuildId, "guildId") : undefined;
 
 // Database path
 const dbPath = process.env.DB_PATH || "./data/data.db";

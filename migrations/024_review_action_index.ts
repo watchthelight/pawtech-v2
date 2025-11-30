@@ -7,6 +7,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
+import { recordMigration } from "./lib/helpers.js";
 
 export function migrate024ReviewActionIndex(db: Database): void {
   logger.info("[migration 024] Starting: add review_action index");
@@ -17,5 +18,9 @@ export function migrate024ReviewActionIndex(db: Database): void {
   `);
 
   logger.info("[migration 024] Created idx_review_action_app_time");
+
+  // Record migration
+  recordMigration(db, "024", "review_action_index");
+
   logger.info("[migration 024] Complete");
 }

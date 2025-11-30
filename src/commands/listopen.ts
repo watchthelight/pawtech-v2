@@ -28,13 +28,15 @@ import type { CommandContext } from "../lib/cmdWrap.js";
 import { randomBytes } from "node:crypto";
 import { hasStaffPermissions, isReviewer } from "../lib/config.js";
 import { isOwner } from "../utils/owner.js";
+import { LRUCache } from "../lib/lruCache.js";
 
 /*
  * FINAL_STATUSES defines terminal application states. Once an app reaches one of
  * these, it won't appear in /listopen because there's nothing left to do.
  *
- * Note: "perm_rejected" is handled separately in some queries (see modstats.ts).
- * The distinction matters for re-application eligibility but not for listing.
+ * Note: Permanently rejected apps have status='rejected' with permanently_rejected=1.
+ * The 'perm_reject' action type in review_action distinguishes them for re-application
+ * eligibility checks, but for listing purposes they're all 'rejected'.
  */
 const FINAL_STATUSES = ["approved", "rejected", "kicked"];
 
@@ -51,9 +53,16 @@ interface OpenApplication {
   reviewer_id?: string; // Present when fetching all apps
 }
 
-// Cache for draft applications (guild_id -> { apps, count, timestamp })
-const draftsCache = new Map<string, { apps: OpenApplication[]; count: number; timestamp: number }>();
+// LRU cache for draft applications with TTL and bounded size.
+// Prevents unbounded memory growth proportional to guild count.
 const CACHE_TTL_MS = 60_000; // 1 minute cache
+const CACHE_MAX_SIZE = 1000; // Max guilds to cache
+
+interface DraftsCacheEntry {
+  apps: OpenApplication[];
+  count: number;
+}
+const draftsCache = new LRUCache<string, DraftsCacheEntry>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 interface ReviewCardMapping {
   channel_id: string;
@@ -110,7 +119,8 @@ function formatTimestamp(value: string | null | undefined, style: "f" | "R" = "R
 
     const seconds = Math.floor(date.getTime() / 1000);
     return `<t:${seconds}:${style}>`;
-  } catch {
+  } catch (error) {
+    logger.debug({ error }, "[listopen] Failed to resolve username");
     return "unknown";
   }
 }
@@ -218,9 +228,8 @@ function countAllOpenApplications(guildId: string): number {
  */
 function getCachedDrafts(guildId: string): { apps: OpenApplication[]; count: number } {
   const cached = draftsCache.get(guildId);
-  const now = Date.now();
 
-  if (cached && now - cached.timestamp < CACHE_TTL_MS) {
+  if (cached) {
     return { apps: cached.apps, count: cached.count };
   }
 
@@ -240,7 +249,7 @@ function getCachedDrafts(guildId: string): { apps: OpenApplication[]; count: num
   `;
 
   const apps = db.prepare(query).all(guildId) as OpenApplication[];
-  const result = { apps, count: apps.length, timestamp: now };
+  const result = { apps, count: apps.length };
   draftsCache.set(guildId, result);
 
   return { apps, count: apps.length };

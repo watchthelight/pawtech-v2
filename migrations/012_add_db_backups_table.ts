@@ -21,7 +21,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
-import { enableForeignKeys, tableExists } from "./lib/helpers.js";
+import { enableForeignKeys, tableExists, recordMigration } from "./lib/helpers.js";
 
 /**
  * Migration: Create db_backups metadata table
@@ -70,6 +70,9 @@ export function migrate012AddDbBackupsTable(db: Database): void {
   } else {
     logger.info("[migration 012] db_backups table already exists, skipping");
   }
+
+  // Record migration
+  recordMigration(db, "012", "add_db_backups_table");
 
   logger.info("[migration 012] ✅ Complete");
   logger.info("[migration 012] 💡 Run `npm run db:scan-backups` to populate metadata");

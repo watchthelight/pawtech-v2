@@ -5,13 +5,24 @@
 
 import { Client, GatewayIntentBits, ChannelType } from 'discord.js';
 
-async function main() {
-  const channelId = process.argv[2];
-
-  if (!channelId) {
+/**
+ * Validate a Discord snowflake ID (17-19 digits)
+ */
+function validateDiscordId(id: string | undefined, name: string): string {
+  if (!id) {
+    console.error(`Error: ${name} is required`);
     console.error('Usage: tsx scripts/check-channel-access.ts <channelId>');
     process.exit(1);
   }
+  if (!/^\d{17,19}$/.test(id)) {
+    console.error(`Error: ${name} must be a valid Discord snowflake (17-19 digits)`);
+    process.exit(1);
+  }
+  return id;
+}
+
+async function main() {
+  const channelId = validateDiscordId(process.argv[2], 'channelId');
 
   const token = process.env.DISCORD_TOKEN;
   if (!token) {

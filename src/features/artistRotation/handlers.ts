@@ -12,7 +12,7 @@ import type { ButtonInteraction, TextChannel } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import { logger } from "../../lib/logger.js";
 import {
-  TICKET_ROLES,
+  getTicketRoles,
   TICKET_ROLE_NAMES,
   ART_TYPE_DISPLAY,
   type ArtType,
@@ -113,8 +113,9 @@ async function handleConfirm(
   const results: string[] = [];
   let success = true;
 
-  // Step 1: Remove ticket role from recipient
-  const ticketRoleId = TICKET_ROLES[data.artType];
+  // Step 1: Remove ticket role from recipient (using guild-specific config)
+  const ticketRoles = getTicketRoles(guild.id);
+  const ticketRoleId = ticketRoles[data.artType];
   if (ticketRoleId) {
     try {
       const member = await guild.members.fetch(data.recipientId);

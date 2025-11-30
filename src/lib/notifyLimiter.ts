@@ -13,20 +13,19 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 import { logger } from "./logger.js";
-
-interface NotifyConfig {
-  notify_cooldown_seconds?: number;
-  notify_max_per_hour?: number;
-}
+import type { NotifyConfig } from "../features/notifyConfig.js";
 
 interface RateLimitCheck {
   ok: boolean;
   reason?: string;
 }
 
+// Maximum timestamps to keep per guild (prevents memory exhaustion between cleanup cycles)
+const MAX_TIMESTAMPS_PER_GUILD = 100;
+
 interface GuildNotifyState {
-  // Unbounded array - cleanup() prevents runaway growth but watch memory
-  // in high-traffic guilds. Consider circular buffer if this becomes an issue.
+  // Bounded array - limited to MAX_TIMESTAMPS_PER_GUILD entries
+  // Cleanup happens both on record (immediate eviction) and periodically (every 5 min)
   timestamps: number[]; // Last N notification timestamps (epoch ms)
   lastNotifyAt: number; // Last notification timestamp (epoch ms)
 }
@@ -117,6 +116,12 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
     // successful notification sends. Double-calling will mess up rate limits.
     guildState.timestamps.push(now);
     guildState.lastNotifyAt = now;
+
+    // Immediate eviction if array grows too large (prevents runaway growth between cleanup cycles)
+    if (guildState.timestamps.length > MAX_TIMESTAMPS_PER_GUILD) {
+      const oneHourAgo = now - 60 * 60 * 1000;
+      guildState.timestamps = guildState.timestamps.filter(ts => ts > oneHourAgo);
+    }
 
     this.state.set(guildId, guildState);
   }

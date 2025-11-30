@@ -6,6 +6,7 @@
  * that reliably indicates which database has more recent changes.
  */
 import type Database from "better-sqlite3";
+import { recordMigration } from "./lib/helpers.js";
 
 export function migrate026SyncMarker(db: Database.Database): void {
   db.exec(`
@@ -21,4 +22,7 @@ export function migrate026SyncMarker(db: Database.Database): void {
     INSERT OR IGNORE INTO sync_marker (id, last_modified_at, last_modified_by, action_count)
     VALUES (1, strftime('%s', 'now'), 'unknown', 0);
   `);
+
+  // Record migration
+  recordMigration(db, "026", "sync_marker");
 }

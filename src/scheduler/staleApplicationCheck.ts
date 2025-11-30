@@ -16,6 +16,7 @@ import type { Client, TextChannel } from "discord.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { shortCode } from "../lib/ids.js";
+import { recordSchedulerRun } from "../lib/schedulerHealth.js";
 
 const STALE_CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const STALE_THRESHOLD_HOURS = 24;
@@ -191,11 +192,15 @@ async function sendAlertForGuild(
   }
 
   try {
-    const channel = await client.channels.fetch(reviewChannelId);
-    if (!channel || !channel.isTextBased()) {
+    const channel = await client.channels.fetch(reviewChannelId).catch(() => null);
+    if (!channel) {
+      logger.warn({ reviewChannelId, guildId }, "[stale-alert] Review channel not accessible, skipping guild");
+      return;
+    }
+    if (!channel.isTextBased()) {
       logger.error(
         { guildId, reviewChannelId },
-        "[stale-alert] Review channel not found or not text-based"
+        "[stale-alert] Review channel not text-based"
       );
       return;
     }
@@ -315,17 +320,25 @@ export function startStaleApplicationScheduler(client: Client): void {
   );
 
   // Run initial check after a short delay to let bot stabilize
-  setTimeout(() => {
-    checkStaleApplications(client).catch((err) => {
+  setTimeout(async () => {
+    try {
+      await checkStaleApplications(client);
+      recordSchedulerRun("staleApplicationCheck", true);
+    } catch (err) {
+      recordSchedulerRun("staleApplicationCheck", false);
       logger.error({ err }, "[stale-alert] initial check failed");
-    });
+    }
   }, 15000); // 15s delay
 
   // Set up periodic check
-  const interval = setInterval(() => {
-    checkStaleApplications(client).catch((err) => {
+  const interval = setInterval(async () => {
+    try {
+      await checkStaleApplications(client);
+      recordSchedulerRun("staleApplicationCheck", true);
+    } catch (err) {
+      recordSchedulerRun("staleApplicationCheck", false);
       logger.error({ err }, "[stale-alert] scheduled check failed");
-    });
+    }
   }, STALE_CHECK_INTERVAL_MS);
 
   // Prevent interval from keeping process alive during shutdown

@@ -26,6 +26,16 @@ vi.mock("../../src/lib/sentry.js", async () => {
   };
 });
 
+/**
+ * Mock canManageRole from roleAutomation. This is used for pre-flight permission checks.
+ * We need to control this to test both success and failure paths.
+ * Use vi.hoisted() to ensure the mock is available before module initialization.
+ */
+const mockCanManageRole = vi.hoisted(() => vi.fn());
+vi.mock("../../src/features/roleAutomation.js", () => ({
+  canManageRole: mockCanManageRole,
+}));
+
 const sentry = await import("../../src/lib/sentry.js");
 
 describe("approveFlow", () => {
@@ -34,27 +44,24 @@ describe("approveFlow", () => {
   });
 
   /**
-   * Discord error code 50013 = Missing Permissions. This happens when:
+   * Pre-flight permission check failure. This happens when canManageRole detects:
    * - Bot role is lower than the role it's trying to assign
    * - Bot lacks "Manage Roles" permission
-   * - Target role is @everyone or a managed role (like Nitro Booster)
    *
-   * The flow should surface the error to the UI but NOT report to Sentry.
-   * Admins need to fix their role hierarchy, not us.
+   * The flow should surface the error to the UI but NOT attempt the role.add()
+   * call since it would fail anyway. This prevents unnecessary API errors.
    */
   it("returns roleError and skips captureException on missing permissions", async () => {
-    // Simulating Discord.js error shape. The code property is how we identify
-    // permission errors vs other API failures.
-    const error = Object.assign(new Error("Missing Permissions"), {
-      code: 50013,
-      name: "DiscordAPIError[50013]",
+    // Mock canManageRole to return failure - this is the pre-flight check
+    mockCanManageRole.mockResolvedValue({
+      canManage: false,
+      reason: "Role hierarchy violation: bot role (Bot @5) is not above target role (Admin @10)",
     });
 
-    // Minimal GuildMember mock. roles.add() is the method that throws when
-    // the bot can't assign the role.
+    // Minimal GuildMember mock. roles.add() should NOT be called when pre-flight fails.
     const memberRoles = {
       cache: new Map<string, true>(),
-      add: vi.fn().mockRejectedValue(error),
+      add: vi.fn().mockResolvedValue(undefined),
     };
 
     const member = {
@@ -82,12 +89,49 @@ describe("approveFlow", () => {
 
     // roleApplied: false tells the caller to show a warning in the UI
     expect(result.roleApplied).toBe(false);
-    // The error object is passed through so it can be displayed
-    expect(result.roleError?.code).toBe(50013);
-    expect(result.roleError?.message).toContain("Missing Permissions");
-    // Sanity check: we did try to add the role
-    expect(memberRoles.add).toHaveBeenCalled();
-    // The key assertion: permission errors should NOT go to Sentry
+    // The error message comes from canManageRole
+    expect(result.roleError?.message).toContain("Role hierarchy violation");
+    // Pre-flight check prevents the role.add() call entirely
+    expect(memberRoles.add).not.toHaveBeenCalled();
+    // Permission errors detected by pre-flight should NOT go to Sentry
     expect(sentry.captureException).not.toHaveBeenCalled();
+  });
+
+  /**
+   * Happy path: role assignment succeeds. This is the normal flow when:
+   * - Bot has proper permissions
+   * - Bot role is positioned above the target role
+   * - The role exists and is assignable
+   */
+  it("successfully approves user and assigns role", async () => {
+    // Mock canManageRole to return success - pre-flight check passes
+    mockCanManageRole.mockResolvedValue({ canManage: true });
+
+    const memberRoles = {
+      cache: new Map<string, true>(),
+      add: vi.fn().mockResolvedValue(undefined),
+    };
+
+    const member = {
+      id: "member-1",
+      roles: memberRoles,
+    } as unknown as GuildMember;
+
+    const guild = {
+      id: "guild-1",
+      members: { fetch: vi.fn().mockResolvedValue(member) },
+      roles: {
+        cache: new Map([["role-1", { id: "role-1" }]]),
+        fetch: vi.fn().mockResolvedValue({ id: "role-1" }),
+      },
+    } as unknown as Guild;
+
+    const cfg = { accepted_role_id: "role-1" } as GuildConfig;
+
+    const result = await approveFlow(guild, "member-1", cfg);
+
+    expect(result.roleApplied).toBe(true);
+    expect(result.roleError).toBeNull();
+    expect(memberRoles.add).toHaveBeenCalledWith({ id: "role-1" }, "Gate approval");
   });
 });

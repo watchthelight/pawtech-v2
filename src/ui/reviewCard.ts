@@ -12,59 +12,32 @@ import {
   type AttachmentBuilder,
 } from "discord.js";
 import { shortCode } from "../lib/ids.js";
+import { logger } from "../lib/logger.js";
 import { ts } from "../utils/dt.js";
+import type {
+  ApplicationStatus,
+  ReviewAnswer,
+  ReviewClaimRow,
+  AvatarScanRow,
+  ReviewCardApplication,
+} from "../features/review/types.js";
+import type { ModmailTicket } from "../features/modmail/types.js";
 
-// ============================================================================
-// Types
-// ============================================================================
+// Re-export types for backward compatibility
+export type { ApplicationStatus, ReviewAnswer, ReviewClaimRow, AvatarScanRow, ReviewCardApplication };
 
-export type ApplicationStatus = "draft" | "submitted" | "approved" | "rejected" | "needs_info" | "kicked";
-
-export interface ReviewCardApplication {
-  id: string;
-  guild_id: string;
-  user_id: string;
-  status: ApplicationStatus;
-  created_at: string;
-  submitted_at: string | null;
-  updated_at: string | null;
-  resolved_at: string | null;
-  resolver_id: string | null;
-  resolution_reason: string | null;
-  userTag: string;
-  avatarUrl?: string | null;
-}
-
-export interface ReviewAnswer {
-  q_index: number;
-  question: string;
-  answer: string;
-}
-
-export interface AvatarScanRow {
-  finalPct: number;
-  furryScore: number;
-  scalieScore: number;
-  reason: string;
-  evidence: {
-    hard: Array<{ tag: string; p?: number }>;
-    soft: Array<{ tag: string; p?: number }>;
-    safe: Array<{ tag: string; p?: number }>;
-  };
-}
-
-export interface ReviewClaimRow {
-  reviewer_id: string;
-  claimed_at: string | number; // string (ISO) from DB, or number (epoch seconds) after conversion
-}
-
-export interface ModmailTicket {
+/**
+ * Subset of ModmailTicket fields needed for review card display.
+ * The full ModmailTicket type lives in src/features/modmail/types.ts
+ * Note: status is typed as string here to accept raw database values.
+ */
+export type ModmailTicketDisplay = {
   id: number;
   thread_id: string | null;
   status: string;
-  log_channel_id: string | null;
-  log_message_id: string | null;
-}
+  log_channel_id?: string | null;
+  log_message_id?: string | null;
+};
 
 export interface ReviewAction {
   action: string;
@@ -87,7 +60,7 @@ export interface BuildEmbedOptions {
   avatarScan?: AvatarScanRow | null;
   claim?: ReviewClaimRow | null;
   accountCreatedAt?: number | null;
-  modmailTicket?: ModmailTicket | null;
+  modmailTicket?: ModmailTicketDisplay | null;
   member?: GuildMember | null;
   recentActions?: ReviewAction[] | null;
   previousApps?: PreviousApplication[] | null;
@@ -115,11 +88,9 @@ const COLORS = {
 /**
  * Parse claimed_at timestamp from database (handles multiple formats)
  * Supports: Unix timestamps (numeric strings), SQLite datetime, ISO 8601
+ * Note: Database stores TEXT, but may contain numeric strings from nowUtc()
  */
-function parseClaimedAt(value: string | number): number | null {
-  if (typeof value === 'number') {
-    return value; // Already in seconds
-  }
+function parseClaimedAt(value: string): number | null {
 
   const trimmed = value.trim();
 
@@ -646,18 +617,27 @@ export function buildReviewEmbedV3(
   const removedSections = optionalSections.filter(s => !includedSections.includes(s));
   if (removedSections.length > 0) {
     const removedNames = removedSections.map(s => s.name);
-    console.warn(
-      `[reviewCard] Truncated embed for app ${shortCode(app.id)}: ` +
-      `removed sections: ${removedNames.join(", ")} ` +
-      `(original ${baseSize + removedSections.reduce((sum, s) => sum + s.estimatedSize, 0)} chars)`
+    logger.warn(
+      {
+        appId: app.id,
+        appCode: shortCode(app.id),
+        removedSections: removedNames,
+        originalSize: baseSize + removedSections.reduce((sum, s) => sum + s.estimatedSize, 0),
+      },
+      "[reviewCard] Truncated embed"
     );
   }
 
   // Final safety check with hard truncation (only if answers section alone is too large)
   if (description.length > TARGET_LENGTH) {
-    console.warn(
-      `[reviewCard] Hard truncation for app ${shortCode(app.id)}: ` +
-      `${description.length} chars -> 3950 chars`
+    logger.warn(
+      {
+        appId: app.id,
+        appCode: shortCode(app.id),
+        originalLength: description.length,
+        truncatedLength: 3950,
+      },
+      "[reviewCard] Hard truncation applied"
     );
     description = description.slice(0, 3950) + "\n\n*...content truncated for Discord limits*";
   }

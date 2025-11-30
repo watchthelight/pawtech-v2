@@ -832,6 +832,56 @@ export function ensurePanicModeColumn() {
 }
 
 /**
+ * ensureArtistRotationConfigColumns
+ * WHAT: Adds artist rotation config columns to guild_config table if missing.
+ * WHY: Supports per-guild artist rotation configuration (Issue #78) instead of hardcoded IDs.
+ * DOCS:
+ *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
+ *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
+ */
+export function ensureArtistRotationConfigColumns() {
+  try {
+    const tableExists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
+      .get();
+
+    if (!tableExists) {
+      logger.warn("[ensure] guild_config table does not exist, skipping artist rotation columns");
+      return;
+    }
+
+    const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
+    const colNames = cols.map((c) => c.name);
+
+    if (!colNames.includes("artist_role_id")) {
+      logger.info("[ensure] adding artist_role_id column to guild_config");
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN artist_role_id TEXT`).run();
+    }
+
+    if (!colNames.includes("ambassador_role_id")) {
+      logger.info("[ensure] adding ambassador_role_id column to guild_config");
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN ambassador_role_id TEXT`).run();
+    }
+
+    if (!colNames.includes("server_artist_channel_id")) {
+      logger.info("[ensure] adding server_artist_channel_id column to guild_config");
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN server_artist_channel_id TEXT`).run();
+    }
+
+    if (!colNames.includes("artist_ticket_roles_json")) {
+      logger.info("[ensure] adding artist_ticket_roles_json column to guild_config");
+      // JSON string containing ticket role IDs keyed by art type
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN artist_ticket_roles_json TEXT`).run();
+    }
+
+    logger.info("[ensure] guild_config artist rotation columns ensured");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure artist rotation columns");
+    throw err;
+  }
+}
+
+/**
  * ensureApplicationStaleAlertColumns
  * WHAT: Adds stale_alert_sent and stale_alert_sent_at columns to application table if missing.
  * WHY: Supports 24-hour unclaimed application alert feature that pings Gatekeeper role.

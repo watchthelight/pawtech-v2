@@ -20,7 +20,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
-import { enableForeignKeys, tableExists } from "./lib/helpers.js";
+import { enableForeignKeys, tableExists, recordMigration } from "./lib/helpers.js";
 
 /**
  * Migration: Create health_alerts table
@@ -75,6 +75,9 @@ export function migrate013AddHealthAlertsTable(db: Database): void {
   } else {
     logger.info("[migration 013] health_alerts table already exists, skipping");
   }
+
+  // Record migration
+  recordMigration(db, "013", "add_health_alerts_table");
 
   logger.info("[migration 013] ✅ Complete");
   logger.info("[migration 013] 💡 Health alerts will be populated automatically by scheduler");

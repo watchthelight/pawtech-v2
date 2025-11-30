@@ -35,8 +35,11 @@ const FLAG_RATE_LIMIT_MS = 2000;
 const FLAG_COOLDOWN_TTL_MS = 60 * 60 * 1000; // 1 hour - entries expire after this
 const flagCooldowns = new Map<string, number>();
 
+// Track interval for cleanup on shutdown
+let flagCooldownInterval: NodeJS.Timeout | null = null;
+
 // Cleanup expired entries every 5 minutes
-setInterval(() => {
+flagCooldownInterval = setInterval(() => {
   const now = Date.now();
   let cleaned = 0;
 
@@ -54,6 +57,20 @@ setInterval(() => {
     );
   }
 }, 5 * 60 * 1000);
+flagCooldownInterval.unref();
+
+/**
+ * Cleanup function for graceful shutdown.
+ * Clears the interval and the cooldown map to prevent memory leaks
+ * and allow the process to exit cleanly.
+ */
+export function cleanupFlagCooldowns(): void {
+  if (flagCooldownInterval) {
+    clearInterval(flagCooldownInterval);
+    flagCooldownInterval = null;
+  }
+  flagCooldowns.clear();
+}
 
 export const data = new SlashCommandBuilder()
   .setName("flag")

@@ -55,6 +55,12 @@ vi.mock("../../../src/lib/time.js", () => ({
   nowUtc: vi.fn(() => "2024-01-15T10:00:00.000Z"),
 }));
 
+// Mock canManageRole from roleAutomation
+const mockCanManageRole = vi.hoisted(() => vi.fn());
+vi.mock("../../../src/features/roleAutomation.js", () => ({
+  canManageRole: mockCanManageRole,
+}));
+
 // Import after mocks
 import {
   approveTx,
@@ -276,6 +282,9 @@ describe("approveTx", () => {
 describe("approveFlow", () => {
   describe("successful flow", () => {
     it("fetches member and applies role", async () => {
+      // Pre-flight check passes
+      mockCanManageRole.mockResolvedValue({ canManage: true });
+
       const member = createMockMember({ id: "member-123" });
       const guild = createMockGuild({ member });
       const config = createMockConfig();
@@ -321,30 +330,33 @@ describe("approveFlow", () => {
   });
 
   describe("role assignment failure", () => {
-    it("captures roleError on permission failure", async () => {
-      const permError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
-      const member = createMockMember({
-        id: "member-123",
-        roleAddFails: true,
-        roleError: permError,
+    it("captures roleError on permission failure via pre-flight check", async () => {
+      // Pre-flight check fails - bot cannot manage the role
+      mockCanManageRole.mockResolvedValue({
+        canManage: false,
+        reason: "Role hierarchy violation: bot role (Bot @5) is not above target role (Admin @10)",
       });
+
+      const member = createMockMember({ id: "member-123" });
       const guild = createMockGuild({ member });
       const config = createMockConfig();
 
       const result = await approveFlow(guild, "member-123", config);
 
       expect(result.roleApplied).toBe(false);
-      expect(result.roleError?.code).toBe(50013);
-      expect(result.roleError?.message).toContain("Missing Permissions");
+      expect(result.roleError?.message).toContain("Role hierarchy violation");
+      // Pre-flight check prevents role.add() from being called
+      expect(member.roles.add).not.toHaveBeenCalled();
     });
 
     it("does not report permission errors to Sentry", async () => {
-      const permError = Object.assign(new Error("Missing Permissions"), { code: 50013 });
-      const member = createMockMember({
-        id: "member-123",
-        roleAddFails: true,
-        roleError: permError,
+      // Pre-flight check fails - this is a config error, not a bug
+      mockCanManageRole.mockResolvedValue({
+        canManage: false,
+        reason: "Bot missing MANAGE_ROLES permission",
       });
+
+      const member = createMockMember({ id: "member-123" });
       const guild = createMockGuild({ member });
       const config = createMockConfig();
 
@@ -354,6 +366,9 @@ describe("approveFlow", () => {
     });
 
     it("reports non-permission errors to Sentry", async () => {
+      // Pre-flight check passes but role.add() fails with unexpected error
+      mockCanManageRole.mockResolvedValue({ canManage: true });
+
       const otherError = Object.assign(new Error("Unknown error"), { code: 50000 });
       const member = createMockMember({
         id: "member-123",

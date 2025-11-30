@@ -20,15 +20,10 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { nowUtc } from "../lib/time.js";
 import { isPanicMode } from "./panicStore.js";
+import type { ReviewClaimRow } from "./review/types.js";
 
-/**
- * ReviewClaimRow - Matches database schema for review_claim table
- */
-export type ReviewClaimRow = {
-  app_id: string;
-  reviewer_id: string;
-  claimed_at: number; // Unix epoch seconds
-};
+// Re-export for backward compatibility
+export type { ReviewClaimRow };
 
 /**
  * ClaimError - Typed errors for claim/unclaim operations

@@ -24,7 +24,7 @@ import {
  * Key gotchas:
  * - Response time is measured from app_submitted to claim, NOT from claim to decision
  * - Percentile calculations require multiple data points to be meaningful
- * - The cache has TTL=0 in tests so it always refreshes (production uses longer TTL)
+ * - The cache has TTL=1ms in tests so it always refreshes (production uses longer TTL)
  */
 describe("Mod Performance Engine", () => {
   // Using Date.now() suffix prevents test pollution when running in parallel
@@ -383,14 +383,14 @@ describe("Mod Performance Engine", () => {
 
   /**
    * Cache behavior tests. In production the cache has a 5-minute TTL to avoid
-   * hammering the DB on every leaderboard request. Tests use TTL=0 for determinism.
+   * hammering the DB on every leaderboard request. Tests use TTL=1ms for determinism.
    */
   describe("getCachedMetrics", () => {
     /**
-     * With TTL=0, every call triggers a fresh DB query. This test verifies that
+     * With TTL=1ms, every call triggers a fresh DB query. This test verifies that
      * new data appears immediately rather than being stale-cached.
      */
-    it("should refresh when cache stale (TTL=0 in tests)", async () => {
+    it("should refresh when cache stale (TTL=1ms in tests)", async () => {
       const cacheGuildId = "test-guild-cache-" + Date.now();
       const now = nowUtc();
 
@@ -430,9 +430,10 @@ describe("Mod Performance Engine", () => {
         now + 10
       );
 
-      // With TTL=0, cache is always stale - should auto-refresh
+      // Wait for cache to expire (TTL=1ms), then refresh should pick up new data
+      await new Promise((r) => setTimeout(r, 5));
       const metrics2 = await getCachedMetrics(cacheGuildId);
-      expect(metrics2.length).toBe(2); // Auto-refreshed
+      expect(metrics2.length).toBe(2); // Auto-refreshed after TTL expired
 
       // Clean up
       db.prepare(`DELETE FROM action_log WHERE guild_id = ?`).run(cacheGuildId);

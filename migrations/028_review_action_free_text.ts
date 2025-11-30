@@ -27,6 +27,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
+import { recordMigration } from "./lib/helpers.js";
 
 /**
  * Detects if a table has a CHECK constraint by parsing its CREATE TABLE statement.
@@ -70,6 +71,8 @@ export function migrate028ReviewActionFreeText(db: Database): void {
 
     if (!tableExists) {
       logger.info("[migrate] review_action table does not exist, skipping migration");
+      // Record migration
+      recordMigration(db, "028", "review_action_free_text");
       return;
     }
 
@@ -86,6 +89,8 @@ export function migrate028ReviewActionFreeText(db: Database): void {
     // Check if created_at is already INTEGER (migration already applied)
     if (createdAtCol && createdAtCol.type === "INTEGER") {
       logger.info("[migrate] review_action.created_at already INTEGER, skipping migration");
+      // Record migration
+      recordMigration(db, "028", "review_action_free_text");
       return;
     }
 
@@ -110,17 +115,23 @@ export function migrate028ReviewActionFreeText(db: Database): void {
       // Only convert created_at type (no CHECK to remove)
       logger.info("[migrate] review_action has no CHECK, converting created_at to INTEGER");
       performCreatedAtConversion(db);
+      // Record migration
+      recordMigration(db, "028", "review_action_free_text");
       return;
     }
 
     if (!hasActionCheckConstraint) {
       logger.info("[migrate] review_action already migrated (no CHECK, created_at is INTEGER)");
+      // Record migration
+      recordMigration(db, "028", "review_action_free_text");
       return;
     }
 
     // Perform full migration: remove CHECK + convert created_at
     logger.info("[migrate] review_action CHECK constraint detected, starting copy-swap migration");
     performFullMigration(db);
+    // Record migration
+    recordMigration(db, "028", "review_action_free_text");
   } catch (err) {
     logger.error({ err }, "[migrate] failed to migrate review_action table");
     throw err;

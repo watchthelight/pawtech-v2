@@ -51,6 +51,7 @@ import { ensureDeferred, replyOrEdit, withSql } from "../lib/cmdWrap.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { getQuestions as getQuestionsShared } from "./gate/questions.js";
 import { touchSyncMarker } from "../lib/syncMarker.js";
+import { isPanicMode } from "./panicStore.js";
 
 // Discord modal limits - these are API-enforced, not arbitrary.
 // See: https://discord.com/developers/docs/interactions/message-components#text-inputs
@@ -202,17 +203,20 @@ function getOrCreateDraft(db: BetterSqliteDatabase, guildId: string, userId: str
   const code = shortCode(id);
 
   // Delete any resolved application with the same shortCode to allow reuse
-  // Only deletes terminal statuses (approved, rejected, kicked, perm_rejected)
+  // Only deletes terminal statuses (approved, rejected, kicked)
   // Active apps (draft, submitted, needs_info) are never deleted
+  // Note: Permanently rejected apps have status='rejected' with permanently_rejected=1
   const resolvedApps = db.prepare(
     `SELECT id FROM application
      WHERE guild_id = ?
-     AND status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+     AND status IN ('approved', 'rejected', 'kicked')`
   ).all(guildId) as Array<{ id: string }>;
 
+  // Prepare statement once outside loop to avoid N+1 query pattern
+  const deleteStmt = db.prepare(`DELETE FROM application WHERE id = ?`);
   for (const app of resolvedApps) {
     if (shortCode(app.id) === code) {
-      db.prepare(`DELETE FROM application WHERE id = ?`).run(app.id);
+      deleteStmt.run(app.id);
       break; // Only one collision possible per code
     }
   }
@@ -1082,6 +1086,24 @@ export async function handleGateModalSubmit(
 
   const guildId = interaction.guildId;
   const userId = interaction.user.id;
+
+  // Panic mode check - block all new submissions during emergencies
+  // This prevents the review queue from being flooded while staff handles an incident
+  ctx.step("panic_check");
+  if (isPanicMode(guildId)) {
+    logger.warn({
+      evt: "gate_submission_blocked_panic",
+      guildId,
+      userId,
+    }, "[gate] Submission blocked - panic mode active");
+
+    await replyOrEdit(interaction, {
+      content: "Applications are temporarily paused. Please try again later.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const appIdMatch = interaction.customId.match(/^v1:modal:([^:]+):p/);
   const appId = appIdMatch ? appIdMatch[1] : null;
 

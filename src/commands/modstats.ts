@@ -16,6 +16,7 @@ import {
   SlashCommandBuilder,
   EmbedBuilder,
   AttachmentBuilder,
+  PermissionFlagsBits,
 } from "discord.js";
 import { db } from "../db/db.js";
 import { nowUtc } from "../lib/time.js";
@@ -23,10 +24,12 @@ import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { generateLeaderboardImage, type ModStats } from "../lib/leaderboardImage.js";
 import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
+import { requireStaff } from "../lib/config.js";
 
 export const data = new SlashCommandBuilder()
   .setName("modstats")
   .setDescription("View moderator analytics and leaderboards")
+  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
   .addSubcommand((sub) =>
     sub
       .setName("leaderboard")
@@ -565,8 +568,11 @@ const resetRateLimiter = new Map<string, number>();
 const RESET_RATE_LIMIT_MS = 30000; // 30 seconds
 const RESET_COOLDOWN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours - entries expire after this
 
+// Track interval for cleanup on shutdown
+let resetRateLimiterInterval: NodeJS.Timeout | null = null;
+
 // Cleanup expired entries every hour
-setInterval(() => {
+resetRateLimiterInterval = setInterval(() => {
   const now = Date.now();
   for (const [userId, timestamp] of resetRateLimiter) {
     if (now - timestamp > RESET_COOLDOWN_TTL_MS) {
@@ -574,6 +580,20 @@ setInterval(() => {
     }
   }
 }, 60 * 60 * 1000);
+resetRateLimiterInterval.unref();
+
+/**
+ * Cleanup function for graceful shutdown.
+ * Clears the interval and the rate limiter map to prevent memory leaks
+ * and allow the process to exit cleanly.
+ */
+export function cleanupModstatsRateLimiter(): void {
+  if (resetRateLimiterInterval) {
+    clearInterval(resetRateLimiterInterval);
+    resetRateLimiterInterval = null;
+  }
+  resetRateLimiter.clear();
+}
 
 /**
  * WHAT: Handle /modstats reset subcommand.
@@ -780,6 +800,10 @@ async function handleExport(interaction: ChatInputCommandInteraction): Promise<v
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
   const { interaction } = ctx;
+
+  // Require staff permissions for all modstats subcommands
+  if (!requireStaff(interaction)) return;
+
   const subcommand = interaction.options.getSubcommand();
 
   if (subcommand === "leaderboard") {

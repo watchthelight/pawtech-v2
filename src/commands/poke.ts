@@ -18,6 +18,7 @@ import {
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { isOwner } from "../utils/owner.js";
 import { logger } from "../lib/logger.js";
+import { getConfig } from "../lib/config.js";
 
 export const data = new SlashCommandBuilder()
   .setName("poke")
@@ -27,14 +28,16 @@ export const data = new SlashCommandBuilder()
   );
 
 /**
- * Category IDs where pokes are sent. Hardcoded because these represent
- * specific organizational categories (staff areas, mod channels, etc.).
- * If you need to add/remove categories, update this array manually.
+ * Fallback category IDs where pokes are sent. Used when no guild-specific
+ * config is set. These represent specific organizational categories
+ * (staff areas, mod channels, etc.) for the primary guild.
  *
  * Gotcha: If a category is deleted on Discord, it just silently won't
  * match any channels - no error thrown.
+ *
+ * To configure per-guild: /config poke add-category <category>
  */
-const POKE_CATEGORY_IDS = [
+const FALLBACK_CATEGORY_IDS = [
   "896070891539169316",
   "1393461646718140436",
   "896070891174260765",
@@ -48,10 +51,70 @@ const POKE_CATEGORY_IDS = [
 ];
 
 /**
- * Excluded channel - typically a rules or announcements channel where
- * poke spam would be inappropriate.
+ * Fallback excluded channel - typically a rules or announcements channel where
+ * poke spam would be inappropriate. Used when no guild-specific config is set.
+ *
+ * To configure per-guild: /config poke exclude-channel <channel>
  */
-const EXCLUDED_CHANNEL_ID = "896958848009637929";
+const FALLBACK_EXCLUDED_CHANNEL_ID = "896958848009637929";
+
+/**
+ * getPokeConfig
+ * WHAT: Returns poke category IDs and excluded channel IDs for a guild.
+ * WHY: Allows per-guild configuration with fallback to hardcoded defaults.
+ * PARAMS: guildId - the guild to get config for
+ * RETURNS: { categoryIds: string[], excludedChannelIds: string[] }
+ * DOCS: Issue #79 - docs/roadmap/079-move-poke-category-ids-to-config.md
+ */
+function getPokeConfig(guildId: string): { categoryIds: string[]; excludedChannelIds: string[] } {
+  const cfg = getConfig(guildId);
+
+  let categoryIds: string[];
+  if (cfg?.poke_category_ids_json) {
+    try {
+      categoryIds = JSON.parse(cfg.poke_category_ids_json);
+      if (!Array.isArray(categoryIds)) {
+        logger.warn(
+          { guildId, value: cfg.poke_category_ids_json },
+          "[poke] Invalid poke_category_ids_json (not an array), using fallback"
+        );
+        categoryIds = FALLBACK_CATEGORY_IDS;
+      }
+    } catch {
+      logger.warn(
+        { guildId, value: cfg.poke_category_ids_json },
+        "[poke] Failed to parse poke_category_ids_json, using fallback"
+      );
+      categoryIds = FALLBACK_CATEGORY_IDS;
+    }
+  } else {
+    categoryIds = FALLBACK_CATEGORY_IDS;
+  }
+
+  let excludedChannelIds: string[];
+  if (cfg?.poke_excluded_channel_ids_json) {
+    try {
+      excludedChannelIds = JSON.parse(cfg.poke_excluded_channel_ids_json);
+      if (!Array.isArray(excludedChannelIds)) {
+        logger.warn(
+          { guildId, value: cfg.poke_excluded_channel_ids_json },
+          "[poke] Invalid poke_excluded_channel_ids_json (not an array), using fallback"
+        );
+        excludedChannelIds = [FALLBACK_EXCLUDED_CHANNEL_ID];
+      }
+    } catch {
+      logger.warn(
+        { guildId, value: cfg.poke_excluded_channel_ids_json },
+        "[poke] Failed to parse poke_excluded_channel_ids_json, using fallback"
+      );
+      excludedChannelIds = [FALLBACK_EXCLUDED_CHANNEL_ID];
+    }
+  } else {
+    excludedChannelIds = [FALLBACK_EXCLUDED_CHANNEL_ID];
+  }
+
+  return { categoryIds, excludedChannelIds };
+}
 
 /**
  * execute
@@ -84,16 +147,20 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       throw new Error("This command can only be used in a guild");
     }
 
+    // Get guild-specific poke config (falls back to hardcoded defaults)
+    const pokeConfig = getPokeConfig(guild.id);
+    const { categoryIds, excludedChannelIds } = pokeConfig;
+
     // Fetch all channels - discord.js v14 requires await on fetch()
     // Returns Collection<Snowflake, GuildBasedChannel | null> from API
     const channels = await guild.channels.fetch();
 
     const targetChannels = channels.filter((channel) => {
       if (!channel) return false;
-      if (channel.id === EXCLUDED_CHANNEL_ID) return false;
+      if (excludedChannelIds.includes(channel.id)) return false;
       if (channel.type !== ChannelType.GuildText) return false;
       if (!channel.parentId) return false;
-      return POKE_CATEGORY_IDS.includes(channel.parentId);
+      return categoryIds.includes(channel.parentId);
     });
 
     const successfulPokes: string[] = [];

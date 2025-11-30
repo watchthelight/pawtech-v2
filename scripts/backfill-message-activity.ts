@@ -59,6 +59,34 @@ interface ProcessChannelOptions {
 }
 
 /**
+ * Validate a Discord snowflake ID (17-19 digits)
+ */
+function validateDiscordId(id: string | undefined, name: string): string {
+  if (!id) {
+    console.error(`Error: ${name} is required`);
+    process.exit(1);
+  }
+  if (!/^\d{17,19}$/.test(id)) {
+    console.error(`Error: ${name} must be a valid Discord snowflake (17-19 digits)`);
+    process.exit(1);
+  }
+  return id;
+}
+
+/**
+ * Validate a positive integer within a range
+ */
+function validatePositiveInt(value: string | undefined, name: string, min: number, max: number, defaultValue: number): number {
+  if (!value) return defaultValue;
+  const num = parseInt(value, 10);
+  if (isNaN(num) || num < min || num > max) {
+    console.error(`Error: ${name} must be between ${min} and ${max}`);
+    process.exit(1);
+  }
+  return num;
+}
+
+/**
  * Draw a progress bar in the console
  */
 function drawProgressBar(current: number, total: number, channelName: string, messages: number): void {
@@ -205,8 +233,9 @@ async function processChannel(options: ProcessChannelOptions): Promise<number> {
 }
 
 async function main() {
-  const guildId = process.argv[2];
-  const weeks = parseInt(process.argv[3] || '8', 10);
+  // Validate required arguments
+  const guildId = validateDiscordId(process.argv[2], 'guildId');
+  const weeks = validatePositiveInt(process.argv[3], 'weeks', 1, 8, 8);
   const dryRun = process.argv.includes('--dry-run');
 
   // Parse optional arguments
@@ -214,7 +243,13 @@ async function main() {
   const maxPerChannel = maxPerChannelArg ? parseInt(maxPerChannelArg.split('=')[1], 10) : Infinity;
 
   const concurrencyArg = process.argv.find(arg => arg.startsWith('--concurrency='));
-  const concurrency = concurrencyArg ? parseInt(concurrencyArg.split('=')[1], 10) : 1; // Default to sequential (1)
+  const concurrency = validatePositiveInt(
+    concurrencyArg ? concurrencyArg.split('=')[1] : undefined,
+    'concurrency',
+    1,
+    20,
+    1
+  );
 
   // Smart sampling options (enabled by default for channels with 5000+ messages)
   const smartSampling = !process.argv.includes('--no-smart-sampling');
@@ -224,21 +259,6 @@ async function main() {
   // Special 20% sampling for main-chat (290k messages)
   const mainChatId = '896070889462976608';
   const mainChatSamplingRate = 0.2; // 20% = keep 1 in 5 messages
-
-  if (!guildId) {
-    console.error('Usage: tsx scripts/backfill-message-activity.ts <guildId> [weeks] [--dry-run] [--max-per-channel=N] [--concurrency=N]');
-    process.exit(1);
-  }
-
-  if (weeks < 1 || weeks > 8) {
-    console.error('Error: weeks parameter must be between 1 and 8');
-    process.exit(1);
-  }
-
-  if (concurrency < 1 || concurrency > 20) {
-    console.error('Error: concurrency must be between 1 and 20');
-    process.exit(1);
-  }
 
   // Check if table exists
   const tableCheck = db

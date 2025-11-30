@@ -19,6 +19,7 @@ import { captureException } from "../../../lib/sentry.js";
 import type { GuildConfig } from "../../../lib/config.js";
 import { nowUtc } from "../../../lib/time.js";
 import type { ApplicationRow, TxResult, ApproveFlowResult } from "../types.js";
+import { canManageRole } from "../../roleAutomation.js";
 
 // ===== Constants =====
 
@@ -129,30 +130,40 @@ export async function approveFlow(
       ).catch(() => null));
     if (role) {
       if (!result.member.roles.cache.has(role.id)) {
-        try {
-          // Bot must be above the target role; otherwise 50013 Missing Permissions.
-          // Permissions model: https://discord.com/developers/docs/topics/permissions
-          await withTimeout(
-            result.member.roles.add(role, "Gate approval"),
-            FLOW_TIMEOUT_MS,
-            "approveFlow:addRole"
-          );
-          result.roleApplied = true;
-        } catch (err) {
-          const code = (err as { code?: number }).code;
-          const message = err instanceof Error ? err.message : undefined;
-          result.roleError = { code, message };
+        // Pre-flight permission check: verify bot can manage this role before attempting
+        const roleCheck = await canManageRole(guild, role.id);
+        if (!roleCheck.canManage) {
+          result.roleApplied = false;
+          result.roleError = { message: roleCheck.reason };
           logger.warn(
-            { err, guildId: guild.id, memberId, roleId },
-            "Failed to grant approval role"
+            { guildId: guild.id, memberId, roleId: role.id, reason: roleCheck.reason },
+            "[approve] Cannot manage accepted role - check role hierarchy"
           );
-          if (!isMissingPermissionError(err)) {
-            captureException(err, {
-              area: "approveFlow:grantRole",
-              guildId: guild.id,
-              userId: memberId,
-              roleId,
-            });
+          // Don't attempt the operation - it would fail with 50013
+        } else {
+          try {
+            await withTimeout(
+              result.member.roles.add(role, "Gate approval"),
+              FLOW_TIMEOUT_MS,
+              "approveFlow:addRole"
+            );
+            result.roleApplied = true;
+          } catch (err) {
+            const code = (err as { code?: number }).code;
+            const message = err instanceof Error ? err.message : undefined;
+            result.roleError = { code, message };
+            logger.warn(
+              { err, guildId: guild.id, memberId, roleId },
+              "Failed to grant approval role"
+            );
+            if (!isMissingPermissionError(err)) {
+              captureException(err, {
+                area: "approveFlow:grantRole",
+                guildId: guild.id,
+                userId: memberId,
+                roleId,
+              });
+            }
           }
         }
       } else {

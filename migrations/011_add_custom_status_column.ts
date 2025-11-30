@@ -12,7 +12,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
-import { columnExists, enableForeignKeys } from "./lib/helpers.js";
+import { columnExists, enableForeignKeys, recordMigration } from "./lib/helpers.js";
 
 /**
  * Migration: Add custom_status column to bot_status
@@ -39,6 +39,9 @@ export function migrate011AddCustomStatusColumn(db: Database): void {
   // Making activity_type and activity_text nullable requires recreating the table
   // For existing installations, NULL values will work fine
   // New installations will get the correct schema from statusStore.ensureBotStatusSchema()
+
+  // Record migration
+  recordMigration(db, "011", "add_custom_status_column");
 
   logger.info("[migration 011] ✅ Complete");
 }

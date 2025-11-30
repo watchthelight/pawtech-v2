@@ -103,6 +103,49 @@ export async function canManageRole(guild: Guild, roleId: string): Promise<{
   return { canManage: true };
 }
 
+/**
+ * Synchronous check if the bot can manage a specific role (using Role object directly)
+ * @returns object with canManage boolean and optional reason
+ *
+ * Use this when you already have the Role object (e.g., from command options).
+ * This avoids redundant cache lookups and is synchronous since no fetching is needed.
+ */
+export function canManageRoleSync(guild: Guild, role: Role): {
+  canManage: boolean;
+  reason?: string;
+} {
+  const botMember = guild.members.me;
+  if (!botMember) {
+    return { canManage: false, reason: "Bot member not found in guild" };
+  }
+
+  // Check MANAGE_ROLES permission
+  if (!botMember.permissions.has(PermissionFlagsBits.ManageRoles)) {
+    return { canManage: false, reason: "Bot lacks Manage Roles permission" };
+  }
+
+  // Check for @everyone role (position 0)
+  if (role.id === guild.id) {
+    return { canManage: false, reason: "@everyone role cannot be assigned" };
+  }
+
+  // Check for managed roles (bot/integration roles)
+  if (role.managed) {
+    return { canManage: false, reason: "This is a managed role (bot/integration) and cannot be assigned manually" };
+  }
+
+  // Check role hierarchy
+  const botHighestRole = botMember.roles.highest;
+  if (botHighestRole.position <= role.position) {
+    return {
+      canManage: false,
+      reason: `Role is at position ${role.position}, but bot's highest role (${botHighestRole.name}) is at position ${botHighestRole.position}. The role must be below the bot's highest role.`,
+    };
+  }
+
+  return { canManage: true };
+}
+
 // ============================================================================
 // Audit Trail Logging
 // ============================================================================

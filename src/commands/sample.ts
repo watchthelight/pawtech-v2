@@ -124,19 +124,24 @@ async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
 
   // Build claim data. We always show a claimed state because that's the more
   // interesting UI to preview (shows the reviewer name, claim duration, etc.)
+  const claimedAtTimestamp = String(Math.floor(Date.now() / 1000) - 60);
   const sampleClaim: ReviewClaimRow | null = claimedByOverride
     ? {
+        app_id: sampleApp.id,
         reviewer_id: claimedByOverride.id,
-        claimed_at: Math.floor(Date.now() / 1000) - 60,
+        claimed_at: claimedAtTimestamp,
       }
     : {
+        app_id: sampleApp.id,
         reviewer_id: interaction.user.id,
-        claimed_at: Math.floor(Date.now() / 1000) - 60,
+        claimed_at: claimedAtTimestamp,
       };
 
   // Build avatar scan data
   const sampleAvatarScan: AvatarScanRow = {
     finalPct: 0,
+    nsfwScore: null,
+    edgeScore: 0,
     furryScore: 0.0,
     scalieScore: 0.0,
     reason: "none",

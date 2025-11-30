@@ -60,9 +60,28 @@ export type ReviewActionSnapshot = {
 // ===== Review Claim Types =====
 
 export type ReviewClaimRow = {
+  app_id: string;
   reviewer_id: string;
-  claimed_at: string;
+  claimed_at: string; // ISO timestamp string (stored as TEXT in SQLite)
 };
+
+/**
+ * Convert claimed_at string to Date object
+ * @param claimed_at - ISO timestamp string from database
+ * @returns Date object
+ */
+export function claimedAtToDate(claimed_at: string): Date {
+  return new Date(claimed_at);
+}
+
+/**
+ * Convert claimed_at string to Unix epoch seconds
+ * @param claimed_at - ISO timestamp string from database
+ * @returns Unix epoch seconds
+ */
+export function claimedAtToEpoch(claimed_at: string): number {
+  return Math.floor(new Date(claimed_at).getTime() / 1000);
+}
 
 // ===== Review Card Types =====
 
@@ -89,12 +108,16 @@ export type ReviewCardRow = {
 
 // ===== Avatar Scan Types =====
 
+/**
+ * UI representation of avatar scan results (camelCase).
+ * For database row representation, see AvatarScanDbRow in src/features/avatarScan.ts
+ */
 export type AvatarScanRow = {
   finalPct: number;
   nsfwScore: number | null;
   edgeScore: number;
-  furry_score: number;
-  scalie_score: number;
+  furryScore: number;
+  scalieScore: number;
   reason: string;
   evidence: {
     hard: Array<{ tag: string; p: number }>;

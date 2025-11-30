@@ -174,6 +174,13 @@ get_size() {
 # DB SYNC (REMOTE-PREFERRED)
 # ============================================================================
 sync_db_remote_preferred() {
+    # Cleanup trap for temp files on error
+    TEMP_DB=""
+    cleanup() {
+        [[ -n "$TEMP_DB" && -f "$TEMP_DB" ]] && rm -f "$TEMP_DB"
+    }
+    trap cleanup EXIT
+
     echo ""
     echo -e "${BLUE}=== DB SYNC (REMOTE-PREFERRED) ===${NC}"
     echo "[sync] Pulling remote database to local (default behavior)..."
@@ -272,10 +279,18 @@ sync_db_remote_preferred() {
 
     # Step 0: Verify remote database integrity BEFORE pulling
     echo "[sync] Verifying remote database integrity..."
-    if ssh -o ConnectTimeout=5 -o BatchMode=yes "$REMOTE_ALIAS" "cd ${REMOTE_PATH} 2>/dev/null && timeout 10 node scripts/verify-db-integrity.js ${DB_REMOTE} 2>/dev/null" &>/dev/null; then
+    VERIFY_RESULT=$(ssh -o ConnectTimeout=5 -o BatchMode=yes "$REMOTE_ALIAS" "cd ${REMOTE_PATH} 2>/dev/null && timeout 10 node scripts/verify-db-integrity.js ${DB_REMOTE} 2>&1" 2>&1)
+    VERIFY_EXIT=$?
+
+    if [[ $VERIFY_EXIT -eq 255 ]]; then
+        echo "[sync] Remote verification unavailable (SSH issue) - will verify after download"
+    elif [[ $VERIFY_EXIT -eq 0 ]]; then
         echo -e "${GREEN}[sync] ✓ Remote database passed integrity check${NC}"
     else
-        echo "[sync] Remote verification unavailable or failed - will verify after download"
+        echo -e "${RED}[ERROR] Remote database failed integrity check:${NC}"
+        echo "$VERIFY_RESULT"
+        echo -e "${RED}Aborting sync to prevent overwriting local database with corrupted remote.${NC}"
+        exit 1
     fi
 
     # Step 1: Checkpoint the WAL on remote
@@ -338,7 +353,15 @@ push_db_to_remote() {
     if [[ "$PM2_RUNNING" -gt 0 ]]; then
         echo "[sync] Remote PM2 process is running - stopping to prevent corruption..."
         ssh "$REMOTE_ALIAS" "bash -lc 'pm2 stop ${PM2_NAME}'" &>/dev/null || true
-        echo "[sync] Remote process stopped"
+
+        # Wait and verify process stopped
+        sleep 2
+        STILL_RUNNING=$(ssh -o ConnectTimeout=5 "$REMOTE_ALIAS" "bash -lc 'pm2 jlist 2>/dev/null | grep -c \"\\\"status\\\":\\\"online\\\"\" || echo 0'" 2>/dev/null || echo "0")
+        if [[ "$STILL_RUNNING" -gt 0 ]]; then
+            echo -e "${RED}[ERROR] PM2 process didn't stop cleanly. Aborting to prevent corruption.${NC}"
+            exit 1
+        fi
+        echo "[sync] Remote process stopped and verified"
     else
         echo "[sync] Remote PM2 process not running (safe to push)"
     fi

@@ -18,8 +18,10 @@
 
 import http from "node:http";
 import { URL, URLSearchParams } from "node:url";
+import { randomBytes } from "node:crypto";
 import dotenv from "dotenv";
 import path from "node:path";
+import { logger } from "../lib/logger.js";
 
 // Load environment
 dotenv.config({ path: path.join(process.cwd(), ".env") });
@@ -32,27 +34,174 @@ const REDIRECT_URI = process.env.LINKED_ROLES_REDIRECT_URI?.trim() ?? `http://lo
 
 // Validate required env vars
 if (!CLIENT_ID) {
-  console.error("Missing CLIENT_ID in .env");
+  logger.error({ requiredVar: "CLIENT_ID" }, "[linkedRoles] Missing required environment variable");
   process.exit(1);
 }
 if (!CLIENT_SECRET) {
-  console.error("Missing DISCORD_CLIENT_SECRET in .env");
-  console.error("Get this from Discord Developer Portal → Your App → OAuth2 → Client Secret");
+  logger.error(
+    { requiredVar: "DISCORD_CLIENT_SECRET", hint: "Get this from Discord Developer Portal -> Your App -> OAuth2 -> Client Secret" },
+    "[linkedRoles] Missing required environment variable"
+  );
   process.exit(1);
 }
 
 // Discord API base
 const DISCORD_API = "https://discord.com/api/v10";
 
+// CSRF state store for OAuth2 flow
+// Bounded to prevent memory exhaustion - 1000 concurrent OAuth flows is plenty
+const STATE_STORE_MAX_SIZE = 1000;
+const stateStore = new Map<string, { created: number }>();
+
+// ===== Rate Limiting =====
+
+interface RateLimitEntry {
+  count: number;
+  resetAt: number;
+}
+
+// Rate limit constants - defined locally since this is a standalone server
+// and doesn't import from ../lib/constants.ts to keep dependencies minimal
+const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
+const RATE_LIMIT_MAX_REQUESTS = 10;
+const OAUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
+const OAUTH_RATE_LIMIT_MAX_REQUESTS = 5;
+const STATE_TOKEN_EXPIRY_MS = 10 * 60 * 1000; // 10 minutes
+const CLEANUP_INTERVAL_MS = 60 * 1000; // 1 minute
+
+// General rate limit for all endpoints
+const RATE_LIMIT = {
+  windowMs: RATE_LIMIT_WINDOW_MS,
+  maxRequests: RATE_LIMIT_MAX_REQUESTS,
+};
+
+// Stricter rate limit for OAuth endpoints
+const OAUTH_RATE_LIMIT = {
+  windowMs: OAUTH_RATE_LIMIT_WINDOW_MS,
+  maxRequests: OAUTH_RATE_LIMIT_MAX_REQUESTS,
+};
+
+// Separate stores for general and OAuth rate limits
+// Bounded to prevent memory exhaustion from unique IPs
+const RATE_LIMIT_MAX_SIZE = 10000;
+const rateLimits = new Map<string, RateLimitEntry>();
+const oauthRateLimits = new Map<string, RateLimitEntry>();
+
 /**
- * Generate Discord OAuth2 authorization URL
+ * Check if a request from the given IP is within rate limits.
+ * Returns true if allowed, false if rate limited.
+ */
+function checkRateLimit(
+  ip: string,
+  store: Map<string, RateLimitEntry>,
+  config: { windowMs: number; maxRequests: number }
+): boolean {
+  const now = Date.now();
+  const entry = store.get(ip);
+
+  if (!entry || now > entry.resetAt) {
+    // Enforce size limit before adding new entry
+    if (!store.has(ip)) {
+      evictOldestEntries(store, RATE_LIMIT_MAX_SIZE - 1);
+    }
+    store.set(ip, { count: 1, resetAt: now + config.windowMs });
+    return true;
+  }
+
+  if (entry.count >= config.maxRequests) {
+    return false;
+  }
+
+  entry.count++;
+  return true;
+}
+
+/**
+ * Send a 429 Too Many Requests response
+ */
+function sendRateLimitResponse(res: http.ServerResponse, retryAfterSeconds: number): void {
+  res.writeHead(429, {
+    "Content-Type": "text/plain",
+    "Retry-After": String(retryAfterSeconds),
+  });
+  res.end("Too Many Requests. Please try again later.");
+}
+
+/**
+ * Evict oldest entries from a Map when it exceeds maxSize
+ */
+function evictOldestEntries<K, V extends { created?: number; resetAt?: number }>(
+  map: Map<K, V>,
+  maxSize: number
+): void {
+  if (map.size <= maxSize) return;
+
+  // Sort by age (oldest first) and remove excess
+  const entries = [...map.entries()].sort((a, b) => {
+    const timeA = a[1].created ?? a[1].resetAt ?? 0;
+    const timeB = b[1].created ?? b[1].resetAt ?? 0;
+    return timeA - timeB;
+  });
+
+  const toRemove = map.size - maxSize;
+  for (let i = 0; i < toRemove; i++) {
+    map.delete(entries[i][0]);
+  }
+}
+
+/**
+ * Generate a cryptographically secure state token for CSRF protection
+ */
+function generateState(): string {
+  const state = randomBytes(32).toString("hex");
+
+  // Enforce size limit before adding new entry
+  evictOldestEntries(stateStore, STATE_STORE_MAX_SIZE - 1);
+
+  stateStore.set(state, { created: Date.now() });
+  return state;
+}
+
+/**
+ * Validate and consume a state token (single-use, expires after 10 minutes)
+ */
+function validateState(state: string): boolean {
+  const entry = stateStore.get(state);
+  if (!entry) return false;
+
+  // Expire after configured duration
+  if (Date.now() - entry.created > STATE_TOKEN_EXPIRY_MS) {
+    stateStore.delete(state);
+    return false;
+  }
+
+  stateStore.delete(state); // One-time use
+  return true;
+}
+
+/**
+ * Escape HTML special characters to prevent XSS attacks
+ */
+function escapeHtml(unsafe: string): string {
+  return unsafe
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&#039;");
+}
+
+/**
+ * Generate Discord OAuth2 authorization URL with CSRF state parameter
  */
 function getAuthorizationUrl(): string {
+  const state = generateState();
   const params = new URLSearchParams({
     client_id: CLIENT_ID!,
     redirect_uri: REDIRECT_URI,
     response_type: "code",
     scope: "identify role_connections.write",
+    state,
   });
   return `https://discord.com/oauth2/authorize?${params.toString()}`;
 }
@@ -80,7 +229,7 @@ async function exchangeCode(code: string): Promise<{ access_token: string; token
     throw new Error(`Token exchange failed: ${response.status} ${error}`);
   }
 
-  return response.json();
+  return response.json() as Promise<{ access_token: string; token_type: string }>;
 }
 
 /**
@@ -95,7 +244,7 @@ async function getCurrentUser(accessToken: string): Promise<{ id: string; userna
     throw new Error(`Failed to get user: ${response.status}`);
   }
 
-  return response.json();
+  return response.json() as Promise<{ id: string; username: string; global_name?: string }>;
 }
 
 /**
@@ -113,8 +262,7 @@ async function setRoleConnection(
     metadata,
   };
 
-  console.log("Sending role connection request:");
-  console.log("  Body:", JSON.stringify(body));
+  logger.debug({ body }, "[linkedRoles] Sending role connection request");
 
   const response = await fetch(`${DISCORD_API}/users/@me/applications/${CLIENT_ID}/role-connection`, {
     method: "PUT",
@@ -126,8 +274,7 @@ async function setRoleConnection(
   });
 
   const responseData = await response.text();
-  console.log("Role connection API response:", response.status);
-  console.log("  Response:", responseData);
+  logger.debug({ status: response.status, responseData }, "[linkedRoles] Role connection API response");
 
   if (!response.ok) {
     throw new Error(`Failed to set role connection: ${response.status} ${responseData}`);
@@ -135,10 +282,15 @@ async function setRoleConnection(
 }
 
 /**
- * Simple HTML response helper
+ * Simple HTML response helper with security headers
  */
 function sendHtml(res: http.ServerResponse, status: number, html: string) {
-  res.writeHead(status, { "Content-Type": "text/html; charset=utf-8" });
+  res.writeHead(status, {
+    "Content-Type": "text/html; charset=utf-8",
+    "X-Content-Type-Options": "nosniff",
+    "X-Frame-Options": "DENY",
+    "Content-Security-Policy": "default-src 'none'; style-src 'unsafe-inline';",
+  });
   res.end(html);
 }
 
@@ -148,8 +300,16 @@ function sendHtml(res: http.ServerResponse, status: number, html: string) {
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
   const pathname = url.pathname;
+  const clientIp = req.socket.remoteAddress || "unknown";
 
-  console.log(`[${new Date().toISOString()}] ${req.method} ${pathname}`);
+  logger.info({ method: req.method, pathname }, "[linkedRoles] HTTP request");
+
+  // Apply general rate limiting to all requests
+  if (!checkRateLimit(clientIp, rateLimits, RATE_LIMIT)) {
+    logger.warn({ clientIp, pathname }, "[linkedRoles] Rate limit exceeded (general)");
+    sendRateLimitResponse(res, 60);
+    return;
+  }
 
   // Health check
   if (pathname === "/" || pathname === "/health") {
@@ -168,13 +328,20 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
   // OAuth2 flow - handles both start and callback on same route
   if (pathname === "/linked-roles" || pathname === "/linked-roles/callback") {
+    // Apply stricter OAuth rate limiting
+    if (!checkRateLimit(clientIp, oauthRateLimits, OAUTH_RATE_LIMIT)) {
+      logger.warn({ clientIp, pathname }, "[linkedRoles] Rate limit exceeded (OAuth)");
+      sendRateLimitResponse(res, 300); // 5 minutes
+      return;
+    }
+
     const code = url.searchParams.get("code");
     const error = url.searchParams.get("error");
 
     // If no code/error, this is the start of the flow - redirect to Discord
     if (!code && !error) {
       const authUrl = getAuthorizationUrl();
-      console.log(`Redirecting to Discord OAuth2...`);
+      logger.info("[linkedRoles] Redirecting to Discord OAuth2");
       res.writeHead(302, { Location: authUrl });
       res.end();
       return;
@@ -182,13 +349,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 
     // Handle OAuth2 error
     if (error) {
-      console.error(`OAuth2 error: ${error}`);
+      logger.error({ error }, "[linkedRoles] OAuth2 error");
       sendHtml(res, 400, `
         <html>
           <head><title>Authorization Failed</title></head>
           <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
             <h1>Authorization Failed</h1>
-            <p>Error: ${error}</p>
+            <p>Error: ${escapeHtml(error)}</p>
             <p><a href="/linked-roles">Try again</a></p>
           </body>
         </html>
@@ -196,28 +363,52 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       return;
     }
 
+    // Validate CSRF state parameter
+    const state = url.searchParams.get("state");
+    if (!state || !validateState(state)) {
+      logger.warn({ stateStatus: state ? "expired/invalid" : "missing" }, "[linkedRoles] Invalid or expired state parameter");
+      sendHtml(res, 400, `
+        <html>
+          <head><title>Invalid Request</title></head>
+          <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
+            <h1>Invalid or Expired State Parameter</h1>
+            <p>This authorization request has expired or is invalid. Please try again.</p>
+            <p><a href="/linked-roles">Start over</a></p>
+          </body>
+        </html>
+      `);
+      return;
+    }
+
     // Handle OAuth2 callback with code
+    // At this point, code is guaranteed to be a string (we've handled !code && !error, and error cases)
+    if (!code) {
+      // This should never happen due to the flow above, but TypeScript needs it
+      sendHtml(res, 400, "<html><body>Invalid request: missing code</body></html>");
+      return;
+    }
+
     try {
-      console.log("Exchanging code for token...");
+      logger.debug("[linkedRoles] Exchanging code for token");
       const tokens = await exchangeCode(code);
 
-      console.log("Fetching user info...");
+      logger.debug("[linkedRoles] Fetching user info");
       const user = await getCurrentUser(tokens.access_token);
-      console.log(`User: ${user.global_name ?? user.username} (${user.id})`);
+      logger.info({ username: user.global_name ?? user.username, userId: user.id }, "[linkedRoles] User authenticated");
 
-      console.log("Setting role connection metadata...");
+      logger.debug("[linkedRoles] Setting role connection metadata");
       await setRoleConnection(tokens.access_token, user.global_name ?? user.username, {
         is_developer: 1, // Boolean true = 1
       });
 
-      console.log("Success! Role connection set.");
+      logger.info({ username: user.global_name ?? user.username }, "[linkedRoles] Role connection set successfully");
 
       sendHtml(res, 200, `
         <html>
           <head><title>Success!</title></head>
           <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #1e402f;">Success!</h1>
-            <p>Welcome, <strong>${user.global_name ?? user.username}</strong>!</p>
+            <p>Welcome, <strong>${escapeHtml(user.global_name ?? user.username)}</strong>!</p>
             <p>Your role connection has been set. You are now verified as a <strong>Server Developer</strong>.</p>
 
             <h2>What happens now?</h2>
@@ -240,13 +431,13 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         </html>
       `);
     } catch (err) {
-      console.error("Callback error:", err);
+      logger.error({ err }, "[linkedRoles] Callback error");
       sendHtml(res, 500, `
         <html>
           <head><title>Error</title></head>
           <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
             <h1 style="color: #c00;">Error</h1>
-            <p>${err instanceof Error ? err.message : "Unknown error"}</p>
+            <p>${escapeHtml(err instanceof Error ? err.message : "Unknown error")}</p>
             <p><a href="/linked-roles">Try again</a></p>
           </body>
         </html>
@@ -270,22 +461,57 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
 // Create and start server
 const server = http.createServer((req, res) => {
   handleRequest(req, res).catch((err) => {
-    console.error("Unhandled error:", err);
+    logger.error({ err }, "[linkedRoles] Unhandled error");
     res.writeHead(500);
     res.end("Internal Server Error");
   });
 });
 
+// Periodic cleanup of expired state tokens and rate limit entries (every minute)
+// .unref() allows Node.js to exit even if this interval is still pending
+const cleanupInterval = setInterval(() => {
+  const now = Date.now();
+
+  // Clean up expired state tokens
+  for (const [state, entry] of stateStore) {
+    if (now - entry.created > STATE_TOKEN_EXPIRY_MS) {
+      stateStore.delete(state);
+    }
+  }
+
+  // Clean up expired rate limit entries
+  for (const [ip, entry] of rateLimits) {
+    if (now > entry.resetAt) {
+      rateLimits.delete(ip);
+    }
+  }
+
+  // Clean up expired OAuth rate limit entries
+  for (const [ip, entry] of oauthRateLimits) {
+    if (now > entry.resetAt) {
+      oauthRateLimits.delete(ip);
+    }
+  }
+}, CLEANUP_INTERVAL_MS);
+cleanupInterval.unref();
+
+// Graceful shutdown handler
+process.on("SIGTERM", () => {
+  logger.info("[linkedRoles] Received SIGTERM, shutting down");
+  clearInterval(cleanupInterval);
+  server.close(() => {
+    logger.info("[linkedRoles] Server closed");
+    process.exit(0);
+  });
+});
+
 server.listen(PORT, () => {
-  console.log(`\n========================================`);
-  console.log(`  Linked Roles Server`);
-  console.log(`========================================`);
-  console.log(`Server running at http://localhost:${PORT}`);
-  console.log(`\nTo authorize yourself:`);
-  console.log(`  1. Visit: http://localhost:${PORT}/linked-roles`);
-  console.log(`  2. Authorize with Discord`);
-  console.log(`  3. You'll be redirected back and your role connection will be set`);
-  console.log(`\nRedirect URI configured: ${REDIRECT_URI}`);
-  console.log(`Make sure this matches your Discord Developer Portal OAuth2 settings!`);
-  console.log(`\nPress Ctrl+C to stop\n`);
+  logger.info(
+    {
+      port: PORT,
+      redirectUri: REDIRECT_URI,
+      authUrl: `http://localhost:${PORT}/linked-roles`,
+    },
+    "[linkedRoles] Server started"
+  );
 });

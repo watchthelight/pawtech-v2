@@ -12,6 +12,7 @@
 import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { HEALTH_CHECK_TIMEOUT_MS } from "../lib/constants.js";
+import { getSchedulerHealth, type SchedulerHealth } from "../lib/schedulerHealth.js";
 
 /*
  * Health Check Command
@@ -56,6 +57,33 @@ function formatUptime(seconds: number): string {
 }
 
 /**
+ * Formats a timestamp as relative time (e.g., "2m ago", "1h ago").
+ * Returns "never" if timestamp is null.
+ */
+function formatRelativeTime(timestamp: number | null): string {
+  if (timestamp === null) return "never";
+
+  const now = Date.now();
+  const diffMs = now - timestamp;
+  const diffSec = Math.floor(diffMs / 1000);
+
+  if (diffSec < 60) return `${diffSec}s ago`;
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  return `${Math.floor(diffSec / 86400)}d ago`;
+}
+
+/**
+ * Formats scheduler health for display in the embed.
+ * Shows status indicator, last run time, and failure info if any.
+ */
+function formatSchedulerStatus(health: SchedulerHealth): string {
+  const statusIcon = health.consecutiveFailures === 0 ? "OK" : `WARN (${health.consecutiveFailures} failures)`;
+  const lastRun = formatRelativeTime(health.lastRunAt);
+  return `${statusIcon} - Last: ${lastRun}`;
+}
+
+/**
  * execute
  * WHAT: Replies with a small embed indicating status, uptime, and ping.
  * RETURNS: Promise<void>
@@ -70,6 +98,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       ping: Math.round(interaction.client.ws.ping),
     }));
 
+    // Collect scheduler health data
+    const schedulerHealthMap = getSchedulerHealth();
+
     await withStep(ctx, "reply", async () => {
       const embed = new EmbedBuilder()
         .setTitle("Health Check")
@@ -78,8 +109,21 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
           { name: "Status", value: "Healthy", inline: true },
           { name: "Uptime", value: formatUptime(metrics.uptimeSec), inline: true },
           { name: "WS Ping", value: `${metrics.ping}ms`, inline: true }
-        )
-        .setTimestamp();
+        );
+
+      // Add scheduler status fields if any schedulers are tracked
+      if (schedulerHealthMap.size > 0) {
+        const schedulerLines = Array.from(schedulerHealthMap.entries()).map(
+          ([name, health]) => `**${name}**: ${formatSchedulerStatus(health)}`
+        );
+        embed.addFields({
+          name: "Schedulers",
+          value: schedulerLines.join("\n"),
+          inline: false,
+        });
+      }
+
+      embed.setTimestamp();
 
       // Public by default (team status check), ephemeral only on timeout
       // Single message path; no need to defer. Keep within 3s SLA.

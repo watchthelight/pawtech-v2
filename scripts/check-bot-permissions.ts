@@ -6,7 +6,11 @@
 import { Client, GatewayIntentBits, PermissionFlagsBits } from 'discord.js';
 
 async function main() {
-  const guildId = process.argv[2] || '896070888594759740'; // Default to Pawtropolis
+  const guildId = process.argv[2] || process.env.GUILD_ID || '896070888594759740'; // Default to Pawtropolis
+  if (!guildId) {
+    console.error("Error: GUILD_ID environment variable required");
+    process.exit(1);
+  }
 
   const token = process.env.DISCORD_TOKEN;
   if (!token) {

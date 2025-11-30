@@ -209,8 +209,15 @@ const addColumnIfMissing = (table: string, column: string, definition: string) =
       db.prepare(`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`).run();
       logger.info({ table, column }, "Added missing column");
     }
-  } catch {
-    // Table doesn't exist yet, that's ok
+  } catch (err) {
+    // Only ignore "no such table" errors - those are expected during initial setup
+    // Other errors (permissions, disk full, corruption) should be logged
+    const errMsg = err instanceof Error ? err.message : String(err);
+    if (/no such table/i.test(errMsg)) {
+      logger.debug({ table, column }, "Table doesn't exist yet, skipping column migration");
+    } else {
+      logger.warn({ err, table, column }, "Failed to add column (non-fatal)");
+    }
   }
 };
 

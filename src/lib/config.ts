@@ -20,6 +20,7 @@ import { env } from "./env.js";
 import { isOwner } from "../utils/owner.js";
 import { touchSyncMarker } from "./syncMarker.js";
 import { isGuildMember } from "../utils/typeGuards.js";
+import { LRUCache } from "./lruCache.js";
 
 export type GuildConfig = {
   guild_id: string;
@@ -43,6 +44,31 @@ export type GuildConfig = {
   listopen_public_output?: number | null; // 1=public (default), 0=ephemeral
   leadership_role_id?: string | null; // Role ID for leadership/senior mod permissions
   ping_dev_on_app?: number | null; // 1=ping dev on new apps, 0=don't ping
+  // Flags feature columns (005_flags_config migration)
+  flags_channel_id?: string | null;
+  silent_first_msg_days?: number | null; // Default 90 days for silent-since-join detection
+  // Logging channel (001_add_logging_channel_id migration)
+  logging_channel_id?: string | null;
+  // Forum post notification config (017_add_notify_config migration)
+  forum_channel_id?: string | null;
+  notify_role_id?: string | null;
+  notify_mode?: string | null; // 'post' (in-thread) or 'channel' (separate channel)
+  notification_channel_id?: string | null;
+  notify_cooldown_seconds?: number | null; // Default 5 seconds
+  notify_max_per_hour?: number | null; // Default 10
+  // Suggestion box config (suggestions/store.ts)
+  suggestion_channel_id?: string | null;
+  suggestion_cooldown?: number | null; // Default 3600 seconds (1 hour)
+  // Support channel for level reward skipped messages (057 issue)
+  support_channel_id?: string | null;
+  // Poke command config (079 issue)
+  poke_category_ids_json?: string | null;
+  poke_excluded_channel_ids_json?: string | null;
+  // Artist rotation config (Issue #78)
+  artist_role_id?: string | null;
+  ambassador_role_id?: string | null;
+  server_artist_channel_id?: string | null;
+  artist_ticket_roles_json?: string | null;
   image_search_url_template: string;
   reapply_cooldown_hours: number;
   min_account_age_hours: number;
@@ -61,9 +87,8 @@ export type GuildConfig = {
   };
 };
 
-// Simple in-memory cache with TTL. Map is fine here - we're not dealing with
-// thousands of guilds, and the cache naturally clears on bot restart.
-// If memory becomes an issue, switch to LRU with bounded size.
+// LRU cache with TTL and bounded size to prevent unbounded memory growth.
+// Max 1000 guilds cached; excess guilds evicted LRU-style.
 //
 // CACHE CONSISTENCY NOTES:
 // - TTL-based invalidation means stale data can be served during concurrent updates
@@ -74,8 +99,9 @@ export type GuildConfig = {
 //   * SQLite handles concurrent writes (no data corruption)
 //   * Single-node deployment reduces actual concurrency
 // - If you need stronger consistency, see Option B in docs/roadmap/043-document-cache-behavior.md
-const configCache = new Map<string, { config: GuildConfig; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes - short enough to pick up config changes reasonably fast
+const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory growth
+const configCache = new LRUCache<string, GuildConfig>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
 /**
  * Track which schema migrations have been applied during this runtime.
@@ -305,8 +331,63 @@ export function ensureListopenPublicOutputColumn() {
   }
 }
 
+export function ensurePokeConfigColumns() {
+  /**
+   * ensurePokeConfigColumns
+   * WHAT: Migration helper to add poke_category_ids_json and poke_excluded_channel_ids_json columns.
+   * WHY: Allows guilds to configure /poke target categories and excluded channels without code changes.
+   * DOCS:
+   *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
+   *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
+   *  - Issue #79: docs/roadmap/079-move-poke-category-ids-to-config.md
+   */
+  if (ensuredMigrations.has("guild_config_poke")) return;
+  try {
+    const exists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
+      .get() as { name: string } | undefined;
+    if (!exists) {
+      return;
+    }
+    const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
+
+    if (!cols.some((col) => col.name === "poke_category_ids_json")) {
+      logger.info(
+        { table: "guild_config", column: "poke_category_ids_json" },
+        "[ensure] adding poke_category_ids_json column"
+      );
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN poke_category_ids_json TEXT`).run();
+    }
+
+    if (!cols.some((col) => col.name === "poke_excluded_channel_ids_json")) {
+      logger.info(
+        { table: "guild_config", column: "poke_excluded_channel_ids_json" },
+        "[ensure] adding poke_excluded_channel_ids_json column"
+      );
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN poke_excluded_channel_ids_json TEXT`).run();
+    }
+
+    ensuredMigrations.add("guild_config_poke");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure poke config columns");
+  }
+}
+
 function invalidateCache(guildId: string) {
   configCache.delete(guildId);
+}
+
+/**
+ * Clear config cache entry for a guild (called on guildDelete).
+ * WHAT: Removes in-memory cache entry when bot leaves a guild
+ * WHY: Prevents memory leak from accumulating entries for departed guilds
+ * NOTE: Does NOT delete DB row - that data may be useful if bot rejoins
+ */
+export function clearConfigCache(guildId: string): void {
+  const existed = configCache.delete(guildId);
+  if (existed) {
+    logger.debug({ guildId }, "[config] Cleared cache entry for departed guild");
+  }
 }
 
 export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig, "guild_id">>) {
@@ -319,6 +400,16 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
    *  - partial: subset of fields to set; other fields default
    * THROWS: Propagates errors; callers typically wrapped by cmdWrap.
    */
+  // Prevent test/mock guild IDs from being saved to production database
+  // This guards against leftover test data causing stale alert errors (Issue #67)
+  if (guildId.startsWith("test-") || guildId.startsWith("mock-")) {
+    logger.warn(
+      { guildId, partial },
+      "[upsertConfig] Blocked attempt to save test guild to database"
+    );
+    throw new Error("Cannot save test guild to production database");
+  }
+
   // NOTE: Schema ensure functions moved to startup (src/index.ts) for performance
   // Manual upsert pattern because SQLite's INSERT OR REPLACE would nuke columns
   // we didn't specify. This way partial updates actually work as expected.
@@ -378,6 +469,8 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
       "silent_first_msg_days", "logging_channel_id", "notify_mode", "notify_role_id",
       "forum_channel_id", "notification_channel_id", "notify_cooldown_seconds",
       "notify_max_per_hour", "suggestion_channel_id", "suggestion_cooldown",
+      "support_channel_id", "poke_category_ids_json", "poke_excluded_channel_ids_json",
+      "artist_role_id", "ambassador_role_id", "server_artist_channel_id", "artist_ticket_roles_json",
     ]);
 
     const validKeys = keys.filter((k) => ALLOWED_CONFIG_COLUMNS.has(k as string));
@@ -409,8 +502,8 @@ export function getConfig(guildId: string): GuildConfig | undefined {
    */
   // NOTE: Schema ensure functions moved to startup (src/index.ts) for performance
   const cached = configCache.get(guildId);
-  if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
-    return cached.config;
+  if (cached) {
+    return cached;
   }
   const config = db.prepare("SELECT * FROM guild_config WHERE guild_id = ?").get(guildId) as
     | (Omit<GuildConfig, "welcome"> & { welcome?: undefined })
@@ -426,7 +519,7 @@ export function getConfig(guildId: string): GuildConfig | undefined {
       cardStyle: "default" as const,
     };
     const fullConfig: GuildConfig = { ...config, welcome };
-    configCache.set(guildId, { config: fullConfig, timestamp: Date.now() });
+    configCache.set(guildId, fullConfig);
     return fullConfig;
   }
   return config;

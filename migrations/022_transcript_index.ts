@@ -7,6 +7,7 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
+import { recordMigration } from "./lib/helpers.js";
 
 export function migrate022TranscriptIndex(db: Database): void {
   logger.info("[migration 022] Starting: add transcript index");
@@ -16,5 +17,9 @@ export function migrate022TranscriptIndex(db: Database): void {
   `);
 
   logger.info("[migration 022] Created idx_transcript_app_ts");
+
+  // Record migration
+  recordMigration(db, "022", "transcript_index");
+
   logger.info("[migration 022] Complete");
 }

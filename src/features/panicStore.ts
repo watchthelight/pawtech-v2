@@ -143,6 +143,19 @@ export function getPanicGuilds(): string[] {
 }
 
 /**
+ * Clear panic cache entry for a guild (called on guildDelete).
+ * WHAT: Removes in-memory cache entry when bot leaves a guild
+ * WHY: Prevents memory leak from accumulating entries for departed guilds
+ * NOTE: Does NOT delete DB row - that data may be useful if bot rejoins
+ */
+export function clearPanicCache(guildId: string): void {
+  const existed = panicCache.delete(guildId);
+  if (existed) {
+    logger.debug({ guildId }, "[panic] Cleared cache entry for departed guild");
+  }
+}
+
+/**
  * Get panic mode details for a guild (for /panic status display).
  * Unlike isPanicMode(), this reads from DB to get the full audit trail
  * (who enabled it, when). Acceptable to be slightly slower since status

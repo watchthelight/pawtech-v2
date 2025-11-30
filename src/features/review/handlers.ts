@@ -107,14 +107,18 @@ function requireInteractionStaff(interaction: ButtonInteraction | ModalSubmitInt
   if (!interaction.inGuild() || !interaction.guildId) {
     interaction
       .reply({ flags: MessageFlags.Ephemeral, content: "Guild only." })
-      .catch(() => undefined);
+      .catch((err) => {
+        logger.debug({ err, interactionId: interaction.id }, "[review] guild-only reply failed");
+      });
     return false;
   }
   const member = interaction.member as GuildMember | null;
   if (!isStaff(interaction.guildId, member)) {
     interaction
       .reply({ flags: MessageFlags.Ephemeral, content: "You do not have permission for this." })
-      .catch(() => undefined);
+      .catch((err) => {
+        logger.debug({ err, interactionId: interaction.id, guildId: interaction.guildId }, "[review] permission reply failed");
+      });
     return false;
   }
   return true;
@@ -132,27 +136,31 @@ async function resolveApplication(
 ): Promise<ApplicationRow | null> {
   const guildId = interaction.guildId;
   if (!guildId) {
-    await replyOrEdit(interaction, { content: "Guild only." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Guild only." }).catch((err) => {
+      logger.debug({ err, code, interactionId: interaction.id }, "[review] guild-only reply failed (resolveApplication)");
+    });
     return null;
   }
 
   const row = findAppByShortCode(guildId, code) as { id: string } | null;
   if (!row) {
-    await replyOrEdit(interaction, { content: `No application with code ${code}.` }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: `No application with code ${code}.` }).catch((err) => {
+      logger.debug({ err, code, guildId, interactionId: interaction.id }, "[review] no-app reply failed");
+    });
     return null;
   }
 
   const app = loadApplication(row.id);
   if (!app) {
-    await replyOrEdit(interaction, { content: "Application not found." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Application not found." }).catch((err) => {
+      logger.debug({ err, code, appId: row.id, interactionId: interaction.id }, "[review] app-not-found reply failed");
+    });
     return null;
   }
   if (app.guild_id !== guildId) {
-    await replyOrEdit(interaction, { content: "Guild mismatch for application." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "Guild mismatch for application." }).catch((err) => {
+      logger.debug({ err, code, appId: app.id, guildId, interactionId: interaction.id }, "[review] guild-mismatch reply failed");
+    });
     return null;
   }
 
@@ -180,16 +188,18 @@ async function openRejectModal(interaction: ButtonInteraction, app: ApplicationR
   modal.addComponents(row);
 
   if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
-    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] already-resolved reply failed");
+    });
     return;
   }
 
   const claim = getClaim(app.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
-    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] claim-guard reply failed");
+    });
     return;
   }
 
@@ -205,16 +215,18 @@ async function openRejectModal(interaction: ButtonInteraction, app: ApplicationR
  */
 async function openAcceptModal(interaction: ButtonInteraction, app: ApplicationRow) {
   if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
-    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "accept" }, "[review] already-resolved reply failed");
+    });
     return;
   }
 
   const claim = getClaim(app.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
-    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "accept" }, "[review] claim-guard reply failed");
+    });
     return;
   }
 
@@ -246,7 +258,9 @@ async function openPermRejectModal(interaction: ButtonInteraction, app: Applicat
   if (claim && claim.reviewer_id !== interaction.user.id) {
     await replyOrEdit(interaction, {
       content: "You did not claim this application.",
-    }).catch(() => undefined);
+    }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject" }, "[review] not-claimed reply failed");
+    });
     return;
   }
 
@@ -284,30 +298,36 @@ async function runApproveAction(
 ) {
   const guild = interaction.guild as Guild | null;
   if (!guild) {
-    await replyOrEdit(interaction, { content: "Guild not found." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Guild not found." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "approve" }, "[review] guild-not-found reply failed");
+    });
     return;
   }
   const claim = getClaim(app.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
-    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "approve" }, "[review] claim-guard reply failed");
+    });
     return;
   }
   const result = approveTx(app.id, interaction.user.id, reason);
   if (result.kind === "already") {
-    await replyOrEdit(interaction, { content: "Already approved." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Already approved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "approve" }, "[review] already-approved reply failed");
+    });
     return;
   }
   if (result.kind === "terminal") {
-    await replyOrEdit(interaction, { content: `Already resolved (${result.status}).` }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: `Already resolved (${result.status}).` }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "approve", status: result.status }, "[review] already-resolved reply failed");
+    });
     return;
   }
   if (result.kind === "invalid") {
-    await replyOrEdit(interaction, { content: "Application is not ready for approval." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "Application is not ready for approval." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "approve" }, "[review] invalid-status reply failed");
+    });
     return;
   }
 
@@ -446,40 +466,46 @@ async function runRejectAction(
   reason: string
 ) {
   if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
-    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] already-resolved reply failed");
+    });
     return;
   }
 
   const claim = getClaim(app.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
-    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] claim-guard reply failed");
+    });
     return;
   }
 
   const trimmed = reason.trim();
   if (trimmed.length === 0) {
-    await replyOrEdit(interaction, { content: "Reason is required." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Reason is required." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] reason-required reply failed");
+    });
     return;
   }
 
   const tx = rejectTx(app.id, interaction.user.id, trimmed);
   if (tx.kind === "already") {
-    await replyOrEdit(interaction, { content: "Already rejected." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Already rejected." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] already-rejected reply failed");
+    });
     return;
   }
   if (tx.kind === "terminal") {
-    await replyOrEdit(interaction, { content: `Already resolved (${tx.status}).` }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: `Already resolved (${tx.status}).` }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject", status: tx.status }, "[review] already-resolved reply failed");
+    });
     return;
   }
   if (tx.kind === "invalid") {
-    await replyOrEdit(interaction, { content: "Application not submitted yet." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "Application not submitted yet." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "reject" }, "[review] invalid-status reply failed");
+    });
     return;
   }
 
@@ -567,40 +593,46 @@ async function runPermRejectAction(
   reason: string
 ) {
   if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
-    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject" }, "[review] already-resolved reply failed");
+    });
     return;
   }
 
   const claim = getClaim(app.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
-    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject" }, "[review] claim-guard reply failed");
+    });
     return;
   }
 
   const trimmed = reason.trim();
   if (trimmed.length === 0) {
-    await replyOrEdit(interaction, { content: "Reason is required." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Reason is required." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject" }, "[review] reason-required reply failed");
+    });
     return;
   }
 
   const tx = rejectTx(app.id, interaction.user.id, trimmed, true); // permanent = true
   if (tx.kind === "already") {
-    await replyOrEdit(interaction, { content: "Already rejected." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Already rejected." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject" }, "[review] already-rejected reply failed");
+    });
     return;
   }
   if (tx.kind === "terminal") {
-    await replyOrEdit(interaction, { content: `Already resolved (${tx.status}).` }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: `Already resolved (${tx.status}).` }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject", status: tx.status }, "[review] already-resolved reply failed");
+    });
     return;
   }
   if (tx.kind === "invalid") {
-    await replyOrEdit(interaction, { content: "Application not submitted yet." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "Application not submitted yet." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "perm_reject" }, "[review] invalid-status reply failed");
+    });
     return;
   }
 
@@ -707,30 +739,36 @@ async function runKickAction(
 ) {
   const guild = interaction.guild as Guild | null;
   if (!guild) {
-    await replyOrEdit(interaction, { content: "Guild not found." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Guild not found." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick" }, "[review] guild-not-found reply failed");
+    });
     return;
   }
   const claim = getClaim(app.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
-    await replyOrEdit(interaction, { content: claimError }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick" }, "[review] claim-guard reply failed");
+    });
     return;
   }
   const tx = kickTx(app.id, interaction.user.id, reason);
   if (tx.kind === "already") {
-    await replyOrEdit(interaction, { content: "Already kicked." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Already kicked." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick" }, "[review] already-kicked reply failed");
+    });
     return;
   }
   if (tx.kind === "terminal") {
-    await replyOrEdit(interaction, { content: `Already resolved (${tx.status}).` }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: `Already resolved (${tx.status}).` }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick", status: tx.status }, "[review] already-resolved reply failed");
+    });
     return;
   }
   if (tx.kind === "invalid") {
-    await replyOrEdit(interaction, { content: "Application not in a kickable state." }).catch(
-      () => undefined
-    );
+    await replyOrEdit(interaction, { content: "Application not in a kickable state." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick" }, "[review] invalid-status reply failed");
+    });
     return;
   }
 
@@ -829,7 +867,9 @@ async function handleClaimToggle(interaction: ButtonInteraction, app: Applicatio
       await replyOrEdit(interaction, {
         content: msg,
         flags: MessageFlags.Ephemeral,
-      }).catch(() => undefined);
+      }).catch((replyErr) => {
+        logger.debug({ err: replyErr, appId: app.id, action: "claim" }, "[review] claim-error reply failed");
+      });
 
       return;
     }
@@ -839,7 +879,9 @@ async function handleClaimToggle(interaction: ButtonInteraction, app: Applicatio
     await replyOrEdit(interaction, {
       content: "An unexpected error occurred. Please try again.",
       flags: MessageFlags.Ephemeral,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, appId: app.id, action: "claim" }, "[review] unexpected-error reply failed");
+    });
     return;
   }
 
@@ -854,7 +896,9 @@ async function handleClaimToggle(interaction: ButtonInteraction, app: Applicatio
     await replyOrEdit(interaction, {
       content: `This user has been permanently rejected from **${interaction.guild?.name ?? "this server"}** and cannot reapply.`,
       flags: MessageFlags.Ephemeral,
-    }).catch(() => undefined);
+    }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "claim" }, "[review] perm-rejected reply failed");
+    });
     logger.info(
       { userId: app.user_id, guildId: app.guild_id, moderatorId: interaction.user.id },
       "[review] Claim attempt blocked - user permanently rejected"
@@ -898,7 +942,9 @@ async function handleClaimToggle(interaction: ButtonInteraction, app: Applicatio
   // Update the review card message content to show who claimed it
   await replyOrEdit(interaction, {
     content: `<@${interaction.user.id}> has claimed this application.`,
-  }).catch(() => undefined);
+  }).catch((err) => {
+    logger.debug({ err, appId: app.id, action: "claim" }, "[review] claim-success reply failed");
+  });
 }
 
 /**
@@ -929,7 +975,9 @@ async function handleUnclaimAction(interaction: ButtonInteraction, app: Applicat
       await replyOrEdit(interaction, {
         content: msg,
         flags: MessageFlags.Ephemeral,
-      }).catch(() => undefined);
+      }).catch((replyErr) => {
+        logger.debug({ err: replyErr, appId: app.id, action: "unclaim" }, "[review] unclaim-error reply failed");
+      });
 
       return;
     }
@@ -939,7 +987,9 @@ async function handleUnclaimAction(interaction: ButtonInteraction, app: Applicat
     await replyOrEdit(interaction, {
       content: "An unexpected error occurred. Please try again.",
       flags: MessageFlags.Ephemeral,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, appId: app.id, action: "unclaim" }, "[review] unexpected-error reply failed");
+    });
     return;
   }
 
@@ -982,7 +1032,9 @@ async function handleUnclaimAction(interaction: ButtonInteraction, app: Applicat
   await replyOrEdit(interaction, {
     content: `Application \`${shortCode(app.id)}\` unclaimed successfully.`,
     flags: MessageFlags.Ephemeral,
-  }).catch(() => undefined);
+  }).catch((err) => {
+    logger.debug({ err, appId: app.id, action: "unclaim" }, "[review] unclaim-success reply failed");
+  });
 }
 
 // ===== Exported Handler Functions =====
@@ -1021,7 +1073,9 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
     // Acknowledge button without visible bubble for kick/claim/unclaim
     // https://discord.js.org/#/docs/discord.js/main/class/Interaction?scrollTo=deferUpdate
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferUpdate().catch(() => undefined);
+      await interaction.deferUpdate().catch((err) => {
+        logger.debug({ err, action, code, interactionId: interaction.id }, "[review] deferUpdate failed");
+      });
     }
 
     const app = await resolveApplication(interaction, code);
@@ -1039,11 +1093,15 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
     logger.error({ err, action, code, traceId }, "Review button handling failed");
     captureException(err, { area: "handleReviewButton", action, code, traceId });
     if (!interaction.deferred && !interaction.replied && action !== "reject" && action !== "approve" && action !== "accept") {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => undefined);
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((deferErr) => {
+        logger.debug({ err: deferErr, action, code, traceId }, "[review] error-deferReply failed");
+      });
     }
     await replyOrEdit(interaction, {
       content: `Failed to process action (trace: ${traceId}). Try again or check logs.`,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, action, code, traceId }, "[review] error-reply failed");
+    });
   }
 }
 
@@ -1060,7 +1118,9 @@ export async function handleRejectModal(interaction: ModalSubmitInteraction) {
   // Acknowledge modal without visible bubble
   // https://discord.js.org/#/docs/discord.js/main/class/Interaction?scrollTo=deferUpdate
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferUpdate().catch(() => undefined);
+    await interaction.deferUpdate().catch((err) => {
+      logger.debug({ err, interactionId: interaction.id }, "[review] reject-modal deferUpdate failed");
+    });
   }
 
   const code = match[1];
@@ -1079,7 +1139,9 @@ export async function handleRejectModal(interaction: ModalSubmitInteraction) {
     captureException(err, { area: "handleRejectModal", code, traceId });
     await replyOrEdit(interaction, {
       content: `Failed to process rejection (trace: ${traceId}).`,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] reject-modal error-reply failed");
+    });
   }
 }
 
@@ -1094,7 +1156,9 @@ export async function handleAcceptModal(interaction: ModalSubmitInteraction) {
   if (!requireInteractionStaff(interaction)) return;
 
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferUpdate().catch(() => undefined);
+    await interaction.deferUpdate().catch((err) => {
+      logger.debug({ err, interactionId: interaction.id }, "[review] accept-modal deferUpdate failed");
+    });
   }
 
   const code = match[1];
@@ -1113,7 +1177,9 @@ export async function handleAcceptModal(interaction: ModalSubmitInteraction) {
     captureException(err, { area: "handleAcceptModal", code, traceId });
     await replyOrEdit(interaction, {
       content: `Failed to process approval (trace: ${traceId}).`,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] accept-modal error-reply failed");
+    });
   }
 }
 
@@ -1131,7 +1197,9 @@ export async function handleModmailButton(interaction: ButtonInteraction) {
 
   // Defer update to acknowledge button
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferUpdate().catch(() => undefined);
+    await interaction.deferUpdate().catch((err) => {
+      logger.debug({ err, code, interactionId: interaction.id }, "[review] modmail-button deferUpdate failed");
+    });
   }
 
   try {
@@ -1169,7 +1237,9 @@ export async function handleModmailButton(interaction: ButtonInteraction) {
           content: `Warning: ${msg}`,
           allowedMentions: SAFE_ALLOWED_MENTIONS,
         })
-        .catch(() => undefined);
+        .catch((followUpErr) => {
+          logger.debug({ err: followUpErr, code }, "[review] modmail-warning followUp failed");
+        });
     }
   } catch (err) {
     const traceId = interaction.id.slice(-8).toUpperCase();
@@ -1177,7 +1247,9 @@ export async function handleModmailButton(interaction: ButtonInteraction) {
     captureException(err, { area: "handleModmailButton", code, traceId });
     await replyOrEdit(interaction, {
       content: `Failed to open modmail (trace: ${traceId}).`,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] modmail-error reply failed");
+    });
   }
 }
 
@@ -1202,11 +1274,15 @@ export async function handlePermRejectButton(interaction: ButtonInteraction) {
     logger.error({ err, code, traceId }, "Permanent reject button handling failed");
     captureException(err, { area: "handlePermRejectButton", code, traceId });
     if (!interaction.deferred && !interaction.replied) {
-      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch(() => undefined);
+      await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((deferErr) => {
+        logger.debug({ err: deferErr, code, traceId }, "[review] perm-reject-button deferReply failed");
+      });
     }
     await replyOrEdit(interaction, {
       content: `Failed to open permanent reject modal (trace: ${traceId}).`,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] perm-reject-button error-reply failed");
+    });
   }
 }
 
@@ -1222,7 +1298,9 @@ export async function handlePermRejectModal(interaction: ModalSubmitInteraction)
 
   // Acknowledge modal without visible bubble
   if (!interaction.deferred && !interaction.replied) {
-    await interaction.deferUpdate().catch(() => undefined);
+    await interaction.deferUpdate().catch((err) => {
+      logger.debug({ err, interactionId: interaction.id }, "[review] perm-reject-modal deferUpdate failed");
+    });
   }
 
   const code = match[1];
@@ -1241,7 +1319,9 @@ export async function handlePermRejectModal(interaction: ModalSubmitInteraction)
     captureException(err, { area: "handlePermRejectModal", code, traceId });
     await replyOrEdit(interaction, {
       content: `Failed to process permanent rejection (trace: ${traceId}).`,
-    }).catch(() => undefined);
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] perm-reject-modal error-reply failed");
+    });
   }
 }
 
@@ -1308,7 +1388,9 @@ export async function handleCopyUidButton(interaction: ButtonInteraction) {
         content: `Failed to copy UID (trace: ${traceId}).`,
         flags: MessageFlags.Ephemeral,
       })
-      .catch(() => undefined);
+      .catch((replyErr) => {
+        logger.debug({ err: replyErr, code, userId, traceId }, "[review] copy-uid error-reply failed");
+      });
   }
 }
 
@@ -1324,7 +1406,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
   if (!legacy && !modern) return;
 
   if (!interaction.guildId || !interaction.guild) {
-    await replyOrEdit(interaction, { content: "Guild only." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Guild only." }).catch((err) => {
+      logger.debug({ err, interactionId: interaction.id }, "[review] ping guild-only reply failed");
+    });
     return;
   }
 
@@ -1333,7 +1417,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
   if (!isStaff(interaction.guildId, member)) {
     await replyOrEdit(interaction, {
       content: "You do not have permission for this.",
-    }).catch(() => undefined);
+    }).catch((err) => {
+      logger.debug({ err, interactionId: interaction.id, guildId: interaction.guildId }, "[review] ping permission reply failed");
+    });
     return;
   }
 
@@ -1349,7 +1435,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
   }
 
   if (!userId) {
-    await replyOrEdit(interaction, { content: "Invalid ping button data." }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: "Invalid ping button data." }).catch((err) => {
+      logger.debug({ err, interactionId: interaction.id, guildId: interaction.guildId }, "[review] invalid-ping reply failed");
+    });
     return;
   }
   const cfg = getConfig(interaction.guildId);
@@ -1357,7 +1445,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
   if (!cfg?.unverified_channel_id) {
     await replyOrEdit(interaction, {
       content: "Unverified channel not configured. Run `/gate setup` to configure it.",
-    }).catch(() => undefined);
+    }).catch((err) => {
+      logger.debug({ err, userId, guildId: interaction.guildId }, "[review] unverified-not-configured reply failed");
+    });
     return;
   }
 
@@ -1367,7 +1457,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
     if (!channel || !channel.isTextBased()) {
       await replyOrEdit(interaction, {
         content: "Unverified channel is not a valid text channel.",
-      }).catch(() => undefined);
+      }).catch((err) => {
+        logger.debug({ err, userId, guildId: interaction.guildId, channelId: cfg.unverified_channel_id }, "[review] invalid-channel reply failed");
+      });
       return;
     }
 
@@ -1395,7 +1487,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
         );
         await replyOrEdit(interaction, {
           content: `Bot is missing required permissions in <#${cfg.unverified_channel_id}>: **${missingPerms.join(", ")}**\n\nPlease check channel permissions.`,
-        }).catch(() => undefined);
+        }).catch((err) => {
+          logger.debug({ err, userId, guildId: interaction.guildId, channelId: channel.id }, "[review] missing-perms reply failed");
+        });
         return;
       }
 
@@ -1431,7 +1525,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
 
     await replyOrEdit(interaction, {
       content: `Ping posted: ${messageUrl}\n\n${deleteNote}`,
-    }).catch(() => undefined);
+    }).catch((err) => {
+      logger.debug({ err, userId, guildId: interaction.guildId, channelId: channel.id }, "[review] ping-success reply failed");
+    });
 
     logger.info(
       {
@@ -1474,7 +1570,9 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
       errorMsg += "\n\nCheck bot logs for details.";
     }
 
-    await replyOrEdit(interaction, { content: errorMsg }).catch(() => undefined);
+    await replyOrEdit(interaction, { content: errorMsg }).catch((replyErr) => {
+      logger.debug({ err: replyErr, userId, guildId: interaction.guildId, channelId: cfg.unverified_channel_id }, "[review] ping-error reply failed");
+    });
   }
 }
 
@@ -1490,7 +1588,9 @@ export async function handleDeletePing(interaction: ButtonInteraction) {
   if (!interaction.guildId || !interaction.guild) {
     await interaction
       .reply({ content: "Guild only.", flags: MessageFlags.Ephemeral })
-      .catch(() => undefined);
+      .catch((err) => {
+        logger.debug({ err, interactionId: interaction.id }, "[review] delete-ping guild-only reply failed");
+      });
     return;
   }
 
@@ -1502,7 +1602,9 @@ export async function handleDeletePing(interaction: ButtonInteraction) {
         content: "You do not have permission for this.",
         flags: MessageFlags.Ephemeral,
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        logger.debug({ err, interactionId: interaction.id, guildId: interaction.guildId }, "[review] delete-ping permission reply failed");
+      });
     return;
   }
 
@@ -1519,7 +1621,9 @@ export async function handleDeletePing(interaction: ButtonInteraction) {
         content: "Ping deleted.",
         flags: MessageFlags.Ephemeral,
       })
-      .catch(() => undefined);
+      .catch((err) => {
+        logger.debug({ err, messageId, guildId: interaction.guildId }, "[review] delete-ping success reply failed");
+      });
 
     logger.info(
       { messageId, moderatorId: interaction.user.id, guildId: interaction.guildId },
@@ -1532,6 +1636,8 @@ export async function handleDeletePing(interaction: ButtonInteraction) {
         content: "Failed to delete ping message (it may have been already deleted).",
         flags: MessageFlags.Ephemeral,
       })
-      .catch(() => undefined);
+      .catch((replyErr) => {
+        logger.debug({ err: replyErr, messageId, guildId: interaction.guildId }, "[review] delete-ping error reply failed");
+      });
   }
 }
