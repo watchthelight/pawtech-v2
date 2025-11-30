@@ -270,10 +270,6 @@ import * as redeemreward from "./commands/redeemreward.js";
 commands.set(artistqueue.data.name, wrapCommand("artistqueue", artistqueue.execute));
 commands.set(redeemreward.data.name, wrapCommand("redeemreward", redeemreward.execute));
 
-// Fun commands
-import * as cage from "./commands/cage.js";
-commands.set(cage.data.name, wrapCommand("cage", cage.execute));
-
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work

@@ -67,10 +67,6 @@ Need to post something as the bot? `/send message:Your text here` does the trick
 
 If someone seems suspicious, `/flag user:@Username reason:Alt account` flags them for other staff to see.
 
-## Fun Commands
-
-Want to jokingly "cage" someone? `/cage user:@Username` overlays prison bars on their avatar and posts the image. Great for playful moderation moments.
-
 ## Tips
 
 - Only use ONE identifier per command (app code, user mention, OR user ID — not multiple)
