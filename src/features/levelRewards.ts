@@ -206,7 +206,7 @@ export async function handleLevelRoleAdded(
     // This bunches together multiple rewards at the same level into a single log entry
     if (grantedRewards.length > 0) {
       // DM the user about their rewards first, so we can log the status
-      const rewardList = grantedRewards.map(r => `<@&${r.id}>`).join(", ");
+      const rewardList = grantedRewards.map(r => `**${r.name}**`).join(", ");
       let dmStatus = "✅ DM Sent";
       await member.send({
         content: `Thanks for being a part of our community! We slid ya ${rewardList} for reaching **Level ${level}**! 🎉`,

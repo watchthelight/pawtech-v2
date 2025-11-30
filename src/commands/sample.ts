@@ -10,7 +10,6 @@ import {
   SlashCommandBuilder,
   ChatInputCommandInteraction,
   MessageFlags,
-  type GuildMember,
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { ulid } from "ulid";
@@ -29,6 +28,7 @@ import {
   SAMPLE_HISTORY,
 } from "../constants/sampleData.js";
 import { canRunAllCommands, hasManageGuild, isReviewer } from "../lib/config.js";
+import { isGuildMember } from "../utils/typeGuards.js";
 
 export const data = new SlashCommandBuilder()
   .setName("sample")
@@ -76,10 +76,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 }
 
 async function handleReviewPreview(interaction: ChatInputCommandInteraction) {
-  // Multi-layered permission check. We cast to GuildMember because the interaction.member
-  // type is APIInteractionGuildMember | GuildMember, and we need the roles property.
-  // The "roles" in check guards against API members which don't have the full object.
-  const member = (interaction.member && "roles" in interaction.member ? interaction.member : null) as GuildMember | null;
+  // Multi-layered permission check using type guard to safely narrow member type.
+  // isGuildMember returns false for APIInteractionGuildMember (uncached members).
+  const member = isGuildMember(interaction.member) ? interaction.member : null;
   const hasPermission =
     canRunAllCommands(member, interaction.guildId!) ||
     hasManageGuild(member) ||

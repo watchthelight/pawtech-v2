@@ -12,6 +12,7 @@ import { AttachmentBuilder, Client, EmbedBuilder, type TextChannel, type Attachm
 import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import { captureException } from "../../lib/sentry.js";
+import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 import type { TranscriptLine } from "./types.js";
 
 // ===== Transcript Buffer =====
@@ -204,7 +205,7 @@ export async function flushTranscript(params: {
       const message = await textChannel.send({
         embeds: [embed],
         content: "_No transcript content (no messages exchanged)_",
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
 
       logger.info(
@@ -236,7 +237,7 @@ export async function flushTranscript(params: {
     const message = await textChannel.send({
       embeds: [embed],
       files: [attachment],
-      allowedMentions: { parse: [] },
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
     });
 
     logger.info(

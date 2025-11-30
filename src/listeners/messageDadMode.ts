@@ -16,6 +16,7 @@
 import { Events, type Message } from "discord.js";
 import { getConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
+import { DADMODE_ODDS_MIN, DADMODE_ODDS_MAX } from "../lib/constants.js";
 
 /**
  * WHAT: Regex to match "I'm/Im/I am..." at the start of messages.
@@ -63,7 +64,7 @@ export async function execute(message: Message) {
   logger.info({ guildId: message.guild.id, content: content.slice(0, 50), odds: cfg.dadmode_odds }, "[dadmode] checking message");
 
   // Get odds (default 1 in 1000, clamped to valid range)
-  const odds = Math.max(2, Math.min(100000, Number(cfg.dadmode_odds || 1000)));
+  const odds = Math.max(DADMODE_ODDS_MIN, Math.min(DADMODE_ODDS_MAX, Number(cfg.dadmode_odds || 1000)));
 
   // Roll the dice - only proceed if we hit 0
   const roll = Math.floor(Math.random() * odds);
@@ -119,7 +120,16 @@ export async function execute(message: Message) {
       "[dadmode] triggered dad joke"
     );
   } catch (err) {
-    // Silently fail if we can't send the message (missing permissions, etc.)
-    logger.debug({ err, guildId: message.guild.id }, "[dadmode] failed to send dad joke");
+    // Log permission and rate limit failures so operators can diagnose issues
+    logger.warn(
+      {
+        err,
+        guildId: message.guild.id,
+        channelId: message.channel.id,
+        messageId: message.id,
+        errorCode: (err as any)?.code,
+      },
+      "[dadmode] failed to send dad joke"
+    );
   }
 }

@@ -18,6 +18,7 @@ import {
 } from "discord.js";
 import { buildCommands } from "../commands/buildCommands.js";
 import { logger } from "./logger.js";
+import { DISCORD_COMMAND_SYNC_DELAY_MS } from "./constants.js";
 
 const OPTION = ApplicationCommandOptionType;
 type CmdOption = APIApplicationCommandOption;
@@ -142,8 +143,8 @@ export async function syncGuildCommandsInProcess(client: Client) {
     }
     // Rate limit buffer. Discord's rate limit for bulk command updates is
     // relatively generous, but hammering 50 guilds in rapid succession will
-    // hit it. 650ms is conservative; could probably go lower with proper
+    // hit it. DISCORD_COMMAND_SYNC_DELAY_MS is conservative; could probably go lower with proper
     // rate limit header parsing, but this is startup-only code so who cares.
-    await new Promise((resolve) => setTimeout(resolve, 650));
+    await new Promise((resolve) => setTimeout(resolve, DISCORD_COMMAND_SYNC_DELAY_MS));
   }
 }

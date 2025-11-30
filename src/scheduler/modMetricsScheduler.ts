@@ -56,23 +56,23 @@ async function refreshAllGuildMetrics(client: Client): Promise<number> {
  * WHY: Automatically keep mod_metrics table up-to-date.
  *
  * @param client - Discord.js client instance
- * @returns Interval timer for cleanup
  *
  * @example
  * // In src/index.ts ClientReady event:
  * import { startModMetricsScheduler } from './scheduler/modMetricsScheduler.js';
- * const schedulerInterval = startModMetricsScheduler(client);
+ * startModMetricsScheduler(client);
  *
  * // Graceful shutdown:
+ * import { stopModMetricsScheduler } from './scheduler/modMetricsScheduler.js';
  * process.on('SIGTERM', () => {
- *   clearInterval(schedulerInterval);
+ *   stopModMetricsScheduler();
  * });
  */
-export function startModMetricsScheduler(client: Client): NodeJS.Timeout | null {
+export function startModMetricsScheduler(client: Client): void {
   // Opt-out for tests
   if (process.env.METRICS_SCHEDULER_DISABLED === "1") {
     logger.debug("[metrics] scheduler disabled via env flag");
-    return null;
+    return;
   }
 
   logger.info({ intervalMinutes: REFRESH_INTERVAL_MS / 60000 }, "[metrics] scheduler starting");
@@ -93,39 +93,22 @@ export function startModMetricsScheduler(client: Client): NodeJS.Timeout | null 
   interval.unref();
 
   _activeInterval = interval;
-  return interval;
 }
 
 /**
  * WHAT: Stop the metrics refresh scheduler.
  * WHY: Clean shutdown during bot termination.
  *
- * @param interval - Interval timer returned by startModMetricsScheduler
- *
  * @example
- * const schedulerInterval = startModMetricsScheduler(client);
+ * import { stopModMetricsScheduler } from './scheduler/modMetricsScheduler.js';
  * process.on('SIGTERM', () => {
- *   stopModMetricsScheduler(schedulerInterval);
+ *   stopModMetricsScheduler();
  * });
  */
-export function stopModMetricsScheduler(interval: NodeJS.Timeout | null): void {
-  if (interval) {
-    clearInterval(interval);
+export function stopModMetricsScheduler(): void {
+  if (_activeInterval) {
+    clearInterval(_activeInterval);
+    _activeInterval = null;
     logger.info("[metrics] scheduler stopped");
-  }
-  if (_activeInterval) {
-    clearInterval(_activeInterval);
-    _activeInterval = null;
-  }
-}
-
-/**
- * WHAT: Stop scheduler (test-only).
- * WHY: Ensure test isolation without background intervals.
- */
-export function __test__stopScheduler(): void {
-  if (_activeInterval) {
-    clearInterval(_activeInterval);
-    _activeInterval = null;
   }
 }

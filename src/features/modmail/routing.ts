@@ -25,6 +25,7 @@ import {
   getTicketByThread,
 } from "./tickets.js";
 import { appendTranscript, formatContentWithAttachments } from "./transcript.js";
+import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 
 // ===== Embed Builders =====
 
@@ -91,33 +92,69 @@ export function buildUserToStaffEmbed(args: {
  * The bot sends that DM. Without this map, the DM handler might see the bot's
  * message and try to route it back to the thread, creating an infinite loop.
  *
- * Solution: When we forward a message, we mark its ID in this map with timestamp.
- * The routing handlers check this map and skip messages that were already forwarded.
+ * Solution: Hybrid time + size-based eviction
+ * - Time-based: Entries expire after 5 minutes TTL
+ * - Size-based: Eviction triggers at 5,000 entries (prevents unbounded growth)
+ * - Cleanup: Runs every 60 seconds to remove expired entries
+ *
+ * Memory: Max ~250KB (2,500 entries after eviction x 100 bytes/entry)
  *
  * Uses a Map with timestamps + periodic cleanup instead of Set with setTimeout
  * to avoid accumulating thousands of pending timers under high load.
  */
 const forwardedMessages = new Map<string, number>(); // messageId -> timestamp
 const FORWARDED_TTL_MS = 5 * 60 * 1000; // 5 minutes TTL
+const FORWARDED_MAX_SIZE = 10000; // Hard limit - never exceed this
+const FORWARDED_EVICTION_SIZE = 5000; // Start evicting at this size
 const FORWARDED_CLEANUP_INTERVAL_MS = 60 * 1000; // Cleanup every minute
 
 // Periodic cleanup to remove expired entries
 const forwardedCleanupInterval = setInterval(() => {
   const now = Date.now();
+  const sizeBefore = forwardedMessages.size;
   let cleaned = 0;
+
   for (const [msgId, timestamp] of forwardedMessages) {
     if (now - timestamp > FORWARDED_TTL_MS) {
       forwardedMessages.delete(msgId);
       cleaned++;
     }
   }
-  if (cleaned > 0) {
-    // Only log if we actually cleaned something to avoid log spam
-    // logger.debug({ cleaned }, "[modmail] forwardedMessages cleanup");
+
+  // Log if we cleaned entries or if Map is large (monitoring for memory issues)
+  if (cleaned > 0 || sizeBefore > 1000) {
+    logger.debug(
+      { cleaned, sizeBefore, sizeAfter: forwardedMessages.size },
+      "[modmail] forwardedMessages cleanup"
+    );
   }
 }, FORWARDED_CLEANUP_INTERVAL_MS);
 // Allow process to exit even if interval is running
 forwardedCleanupInterval.unref();
+
+/**
+ * evictOldestEntries
+ * WHAT: Remove oldest entries from forwardedMessages Map to stay under size limit.
+ * WHY: Prevents unbounded memory growth under high message volume.
+ * PARAMS:
+ *  - targetSize: Number of entries to keep after eviction
+ */
+function evictOldestEntries(targetSize: number) {
+  // Sort entries by timestamp (oldest first) and remove oldest
+  const entries = Array.from(forwardedMessages.entries()).sort(
+    (a, b) => a[1] - b[1]
+  );
+
+  const toRemove = entries.slice(0, entries.length - targetSize);
+  for (const [msgId] of toRemove) {
+    forwardedMessages.delete(msgId);
+  }
+
+  logger.debug(
+    { removed: toRemove.length, remaining: forwardedMessages.size },
+    "[modmail] size-based eviction"
+  );
+}
 
 /**
  * isForwarded
@@ -139,9 +176,15 @@ export function isForwarded(messageId: string): boolean {
  * markForwarded
  * WHAT: Mark a message as forwarded.
  * WHY: Prevents the same message from being routed again.
+ * NOTE: Triggers size-based eviction if Map grows too large.
  */
 export function markForwarded(messageId: string) {
   forwardedMessages.set(messageId, Date.now());
+
+  // Size-based eviction if Map grows too large
+  if (forwardedMessages.size > FORWARDED_EVICTION_SIZE) {
+    evictOldestEntries(FORWARDED_EVICTION_SIZE / 2);
+  }
 }
 
 // ===== Message Routing =====
@@ -212,7 +255,7 @@ export async function routeThreadToDm(message: Message, ticket: ModmailTicket, c
     // Send to DM
     const dmMessage = await user.send({
       embeds: [embed],
-      allowedMentions: { parse: [] },
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
       ...(replyToDmMessageId && {
         reply: { messageReference: replyToDmMessageId, failIfNotExists: false },
       }),
@@ -258,7 +301,7 @@ export async function routeThreadToDm(message: Message, ticket: ModmailTicket, c
     try {
       await message.reply({
         content: "Failed to deliver message to applicant (DMs may be closed).",
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     } catch {
       // Best effort
@@ -328,7 +371,7 @@ export async function routeDmToThread(message: Message, ticket: ModmailTicket, c
     // Send to thread
     const threadMessage = await thread.send({
       embeds: [embed],
-      allowedMentions: { parse: [] },
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
       ...(replyToThreadMessageId && {
         reply: { messageReference: replyToThreadMessageId, failIfNotExists: false },
       }),
@@ -421,3 +464,18 @@ export async function handleInboundThreadMessageForModmail(message: Message, cli
     await routeThreadToDm(message, ticket, client);
   }
 }
+
+// ===== Testing Exports =====
+
+/**
+ * _testing
+ * WHAT: Exports internal state and helpers for testing.
+ * WHY: Allows unit tests to verify size-based eviction behavior.
+ * NOTE: Only use in tests, not in production code.
+ */
+export const _testing = {
+  getForwardedMessagesSize: () => forwardedMessages.size,
+  clearForwardedMessages: () => forwardedMessages.clear(),
+  FORWARDED_EVICTION_SIZE,
+  FORWARDED_MAX_SIZE,
+};

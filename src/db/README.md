@@ -24,14 +24,12 @@ The database layer uses **better-sqlite3** for synchronous SQLite access with Wr
 - Creates core tables (review_card, review_claim, dm_bridge, transcript, modmail_ticket, modmail_message)
 - Wraps `db.prepare()` with tracing and legacy SQL detection
 - Handles graceful shutdown (SIGTERM, SIGINT)
-- Provides `execRaw()` for multi-statement DDL (migrations only)
 
 **Key Exports:**
 
-| Export         | Type       | Description                                       |
-| -------------- | ---------- | ------------------------------------------------- |
-| `db`           | `Database` | better-sqlite3 database instance (singleton)      |
-| `execRaw(sql)` | `function` | Execute raw multi-statement SQL (migrations only) |
+| Export | Type       | Description                                  |
+| ------ | ---------- | -------------------------------------------- |
+| `db`   | `Database` | better-sqlite3 database instance (singleton) |
 
 **PRAGMAs Applied:**
 

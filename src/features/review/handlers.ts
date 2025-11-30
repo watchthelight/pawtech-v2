@@ -43,6 +43,7 @@ import { closeModmailForApplication } from "../modmail.js";
 import { nowUtc } from "../../lib/time.js";
 import { autoDelete } from "../../utils/autoDelete.js";
 import { findAppByShortCode } from "../appLookup.js";
+import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 import { postWelcomeCard } from "../welcome.js";
 
 import type {
@@ -425,7 +426,7 @@ async function runApproveAction(
     try {
       await interaction.channel.send({
         content: messages.join("\n"),
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
         reply: reviewMessageId ? { messageReference: reviewMessageId } : undefined,
       });
     } catch (err) {
@@ -546,7 +547,7 @@ async function runRejectAction(
     try {
       await interaction.channel.send({
         content: publicContent,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
         reply: reviewMessageId ? { messageReference: reviewMessageId } : undefined,
       });
     } catch (err) {
@@ -682,7 +683,7 @@ async function runPermRejectAction(
     try {
       await interaction.channel.send({
         content: publicContent,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
         reply: reviewMessageId ? { messageReference: reviewMessageId } : undefined,
       });
     } catch (err) {
@@ -782,7 +783,7 @@ async function runKickAction(
     try {
       await interaction.channel.send({
         content: message,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
         reply: reviewMessageId ? { messageReference: reviewMessageId } : undefined,
       });
     } catch (err) {
@@ -1153,7 +1154,7 @@ export async function handleModmailButton(interaction: ButtonInteraction) {
         try {
           await interaction.channel.send({
             content: result.message ?? "Modmail thread created.",
-            allowedMentions: { parse: [] },
+            allowedMentions: SAFE_ALLOWED_MENTIONS,
           });
         } catch (err) {
           logger.warn({ err, code }, "[modmail] failed to post public thread creation message");
@@ -1166,7 +1167,7 @@ export async function handleModmailButton(interaction: ButtonInteraction) {
         .followUp({
           flags: MessageFlags.Ephemeral,
           content: `Warning: ${msg}`,
-          allowedMentions: { parse: [] },
+          allowedMentions: SAFE_ALLOWED_MENTIONS,
         })
         .catch(() => undefined);
     }

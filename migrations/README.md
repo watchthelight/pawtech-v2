@@ -327,6 +327,19 @@ npm run migrate
 - `.sql` files are legacy/reference only
 - When creating new migrations, check existing `.ts` files only
 
+## 📊 Numbering Gaps
+
+The TypeScript migration sequence has the following gaps:
+
+| Missing Numbers | Reason |
+|-----------------|--------|
+| 006, 007, 009 | These versions exist only as legacy `.sql` files (not auto-run) |
+| 014, 015, 016 | Development migrations that were never committed |
+
+**Important**: These gaps are cosmetic and do not affect functionality. The migration runner processes files by version number regardless of gaps.
+
+**Current sequence**: Migrations continue from 028 onward.
+
 ## 📝 Migration Checklist
 
 Before committing a new migration:

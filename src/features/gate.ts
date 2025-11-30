@@ -47,7 +47,7 @@ import { getConfig, type GuildConfig } from "../lib/config.js";
 import { ensureReviewMessage } from "./review.js";
 import { scanAvatar, type ScanResult } from "./avatarScan.js";
 import type { CmdCtx } from "../lib/cmdWrap.js";
-import { currentTraceId, ensureDeferred, replyOrEdit, withSql } from "../lib/cmdWrap.js";
+import { ensureDeferred, replyOrEdit, withSql } from "../lib/cmdWrap.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { getQuestions as getQuestionsShared } from "./gate/questions.js";
 import { touchSyncMarker } from "../lib/syncMarker.js";
@@ -205,8 +205,10 @@ function getOrCreateDraft(db: BetterSqliteDatabase, guildId: string, userId: str
   // Only deletes terminal statuses (approved, rejected, kicked, perm_rejected)
   // Active apps (draft, submitted, needs_info) are never deleted
   const resolvedApps = db.prepare(
-    `SELECT id FROM application WHERE status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
-  ).all() as Array<{ id: string }>;
+    `SELECT id FROM application
+     WHERE guild_id = ?
+     AND status IN ('approved', 'rejected', 'kicked', 'perm_rejected')`
+  ).all(guildId) as Array<{ id: string }>;
 
   for (const app of resolvedApps) {
     if (shortCode(app.id) === code) {
@@ -717,7 +719,7 @@ async function findExistingGateEntry(channel: GuildTextBasedChannel, botId: stri
 function logPhase(ctx: CmdCtx, phase: string, extras: Record<string, unknown> = {}) {
   logger.info({
     evt: "gate_entry_step",
-    traceId: currentTraceId(ctx),
+    traceId: ctx.traceId,
     phase,
     ...extras,
   });
@@ -1248,7 +1250,7 @@ export async function handleGateModalSubmit(
       user: interaction.user,
       cfg,
       client: interaction.client as Client,
-      parentTraceId: currentTraceId(ctx) ?? null,
+      parentTraceId: ctx.traceId ?? null,
     });
   }
 

@@ -110,23 +110,21 @@ export function claimTx(appId: string, moderatorId: string, guildId: string): vo
       throw new ClaimError("Application already claimed by another moderator", "ALREADY_CLAIMED");
     }
 
-    // Claim the application
-    // Using nowUtc() for consistency - returns ISO string compatible with SQLite datetime.
-    const claimedAt = nowUtc();
+    // Capture timestamp once for both claim record and audit log
+    // nowUtc() returns Unix epoch seconds (INTEGER), matching both table schemas
+    const timestamp = nowUtc();
+
     db.prepare(
       "INSERT INTO review_claim (app_id, reviewer_id, claimed_at) VALUES (?, ?, ?)"
-    ).run(appId, moderatorId, claimedAt);
+    ).run(appId, moderatorId, timestamp);
 
     // Insert into review_action for audit trail (inside same transaction for atomicity)
-    // Uses epoch seconds for the action log - different from claimed_at which is ISO string.
-    // This inconsistency is legacy; new code should standardize on one format.
-    const createdAtEpoch = Math.floor(Date.now() / 1000);
     db.prepare(
       "INSERT INTO review_action (app_id, moderator_id, action, created_at) VALUES (?, ?, 'claim', ?)"
-    ).run(appId, moderatorId, createdAtEpoch);
+    ).run(appId, moderatorId, timestamp);
 
     logger.info(
-      { appId, moderatorId, guildId, claimedAt },
+      { appId, moderatorId, guildId, timestamp },
       "[reviewActions] claimTx: application claimed successfully"
     );
   })();
@@ -185,14 +183,16 @@ export function unclaimTx(appId: string, moderatorId: string, guildId: string): 
       throw new ClaimError("You did not claim this application", "NOT_OWNER");
     }
 
+    // Capture timestamp before deleting claim (for audit log)
+    const timestamp = nowUtc();
+
     // Remove claim
     db.prepare("DELETE FROM review_claim WHERE app_id = ?").run(appId);
 
     // Insert into review_action for audit trail (inside same transaction for atomicity)
-    const createdAtEpoch = Math.floor(Date.now() / 1000);
     db.prepare(
       "INSERT INTO review_action (app_id, moderator_id, action, created_at) VALUES (?, ?, 'unclaim', ?)"
-    ).run(appId, moderatorId, createdAtEpoch);
+    ).run(appId, moderatorId, timestamp);
 
     logger.info(
       { appId, moderatorId, guildId },

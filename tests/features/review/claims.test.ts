@@ -31,7 +31,6 @@ import {
   CLAIMED_MESSAGE,
   getReviewClaim,
   getClaim,
-  upsertClaim,
   clearClaim,
 } from "../../../src/features/review/claims.js";
 import type { ReviewClaimRow } from "../../../src/features/review/types.js";
@@ -164,35 +163,6 @@ describe("getClaim", () => {
   });
 });
 
-// ===== upsertClaim Tests =====
-
-describe("upsertClaim", () => {
-  it("inserts a new claim", () => {
-    upsertClaim("app-123", "reviewer-456");
-
-    expect(mockDb.prepare).toHaveBeenCalledWith(
-      expect.stringMatching(/INSERT INTO review_claim/)
-    );
-    expect(mockDbStatement.run).toHaveBeenCalledWith("app-123", "reviewer-456");
-  });
-
-  it("uses ON CONFLICT for upsert semantics", () => {
-    upsertClaim("app-123", "reviewer-456");
-
-    expect(mockDb.prepare).toHaveBeenCalledWith(
-      expect.stringMatching(/ON CONFLICT.*DO UPDATE/)
-    );
-  });
-
-  it("updates claimed_at timestamp on conflict", () => {
-    upsertClaim("app-123", "new-reviewer");
-
-    expect(mockDb.prepare).toHaveBeenCalledWith(
-      expect.stringMatching(/claimed_at.*excluded\.claimed_at/)
-    );
-  });
-});
-
 // ===== clearClaim Tests =====
 
 describe("clearClaim", () => {
@@ -216,19 +186,19 @@ describe("clearClaim", () => {
 });
 
 // ===== Claim Workflow Integration Tests =====
+// NOTE: Atomic claim operations (claimTx/unclaimTx) are tested in reviewActions.test.ts
+// These tests focus on the guard and clear functions used by handlers.
 
 describe("claim workflow", () => {
-  it("full claim lifecycle: claim -> guard -> clear", () => {
-    // 1. User claims an app
-    upsertClaim("app-workflow", "mod-1");
-    expect(mockDbStatement.run).toHaveBeenCalledWith("app-workflow", "mod-1");
-
-    // 2. Claimer can take action
+  it("guard -> clear flow for resolution", () => {
+    // 1. Existing claim (set up by claimTx in production)
     const claim: ReviewClaimRow = {
       app_id: "app-workflow",
       reviewer_id: "mod-1",
       claimed_at: new Date().toISOString(),
     };
+
+    // 2. Claimer can take action
     expect(claimGuard(claim, "mod-1")).toBeNull();
 
     // 3. Another mod is blocked
@@ -241,31 +211,15 @@ describe("claim workflow", () => {
     );
   });
 
-  it("claim handoff: user A claims, unclaims, user B claims", () => {
-    // User A claims
-    upsertClaim("app-handoff", "user-a");
-
-    // User A unclaims (clear)
+  it("clearClaim releases claim for next reviewer", () => {
+    // Clear claim
     clearClaim("app-handoff");
 
-    // User B can now claim
-    upsertClaim("app-handoff", "user-b");
-
-    // Verify user B's claim
-    const lastRunCall = mockDbStatement.run.mock.calls[mockDbStatement.run.mock.calls.length - 1];
-    expect(lastRunCall).toEqual(["app-handoff", "user-b"]);
-  });
-
-  it("claim takeover: new claim overwrites old claim", () => {
-    // This tests the upsert behavior where a new claim replaces the old one.
-    // In production, the UI prevents this, but the DB layer supports it.
-
-    upsertClaim("app-takeover", "original-claimer");
-    upsertClaim("app-takeover", "new-claimer");
-
-    // Both inserts should work (upsert)
-    expect(mockDbStatement.run).toHaveBeenCalledTimes(2);
-    expect(mockDbStatement.run).toHaveBeenLastCalledWith("app-takeover", "new-claimer");
+    // Verify DELETE was called
+    expect(mockDb.prepare).toHaveBeenCalledWith(
+      expect.stringMatching(/DELETE FROM review_claim/)
+    );
+    expect(mockDbStatement.run).toHaveBeenCalledWith("app-handoff");
   });
 });
 
@@ -278,11 +232,6 @@ describe("edge cases", () => {
 
     const result = getClaim("");
     expect(result).toBeNull();
-  });
-
-  it("handles empty string reviewer_id", () => {
-    upsertClaim("app-123", "");
-    expect(mockDbStatement.run).toHaveBeenCalledWith("app-123", "");
   });
 
   it("claimGuard handles claim with empty reviewer_id", () => {

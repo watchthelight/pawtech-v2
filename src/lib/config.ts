@@ -12,13 +12,14 @@
  *  - SQLite PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
-import type { ChatInputCommandInteraction, GuildMember } from "discord.js";
+import type { ChatInputCommandInteraction, GuildMember, APIInteractionGuildMember } from "discord.js";
 import { MessageFlags } from "discord.js";
 import { db } from "../db/db.js";
 import { logger } from "./logger.js";
 import { env } from "./env.js";
 import { isOwner } from "../utils/owner.js";
 import { touchSyncMarker } from "./syncMarker.js";
+import { isGuildMember } from "../utils/typeGuards.js";
 
 export type GuildConfig = {
   guild_id: string;
@@ -63,21 +64,72 @@ export type GuildConfig = {
 // Simple in-memory cache with TTL. Map is fine here - we're not dealing with
 // thousands of guilds, and the cache naturally clears on bot restart.
 // If memory becomes an issue, switch to LRU with bounded size.
+//
+// CACHE CONSISTENCY NOTES:
+// - TTL-based invalidation means stale data can be served during concurrent updates
+// - Maximum staleness window: CACHE_TTL_MS (5 minutes)
+// - This is ACCEPTABLE for guild config because:
+//   * Updates are infrequent (typically one-time setup)
+//   * Config fields are non-critical convenience settings
+//   * SQLite handles concurrent writes (no data corruption)
+//   * Single-node deployment reduces actual concurrency
+// - If you need stronger consistency, see Option B in docs/roadmap/043-document-cache-behavior.md
 const configCache = new Map<string, { config: GuildConfig; timestamp: number }>();
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes - short enough to pick up config changes reasonably fast
 
-// These flags implement a poor man's migration system. Each ensure*Column function
-// runs ALTER TABLE on first call, then sets its flag to skip subsequent calls.
-// This approach is fragile (restart = re-check) but works for additive migrations.
-// A proper migration runner would be cleaner but this is fine for small schema drift.
-let welcomeTemplateEnsured = false;
-let welcomeChannelsEnsured = false;
-let unverifiedChannelEnsured = false;
-let modRolesColumnsEnsured = false;
-let dadmodeColumnsEnsured = false;
+/**
+ * Track which schema migrations have been applied during this runtime.
+ *
+ * This Set prevents re-running migrations on every config access. Each ensure
+ * function adds its migration name after successful completion. Memory footprint
+ * is minimal (~6 strings x 30 bytes = ~180 bytes vs ~6 bytes for booleans).
+ *
+ * Migration names follow pattern: table_column or table_featurename
+ * Examples: "guild_config_welcome_template", "guild_config_mod_roles"
+ */
+const ensuredMigrations = new Set<string>();
 
-function ensureUnverifiedChannelColumn() {
-  if (unverifiedChannelEnsured) return;
+// Allowlist of valid column names for ALTER TABLE migration operations.
+// This prevents SQL injection if column name sources ever become dynamic.
+// Pattern follows metricsEpoch.ts:101 and config.ts:317 validation approach.
+const ALLOWED_MIGRATION_COLUMNS = new Set([
+  // Welcome channel columns
+  "info_channel_id",
+  "rules_channel_id",
+  "welcome_ping_role_id",
+  "welcome_template",
+  "unverified_channel_id",
+
+  // Mod roles and modmail columns
+  "mod_role_ids",
+  "gatekeeper_role_id",
+  "modmail_log_channel_id",
+  "modmail_delete_on_close",
+
+  // Feature toggle columns
+  "dadmode_enabled",
+  "dadmode_odds",
+  "listopen_public_output",
+]);
+
+/**
+ * validateMigrationColumnName
+ * WHAT: Validates column name against allowlist before SQL interpolation
+ * WHY: Prevents SQL injection if column names ever become dynamic
+ * THROWS: Error with sanitized message if column name is rejected
+ */
+function validateMigrationColumnName(columnName: string): void {
+  if (!ALLOWED_MIGRATION_COLUMNS.has(columnName)) {
+    logger.error(
+      { columnName, table: "guild_config" },
+      "[config] Invalid migration column name rejected - potential SQL injection attempt"
+    );
+    throw new Error(`Invalid column name for migration: ${columnName}`);
+  }
+}
+
+export function ensureUnverifiedChannelColumn() {
+  if (ensuredMigrations.has("guild_config_unverified_channel")) return;
   try {
     const exists = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
@@ -87,20 +139,21 @@ function ensureUnverifiedChannelColumn() {
     }
     const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
     if (!cols.some((col) => col.name === "unverified_channel_id")) {
+      validateMigrationColumnName("unverified_channel_id"); // Validate before interpolation
       logger.info(
         { table: "guild_config", column: "unverified_channel_id" },
         "[ensure] adding unverified_channel_id column"
       );
       db.prepare(`ALTER TABLE guild_config ADD COLUMN unverified_channel_id TEXT`).run();
     }
-    unverifiedChannelEnsured = true;
+    ensuredMigrations.add("guild_config_unverified_channel");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure unverified_channel_id column");
   }
 }
 
-function ensureWelcomeTemplateColumn() {
-  if (welcomeTemplateEnsured) return;
+export function ensureWelcomeTemplateColumn() {
+  if (ensuredMigrations.has("guild_config_welcome_template")) return;
   try {
     const exists = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
@@ -111,20 +164,21 @@ function ensureWelcomeTemplateColumn() {
     // PRAGMA table_info introspection to add missing welcome_template (migration-lite)
     const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
     if (!cols.some((col) => col.name === "welcome_template")) {
+      validateMigrationColumnName("welcome_template"); // Validate before interpolation
       logger.info(
         { table: "guild_config", column: "welcome_template" },
         "[ensure] adding welcome_template column"
       );
       db.prepare(`ALTER TABLE guild_config ADD COLUMN welcome_template TEXT`).run();
     }
-    welcomeTemplateEnsured = true;
+    ensuredMigrations.add("guild_config_welcome_template");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure welcome_template column");
   }
 }
 
-function ensureWelcomeChannelsColumns() {
-  if (welcomeChannelsEnsured) return;
+export function ensureWelcomeChannelsColumns() {
+  if (ensuredMigrations.has("guild_config_welcome_channels")) return;
   try {
     const exists = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
@@ -137,16 +191,17 @@ function ensureWelcomeChannelsColumns() {
       (col) => !cols.some((c) => c.name === col)
     );
     for (const col of missing) {
+      validateMigrationColumnName(col); // Validate before interpolation
       logger.info({ table: "guild_config", column: col }, "[ensure] adding welcome channel column");
       db.prepare(`ALTER TABLE guild_config ADD COLUMN ${col} TEXT`).run();
     }
-    welcomeChannelsEnsured = true;
+    ensuredMigrations.add("guild_config_welcome_channels");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure welcome channel columns");
   }
 }
 
-function ensureModRolesColumns() {
+export function ensureModRolesColumns() {
   /**
    * ensureModRolesColumns
    * WHAT: Migration helper to add mod_role_ids, gatekeeper_role_id, modmail_log_channel_id columns.
@@ -155,7 +210,7 @@ function ensureModRolesColumns() {
    *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
    *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
    */
-  if (modRolesColumnsEnsured) return;
+  if (ensuredMigrations.has("guild_config_mod_roles")) return;
   try {
     const exists = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
@@ -171,18 +226,19 @@ function ensureModRolesColumns() {
       "modmail_delete_on_close",
     ].filter((col) => !cols.some((c) => c.name === col));
     for (const col of missing) {
+      validateMigrationColumnName(col); // Validate before interpolation
       logger.info({ table: "guild_config", column: col }, "[ensure] adding mod roles column");
       // modmail_delete_on_close is INTEGER (boolean), others are TEXT
       const colType = col === "modmail_delete_on_close" ? "INTEGER DEFAULT 1" : "TEXT";
       db.prepare(`ALTER TABLE guild_config ADD COLUMN ${col} ${colType}`).run();
     }
-    modRolesColumnsEnsured = true;
+    ensuredMigrations.add("guild_config_mod_roles");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure mod roles columns");
   }
 }
 
-function ensureDadModeColumns() {
+export function ensureDadModeColumns() {
   /**
    * ensureDadModeColumns
    * WHAT: Migration helper to add dadmode_enabled and dadmode_odds columns.
@@ -191,7 +247,7 @@ function ensureDadModeColumns() {
    *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
    *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
    */
-  if (dadmodeColumnsEnsured) return;
+  if (ensuredMigrations.has("guild_config_dadmode")) return;
   try {
     const exists = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
@@ -204,21 +260,20 @@ function ensureDadModeColumns() {
       (col) => !cols.some((c) => c.name === col)
     );
     for (const col of missing) {
+      validateMigrationColumnName(col); // Validate before interpolation
       logger.info({ table: "guild_config", column: col }, "[ensure] adding dadmode column");
       // dadmode_enabled is INTEGER (boolean 0/1), dadmode_odds is INTEGER (1 in N)
       const colDef =
         col === "dadmode_enabled" ? "INTEGER DEFAULT 0" : "INTEGER DEFAULT 1000";
       db.prepare(`ALTER TABLE guild_config ADD COLUMN ${col} ${colDef}`).run();
     }
-    dadmodeColumnsEnsured = true;
+    ensuredMigrations.add("guild_config_dadmode");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure dadmode columns");
   }
 }
 
-let listopenPublicOutputEnsured = false;
-
-function ensureListopenPublicOutputColumn() {
+export function ensureListopenPublicOutputColumn() {
   /**
    * ensureListopenPublicOutputColumn
    * WHAT: Migration helper to add listopen_public_output column.
@@ -227,7 +282,7 @@ function ensureListopenPublicOutputColumn() {
    *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
    *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
    */
-  if (listopenPublicOutputEnsured) return;
+  if (ensuredMigrations.has("guild_config_listopen_public_output")) return;
   try {
     const exists = db
       .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
@@ -237,13 +292,14 @@ function ensureListopenPublicOutputColumn() {
     }
     const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
     if (!cols.some((col) => col.name === "listopen_public_output")) {
+      validateMigrationColumnName("listopen_public_output"); // Validate before interpolation
       logger.info(
         { table: "guild_config", column: "listopen_public_output" },
         "[ensure] adding listopen_public_output column (default 1 = public)"
       );
       db.prepare(`ALTER TABLE guild_config ADD COLUMN listopen_public_output INTEGER DEFAULT 1`).run();
     }
-    listopenPublicOutputEnsured = true;
+    ensuredMigrations.add("guild_config_listopen_public_output");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure listopen_public_output column");
   }
@@ -263,12 +319,7 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
    *  - partial: subset of fields to set; other fields default
    * THROWS: Propagates errors; callers typically wrapped by cmdWrap.
    */
-  ensureUnverifiedChannelColumn();
-  ensureWelcomeTemplateColumn();
-  ensureWelcomeChannelsColumns();
-  ensureModRolesColumns();
-  ensureDadModeColumns();
-  ensureListopenPublicOutputColumn();
+  // NOTE: Schema ensure functions moved to startup (src/index.ts) for performance
   // Manual upsert pattern because SQLite's INSERT OR REPLACE would nuke columns
   // we didn't specify. This way partial updates actually work as expected.
   const existing = db.prepare("SELECT * FROM guild_config WHERE guild_id = ?").get(guildId);
@@ -356,12 +407,7 @@ export function getConfig(guildId: string): GuildConfig | undefined {
    * WHY: Avoids repeated SQL on hot paths.
    * THROWS: Never; cache miss simply falls through to DB.
    */
-  ensureUnverifiedChannelColumn();
-  ensureWelcomeTemplateColumn();
-  ensureWelcomeChannelsColumns();
-  ensureModRolesColumns();
-  ensureDadModeColumns();
-  ensureListopenPublicOutputColumn();
+  // NOTE: Schema ensure functions moved to startup (src/index.ts) for performance
   const cached = configCache.get(guildId);
   if (cached && Date.now() - cached.timestamp < CACHE_TTL_MS) {
     return cached.config;
@@ -386,23 +432,31 @@ export function getConfig(guildId: string): GuildConfig | undefined {
   return config;
 }
 
-export function hasManageGuild(member: GuildMember | null): boolean {
+export function hasManageGuild(member: GuildMember | APIInteractionGuildMember | null): boolean {
   /**
    * hasManageGuild
    * WHAT: Convenience for checking ManageGuild permission bit on a member.
    * LINK: https://discord.com/developers/docs/topics/permissions
+   * NOTE: Returns false for APIInteractionGuildMember (string permissions) - requires full GuildMember.
    */
-  return !!member?.permissions?.has("ManageGuild");
+  if (!isGuildMember(member)) return false;
+  return !!member.permissions?.has("ManageGuild");
 }
 
-export function hasStaffPermissions(member: GuildMember | null, guildId: string): boolean {
+export function hasStaffPermissions(
+  member: GuildMember | APIInteractionGuildMember | null,
+  guildId: string
+): boolean {
   /**
    * hasStaffPermissions
    * WHAT: Checks if a member has staff permissions, including owner override.
    * WHY: Centralizes staff permission logic with owner bypass.
+   * NOTE: Accepts both GuildMember and APIInteractionGuildMember but role/permission
+   *       checks require full GuildMember - returns false for API members without owner bypass.
    */
-  const { isOwner } = require("../utils/owner.js");
   if (isOwner(member?.user?.id ?? "")) return true;
+  // hasManageGuild and isReviewer require full GuildMember for role cache access
+  if (!isGuildMember(member)) return false;
   return hasManageGuild(member) || isReviewer(guildId, member);
 }
 

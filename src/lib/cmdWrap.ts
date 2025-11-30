@@ -373,10 +373,6 @@ export function withSql<T>(ctx: SqlTrackingCtx, sql: string, run: () => T): T {
   }
 }
 
-export function currentTraceId(ctx: CommandContext<InstrumentedInteraction>): string {
-  return ctx.traceId;
-}
-
 type ReplyableInteraction =
   | ChatInputCommandInteraction
   | ModalSubmitInteraction

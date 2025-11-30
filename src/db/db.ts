@@ -38,17 +38,6 @@ db.pragma(`busy_timeout = ${DB_BUSY_TIMEOUT_MS}`);
 const dbTraceEnabled = process.env.DB_TRACE === "1";
 logger.info({ dbPath, dbTraceEnabled }, "SQLite opened");
 
-/**
- * execRaw
- * WHAT: Execute raw SQL via better-sqlite3's exec() method, bypassing tracedPrepare.
- * WHY: Schema migrations need multi-statement DDL that the prepare() guard blocks.
- * USAGE: Only for migrations in ensure.ts; all normal queries use prepare().
- * DOCS: https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md#execstring---this
- */
-export function execRaw(sql: string): void {
-  db.exec(sql);
-}
-
 const legacyRe = /__old|ALTER\s+TABLE\s+.+\s+RENAME/i;
 const originalPrepare = db.prepare.bind(db);
 (db as any).prepare = function tracedPrepare(sql: string) {
@@ -265,28 +254,8 @@ try {
   // Table may not exist yet if action_log schema hasn't been created
 }
 
-// Sync marker table for local/remote database switching
-// Singleton row tracks database freshness via monotonic action_count
-db.prepare(
-  `
-  CREATE TABLE IF NOT EXISTS sync_marker (
-    id INTEGER PRIMARY KEY CHECK (id = 1),
-    last_modified_at INTEGER NOT NULL,
-    last_modified_by TEXT NOT NULL,
-    action_count INTEGER NOT NULL DEFAULT 0,
-    last_action_type TEXT,
-    updated_at TEXT DEFAULT (datetime('now'))
-  )
-`
-).run();
-
-// Insert initial marker if not exists
-db.prepare(
-  `
-  INSERT OR IGNORE INTO sync_marker (id, last_modified_at, last_modified_by, action_count)
-  VALUES (1, strftime('%s', 'now'), 'unknown', 0)
-`
-).run();
+// NOTE: sync_marker table is created by migration 026_sync_marker.ts
+// Do not add schema creation here - migrations are the single source of truth
 
 // Artist rotation queue: tracks Server Artists and their position in the assignment queue
 // Used by /redeemreward and /artistqueue commands
@@ -337,6 +306,11 @@ db.prepare(
 db.prepare(
   `CREATE INDEX IF NOT EXISTS idx_artist_assignment_log_artist ON artist_assignment_log(artist_id)`
 ).run();
+
+// Movie night qualification threshold: per-guild configurable threshold
+// Default 30 minutes preserves backward compatibility
+// WHY: Allows guilds to customize the threshold for short films vs feature films
+addColumnIfMissing("guild_movie_config", "qualification_threshold_minutes", "INTEGER DEFAULT 30");
 
 // NOTE: Database shutdown is handled by the coordinated graceful shutdown in index.ts
 // which ensures proper ordering (stop schedulers → cleanup features → close DB)

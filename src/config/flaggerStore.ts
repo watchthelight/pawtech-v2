@@ -154,7 +154,9 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
  * setFlagsChannelId('123456789', '987654321');
  */
 export function setFlagsChannelId(guildId: string, channelId: string): void {
-  const now = new Date().toISOString();
+  // Use Unix epoch timestamp (INTEGER) to match standardized guild_config.updated_at_s column
+  // This aligns with action_log.created_at_s and panicStore patterns for consistency
+  const nowS = Math.floor(Date.now() / 1000);
 
   try {
     // UPSERT pattern: insert new row or update existing guild_config entry
@@ -162,13 +164,13 @@ export function setFlagsChannelId(guildId: string, channelId: string): void {
     // This is called by /config set flags.channel command (ManageGuild permission required)
     db.prepare(
       `
-      INSERT INTO guild_config (guild_id, flags_channel_id, updated_at)
+      INSERT INTO guild_config (guild_id, flags_channel_id, updated_at_s)
       VALUES (?, ?, ?)
       ON CONFLICT(guild_id) DO UPDATE SET
         flags_channel_id = excluded.flags_channel_id,
-        updated_at = excluded.updated_at
+        updated_at_s = excluded.updated_at_s
     `
-    ).run(guildId, channelId, now);
+    ).run(guildId, channelId, nowS);
 
     // Invalidate cache AFTER successful write to prevent serving stale data
     // This ensures any subsequent reads get the fresh value from DB
@@ -208,19 +210,21 @@ export function setSilentFirstMsgDays(guildId: string, days: number): void {
     throw new Error("Silent days threshold must be between 7 and 365 days");
   }
 
-  const now = new Date().toISOString();
+  // Use Unix epoch timestamp (INTEGER) to match standardized guild_config.updated_at_s column
+  // This aligns with action_log.created_at_s and panicStore patterns for consistency
+  const nowS = Math.floor(Date.now() / 1000);
 
   try {
     // UPSERT pattern: insert new row or update existing guild_config entry
     db.prepare(
       `
-      INSERT INTO guild_config (guild_id, silent_first_msg_days, updated_at)
+      INSERT INTO guild_config (guild_id, silent_first_msg_days, updated_at_s)
       VALUES (?, ?, ?)
       ON CONFLICT(guild_id) DO UPDATE SET
         silent_first_msg_days = excluded.silent_first_msg_days,
-        updated_at = excluded.updated_at
+        updated_at_s = excluded.updated_at_s
     `
-    ).run(guildId, days, now);
+    ).run(guildId, days, nowS);
 
     // Invalidate cache AFTER successful write to prevent serving stale data
     invalidateCache(guildId);

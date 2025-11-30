@@ -15,6 +15,7 @@
 import { logger } from "./logger.js";
 import { captureException } from "./sentry.js";
 import { classifyError, errorContext, shouldReportToSentry } from "./errors.js";
+import { SLOW_EVENT_THRESHOLD_MS } from "./constants.js";
 
 /**
  * Generic event handler type.
@@ -25,20 +26,37 @@ import { classifyError, errorContext, shouldReportToSentry } from "./errors.js";
  */
 type EventHandler<T extends unknown[]> = (...args: T) => Promise<void> | void;
 
-const DEFAULT_EVENT_TIMEOUT_MS = parseInt(process.env.EVENT_TIMEOUT_MS ?? "30000", 10);
+/**
+ * Default timeout for event handlers.
+ *
+ * Discord.js events should generally complete quickly. 10 seconds provides
+ * ample safety margin while catching genuinely slow handlers that need
+ * investigation.
+ *
+ * Override via EVENT_TIMEOUT_MS environment variable or per-handler timeout
+ * parameter if specific events need more time.
+ */
+const DEFAULT_EVENT_TIMEOUT_MS = parseInt(process.env.EVENT_TIMEOUT_MS ?? "10000", 10);
 
 /**
  * Wrap an event handler with error protection
  *
  * @param eventName - Name of the event for logging
  * @param handler - The actual event handler function
+ * @param timeoutMs - Timeout in milliseconds (default: 10000)
  * @returns Wrapped handler that catches and logs errors
  *
  * @example
  * ```ts
+ * // Use default 10-second timeout
  * client.on("guildMemberAdd", wrapEvent("guildMemberAdd", async (member) => {
  *   await processNewMember(member);
  * }));
+ *
+ * // Override for slow operation
+ * client.on("guildCreate", wrapEvent("guildCreate", async (guild) => {
+ *   await syncCommandsToGuild(guild.id);
+ * }, 20000)); // 20-second timeout
  * ```
  */
 export function wrapEvent<T extends unknown[]>(
@@ -93,71 +111,6 @@ export function wrapEvent<T extends unknown[]>(
 }
 
 /**
- * Wrap an event handler with error protection and timing.
- *
- * Use this variant for events where you want performance visibility.
- * The 5-second threshold is somewhat arbitrary - tune it based on your
- * typical event handling times.
- *
- * Note: Date.now() is sufficient for this use case. Performance.now()
- * would be more precise but we're measuring wall clock time anyway, and
- * the overhead of Date.now() is negligible compared to async I/O.
- */
-export function wrapEventWithTiming<T extends unknown[]>(
-  eventName: string,
-  handler: EventHandler<T>,
-  timeoutMs: number = DEFAULT_EVENT_TIMEOUT_MS
-): EventHandler<T> {
-  return async (...args: T) => {
-    const startMs = Date.now();
-    try {
-      await Promise.race([
-        handler(...args),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`Event handler timeout after ${timeoutMs}ms`)), timeoutMs)
-        ),
-      ]);
-      const durationMs = Date.now() - startMs;
-
-      // 5 seconds is a long time for an event handler. If you're hitting this
-      // regularly, consider deferring expensive work to a background job.
-      if (durationMs > 5000) {
-        logger.warn(
-          { evt: "slow_event", event: eventName, durationMs },
-          `[${eventName}] event handler took ${durationMs}ms`
-        );
-      }
-    } catch (err) {
-      const durationMs = Date.now() - startMs;
-      const classified = classifyError(err);
-      const contextIds = extractEventContext(args);
-
-      logger.error(
-        {
-          evt: "event_error",
-          event: eventName,
-          durationMs,
-          ...errorContext(classified, contextIds),
-          err,
-        },
-        `[${eventName}] event handler failed after ${durationMs}ms: ${classified.message}`
-      );
-
-      if (shouldReportToSentry(classified)) {
-        captureException(err instanceof Error ? err : new Error(String(err)), {
-          event: eventName,
-          errorKind: classified.kind,
-          durationMs,
-          ...contextIds,
-        });
-      }
-
-      // Never re-throw - keep bot running
-    }
-  };
-}
-
-/**
  * Extract common identifiers from Discord.js event arguments.
  *
  * Discord.js event payloads are polymorphic - different events pass different
@@ -205,60 +158,4 @@ function extractEventContext(args: unknown[]): Record<string, unknown> {
   }
 
   return context;
-}
-
-/**
- * Create a rate-limited event handler wrapper.
- *
- * This is a simple sliding window limiter. Use it for high-frequency events
- * like messageCreate where a spam attack could overwhelm the bot.
- *
- * IMPORTANT: This uses in-memory state, so:
- * 1. Limits are per-process, not global (fine for single-instance bots)
- * 2. Limits reset on restart
- * 3. No fairness guarantees - first N callers in the window win
- *
- * For more sophisticated rate limiting (per-user, per-guild, distributed),
- * you'd need Redis or similar.
- *
- * The rateLimitWarned flag prevents log spam - we only log once per window
- * even if we're dropping hundreds of events.
- */
-export function wrapEventRateLimited<T extends unknown[]>(
-  eventName: string,
-  handler: EventHandler<T>,
-  windowMs: number = 1000,
-  maxPerWindow: number = 10
-): EventHandler<T> {
-  let invocations = 0;
-  let windowStart = Date.now();
-  let rateLimitWarned = false;
-
-  return async (...args: T) => {
-    const now = Date.now();
-
-    // Reset window if expired
-    if (now - windowStart > windowMs) {
-      invocations = 0;
-      windowStart = now;
-      rateLimitWarned = false;
-    }
-
-    invocations++;
-
-    // Rate limit exceeded - silently drop the event
-    if (invocations > maxPerWindow) {
-      if (!rateLimitWarned) {
-        rateLimitWarned = true;
-        logger.warn(
-          { evt: "event_rate_limited", event: eventName, invocations, windowMs },
-          `[${eventName}] event rate limited (${invocations} calls in ${windowMs}ms)`
-        );
-      }
-      return; // Drop the event
-    }
-
-    // Delegate to wrapped handler with timeout
-    return wrapEvent(eventName, handler, 1000)(...args);
-  };
 }

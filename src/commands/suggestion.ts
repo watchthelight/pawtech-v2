@@ -169,7 +169,8 @@ async function handleApprove(ctx: CommandContext<ChatInputCommandInteraction>): 
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  // Public reply - staff moderation action for team visibility
+  await interaction.deferReply({ ephemeral: false });
 
   ctx.step("update_status");
 
@@ -224,7 +225,8 @@ async function handleDeny(ctx: CommandContext<ChatInputCommandInteraction>): Pro
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  // Public reply - staff moderation action for team visibility
+  await interaction.deferReply({ ephemeral: false });
 
   ctx.step("update_status");
 
@@ -280,7 +282,8 @@ async function handleImplement(ctx: CommandContext<ChatInputCommandInteraction>)
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  // Public reply - staff moderation action for team visibility
+  await interaction.deferReply({ ephemeral: false });
 
   ctx.step("update_status");
 
@@ -326,7 +329,8 @@ async function handleDelete(ctx: CommandContext<ChatInputCommandInteraction>): P
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  // Public reply - staff moderation action for team visibility
+  await interaction.deferReply({ ephemeral: false });
 
   ctx.step("delete_message");
 

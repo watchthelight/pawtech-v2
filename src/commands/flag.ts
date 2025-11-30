@@ -22,8 +22,38 @@ import { env } from "../lib/env.js";
 import { getExistingFlag, isAlreadyFlagged, upsertManualFlag } from "../store/flagsStore.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
 
+/**
+ * Rate limiter for flag command (per moderator per guild).
+ *
+ * - Active cooldown: 2 seconds (prevents spam)
+ * - Entry TTL: 1 hour (memory cleanup)
+ * - Cleanup interval: 5 minutes
+ *
+ * Memory: Max ~50-500 entries x 120 bytes = ~6-60 KB
+ */
 const FLAG_RATE_LIMIT_MS = 2000;
+const FLAG_COOLDOWN_TTL_MS = 60 * 60 * 1000; // 1 hour - entries expire after this
 const flagCooldowns = new Map<string, number>();
+
+// Cleanup expired entries every 5 minutes
+setInterval(() => {
+  const now = Date.now();
+  let cleaned = 0;
+
+  for (const [key, timestamp] of flagCooldowns) {
+    if (now - timestamp > FLAG_COOLDOWN_TTL_MS) {
+      flagCooldowns.delete(key);
+      cleaned++;
+    }
+  }
+
+  if (cleaned > 0) {
+    logger.debug(
+      { cleaned, remaining: flagCooldowns.size },
+      "[flag] cooldown cleanup"
+    );
+  }
+}, 5 * 60 * 1000);
 
 export const data = new SlashCommandBuilder()
   .setName("flag")

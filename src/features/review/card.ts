@@ -28,6 +28,7 @@ import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import { captureException } from "../../lib/sentry.js";
 import { getConfig } from "../../lib/config.js";
+import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 import { getScan, googleReverseImageUrl, type ScanResult } from "../avatarScan.js";
 import { GATE_SHOW_AVATAR_RISK } from "../../lib/env.js";
 import { shortCode } from "../../lib/ids.js";
@@ -881,28 +882,27 @@ export async function ensureReviewMessage(
     if (message) {
       // Edit existing card - no ping
       await message
-        .edit({ embeds: [embed], components, allowedMentions: { parse: [] } })
+        .edit({ embeds: [embed], components, allowedMentions: SAFE_ALLOWED_MENTIONS })
         .catch((err) => {
           logger.warn({ err, messageId: message?.id }, "Failed to edit review card message");
           throw err;
         });
     } else {
-      // Create new card - include one-time Gatekeeper ping (and optionally Bot Dev)
+      // Create new card - include one-time Gatekeeper ping
       const code = shortCode(app.id);
-      const gatekeeperRoleId = guildCfg?.gatekeeper_role_id ?? "896070888762535969";
-      const botDevRoleId = "1120074045883420753";
-      const pingDevEnabled = guildCfg?.ping_dev_on_app ?? true; // Default to true
+      const gatekeeperRoleId = guildCfg?.gatekeeper_role_id;
 
       // Build role mentions and allowedMentions
-      const rolesToPing = [gatekeeperRoleId];
-      const roleMentions = [`<@&${gatekeeperRoleId}>`];
+      const rolesToPing: string[] = [];
+      const roleMentions: string[] = [];
 
-      if (pingDevEnabled) {
-        rolesToPing.push(botDevRoleId);
-        roleMentions.push(`<@&${botDevRoleId}>`);
+      if (gatekeeperRoleId) {
+        rolesToPing.push(gatekeeperRoleId);
+        roleMentions.push(`<@&${gatekeeperRoleId}>`);
       }
 
-      const content = `${roleMentions.join(" ")} New application from <@${app.user_id}> • App #${code}`;
+      const mentionPrefix = roleMentions.length > 0 ? `${roleMentions.join(" ")} ` : "";
+      const content = `${mentionPrefix}New application from <@${app.user_id}> • App #${code}`;
 
       message = await channel
         .send({
@@ -917,8 +917,7 @@ export async function ensureReviewMessage(
         });
 
       logger.info({
-        gatekeeperRoleId,
-        botDevRoleId: pingDevEnabled ? botDevRoleId : null,
+        gatekeeperRoleId: gatekeeperRoleId ?? null,
         guildId: app.guild_id,
         code
       }, "[review] role pings sent");

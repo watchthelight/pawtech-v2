@@ -18,6 +18,7 @@ import { nowUtc } from "../lib/time.js";
 import { getLoggingChannelId } from "../config/loggingStore.js";
 import { logger } from "../lib/logger.js";
 import { getLoggingChannel, logActionJSON } from "../features/logger.js";
+import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 
 /**
  * Action types allowed in action_log
@@ -416,7 +417,7 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
   try {
     await channel.send({
       embeds: [embed],
-      allowedMentions: { parse: [] }, // Suppress all mentions in logs
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
     });
     logger.debug(
       { guildId: guild.id, channelId: channel.id, action },

@@ -4,10 +4,10 @@
  * WHY: Centralize claim logic to prevent race conditions and duplicate reviews.
  * FLOWS:
  *  - claimGuard: Check if another moderator has claimed the application
- *  - upsertClaim: Claim an application for review
+ *  - getClaim/getReviewClaim: Retrieve current claim status
  *  - clearClaim: Release a claim after resolution
+ * NOTE: For atomic claim operations, use claimTx() from reviewActions.ts
  * DOCS:
- *  - SQLite UPSERT: https://sqlite.org/lang_UPSERT.html
  *  - better-sqlite3: https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
@@ -67,27 +67,6 @@ export function getClaim(appId: string): ReviewClaimRow | null {
 }
 
 // ===== Claim Mutations =====
-
-/**
- * upsertClaim
- * WHAT: Claim an application for a moderator.
- * WHY: UPSERT pattern ensures only one moderator can claim at a time.
- * NOTE: Race condition possible - two simultaneous claims may overwrite.
- *       For atomic claims, use claimTx() from reviewActions.ts instead.
- * @param appId - The application ID
- * @param reviewerId - The moderator's user ID
- */
-export function upsertClaim(appId: string, reviewerId: string) {
-  db.prepare(
-    `
-    INSERT INTO review_claim (app_id, reviewer_id, claimed_at)
-    VALUES (?, ?, datetime('now'))
-    ON CONFLICT(app_id) DO UPDATE SET
-      reviewer_id = excluded.reviewer_id,
-      claimed_at = excluded.claimed_at
-  `
-  ).run(appId, reviewerId);
-}
 
 /**
  * clearClaim

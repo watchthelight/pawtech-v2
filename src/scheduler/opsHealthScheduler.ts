@@ -69,23 +69,23 @@ async function runHealthCheckForAllGuilds(client: Client): Promise<number> {
  * WHY: Automatically monitor health and trigger alerts.
  *
  * @param client - Discord.js client instance
- * @returns Interval timer for cleanup
  *
  * @example
  * // In src/index.ts ClientReady event:
  * import { startOpsHealthScheduler } from './scheduler/opsHealthScheduler.js';
- * const schedulerInterval = startOpsHealthScheduler(client);
+ * startOpsHealthScheduler(client);
  *
  * // Graceful shutdown:
+ * import { stopOpsHealthScheduler } from './scheduler/opsHealthScheduler.js';
  * process.on('SIGTERM', () => {
- *   stopOpsHealthScheduler(schedulerInterval);
+ *   stopOpsHealthScheduler();
  * });
  */
-export function startOpsHealthScheduler(client: Client): NodeJS.Timeout | null {
+export function startOpsHealthScheduler(client: Client): void {
   // Opt-out for tests or when disabled
   if (process.env.OPS_HEALTH_SCHEDULER_DISABLED === "1") {
     logger.debug("[opshealth:scheduler] scheduler disabled via env flag");
-    return null;
+    return;
   }
 
   const intervalSeconds =
@@ -115,33 +115,22 @@ export function startOpsHealthScheduler(client: Client): NodeJS.Timeout | null {
   interval.unref();
 
   _activeInterval = interval;
-  return interval;
 }
 
 /**
  * WHAT: Stop the health check scheduler.
  * WHY: Clean shutdown during bot termination.
  *
- * @param interval - Interval timer returned by startOpsHealthScheduler
+ * @example
+ * import { stopOpsHealthScheduler } from './scheduler/opsHealthScheduler.js';
+ * process.on('SIGTERM', () => {
+ *   stopOpsHealthScheduler();
+ * });
  */
-export function stopOpsHealthScheduler(interval: NodeJS.Timeout | null): void {
-  if (interval) {
-    clearInterval(interval);
+export function stopOpsHealthScheduler(): void {
+  if (_activeInterval) {
+    clearInterval(_activeInterval);
+    _activeInterval = null;
     logger.info("[opshealth:scheduler] scheduler stopped");
-  }
-  if (_activeInterval) {
-    clearInterval(_activeInterval);
-    _activeInterval = null;
-  }
-}
-
-/**
- * WHAT: Stop scheduler (test-only).
- * WHY: Ensure test isolation without background intervals.
- */
-export function __test__stopScheduler(): void {
-  if (_activeInterval) {
-    clearInterval(_activeInterval);
-    _activeInterval = null;
   }
 }

@@ -6,6 +6,11 @@
  * DOCS:
  *  - SQLite PRAGMA: https://sqlite.org/pragma.html
  *  - better-sqlite3 API: https://github.com/WiseLibs/better-sqlite3/blob/master/docs/api.md
+ *  - SQL Injection Prevention: https://cheatsheetseries.owasp.org/cheatsheets/SQL_Injection_Prevention_Cheat_Sheet.html
+ *
+ * SECURITY:
+ *  - All table/column names are validated against SQL_IDENTIFIER_RE before interpolation
+ *  - Functions throw early if invalid identifiers are detected
  *
  * USAGE:
  *   import { columnExists, tableExists, recordMigration } from "./lib/helpers.js";
@@ -18,6 +23,29 @@
 
 import type { Database } from "better-sqlite3";
 import { logger } from "../../src/lib/logger.js";
+
+/**
+ * SQL identifier validation regex
+ * SECURITY: Prevents SQL injection by ensuring identifiers contain only safe characters
+ * Pattern: Must start with letter/underscore, followed by letters/numbers/underscores
+ * Same regex used in src/db/db.ts for consistency
+ */
+const SQL_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
+
+/**
+ * Validate SQL identifier to prevent injection attacks
+ * @param identifier - Table or column name to validate
+ * @param type - Type of identifier for error message (e.g., "table", "column")
+ * @throws Error if identifier contains invalid characters
+ */
+function validateIdentifier(identifier: string, type: string): void {
+  if (!SQL_IDENTIFIER_RE.test(identifier)) {
+    throw new Error(
+      `Invalid ${type} name: "${identifier}". ` +
+      `SQL identifiers must start with a letter or underscore and contain only letters, numbers, and underscores.`
+    );
+  }
+}
 
 /**
  * Check if a table exists in the database
@@ -92,6 +120,9 @@ export function getTableColumns(
   db: Database,
   tableName: string
 ): Array<{ name: string; type: string; notnull: number; dflt_value: any; pk: number }> {
+  // SECURITY: Validate table name before interpolation to prevent SQL injection
+  validateIdentifier(tableName, "table");
+
   return db.prepare(`PRAGMA table_info(${tableName})`).all() as Array<{
     name: string;
     type: string;
@@ -196,6 +227,9 @@ export function recordMigration(db: Database, version: string, name: string): vo
  * logger.info({ count }, "Users table row count");
  */
 export function getRowCount(db: Database, tableName: string): number {
+  // SECURITY: Validate table name before interpolation to prevent SQL injection
+  validateIdentifier(tableName, "table");
+
   const result = db.prepare(`SELECT COUNT(*) as count FROM ${tableName}`).get() as {
     count: number;
   };

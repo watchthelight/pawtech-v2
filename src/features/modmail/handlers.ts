@@ -14,6 +14,7 @@ import {
   type MessageContextMenuCommandInteraction,
 } from "discord.js";
 import { logger } from "../../lib/logger.js";
+import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 
 // ===== Button Handlers =====
 
@@ -49,7 +50,7 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
       .followUp({
         flags: MessageFlags.Ephemeral,
         content: "Invalid modmail button data.",
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       })
       .catch(() => undefined);
     return;
@@ -68,7 +69,7 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
       .followUp({
         flags: MessageFlags.Ephemeral,
         content: `No application found with code ${appCode}.`,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       })
       .catch(() => undefined);
     return;
@@ -96,7 +97,7 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
       try {
         await interaction.channel.send({
           content: result.message ?? "Modmail thread created.",
-          allowedMentions: { parse: [] },
+          allowedMentions: SAFE_ALLOWED_MENTIONS,
         });
       } catch (err) {
         logger.warn({ err, appCode }, "[modmail] failed to post public thread creation message");
@@ -109,7 +110,7 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
       .followUp({
         flags: MessageFlags.Ephemeral,
         content: `Warning: ${msg}`,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       })
       .catch(() => undefined);
   }
@@ -144,7 +145,7 @@ export async function handleModmailCloseButton(interaction: ButtonInteraction) {
     try {
       await interaction.channel.send({
         content: result.message ?? "Modmail thread closed.",
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     } catch (err) {
       logger.warn({ err, ticketId }, "[modmail] failed to post public close message");

@@ -11,7 +11,6 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 import { db } from "../db/db.js";
-import { nowUtc } from "../lib/time.js";
 import { logger } from "../lib/logger.js";
 
 // ============================================================================
@@ -115,13 +114,9 @@ export function getLoggingChannelId(guildId: string): string | null {
  * setLoggingChannelId('123456789', '987654321');
  */
 export function setLoggingChannelId(guildId: string, channelId: string): void {
-  // Invalidate cache BEFORE write to ensure stale reads are impossible
-  // If DB write fails, cache will repopulate on next read
-  invalidateCache(guildId);
-
-  // Use ISO8601 timestamp to match guild_config.updated_at column (TEXT type)
-  // Note: guild_config uses updated_at (TEXT), not updated_at_s (INTEGER) like action_log
-  const now = new Date().toISOString();
+  // Use Unix epoch timestamp (INTEGER) to match standardized guild_config.updated_at_s column
+  // This aligns with action_log.created_at_s and panicStore patterns for consistency
+  const nowS = Math.floor(Date.now() / 1000);
 
   try {
     // UPSERT pattern: insert new row or update existing guild_config entry
@@ -129,13 +124,17 @@ export function setLoggingChannelId(guildId: string, channelId: string): void {
     // This is called by /config set logging command (ManageGuild permission required)
     db.prepare(
       `
-      INSERT INTO guild_config (guild_id, logging_channel_id, updated_at)
+      INSERT INTO guild_config (guild_id, logging_channel_id, updated_at_s)
       VALUES (?, ?, ?)
       ON CONFLICT(guild_id) DO UPDATE SET
         logging_channel_id = excluded.logging_channel_id,
-        updated_at = excluded.updated_at
+        updated_at_s = excluded.updated_at_s
     `
-    ).run(guildId, channelId, now);
+    ).run(guildId, channelId, nowS);
+
+    // Invalidate cache AFTER successful write to prevent serving stale data
+    // This ensures any subsequent reads get the fresh value from DB
+    invalidateCache(guildId);
 
     logger.info({ guildId, channelId }, "[config] logging_channel_id updated");
   } catch (err: unknown) {

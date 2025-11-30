@@ -7,9 +7,8 @@
  *  - recordNotify() increments counters
  *  - cleanup() removes old timestamps
  * MULTI-INSTANCE: In-memory implementation works for single process only.
- *   For multi-instance deployments, implement RedisNotifyLimiter adapter.
- * DOCS:
- *  - See docs/adr/redis-notify-limiter.md for Redis migration guide
+ *   Multi-instance deployments will require a distributed solution (Redis, etc.)
+ *   if notification rate limits need to be coordinated across instances.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -34,7 +33,7 @@ interface GuildNotifyState {
 
 /**
  * WHAT: Abstract interface for notify rate limiter
- * WHY: Allow pluggable implementations (in-memory, Redis, etc.)
+ * WHY: Enables testability and future extensibility
  */
 export interface INotifyLimiter {
   canNotify(guildId: string, config: NotifyConfig): RateLimitCheck;
@@ -166,42 +165,10 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
 }
 
 /**
- * WHAT: Redis-backed rate limiter adapter interface
- * WHY: Coordinate rate limits across multiple bot instances
- * IMPLEMENTATION: Left as exercise for multi-instance deployment
- * DOCS: See docs/adr/redis-notify-limiter.md
- *
- * Example Redis keys:
- *  - notify:{guildId}:last → timestamp of last notification
- *  - notify:{guildId}:hour:{YYYYMMDDHH} → sorted set of notification timestamps
- *
- * Example methods:
- *  - canNotify(): GET last timestamp, check cooldown; ZCOUNT hour key for cap
- *  - recordNotify(): SET last timestamp; ZADD to hour sorted set with TTL
- */
-export class RedisNotifyLimiter implements INotifyLimiter {
-  // Placeholder for Redis implementation
-  // TODO: Implement using ioredis or redis client
-  // See docs/adr/redis-notify-limiter.md for design
-
-  canNotify(guildId: string, config: NotifyConfig): RateLimitCheck {
-    throw new Error("RedisNotifyLimiter not implemented - use InMemoryNotifyLimiter");
-  }
-
-  recordNotify(guildId: string): void {
-    throw new Error("RedisNotifyLimiter not implemented - use InMemoryNotifyLimiter");
-  }
-
-  cleanup(): void {
-    // Redis handles TTL automatically
-  }
-}
-
-/**
  * WHAT: Global rate limiter instance
  * WHY: Shared across all event handlers
  *
- * MULTI-INSTANCE: Replace with RedisNotifyLimiter when deploying multiple instances
+ * MULTI-INSTANCE: This in-memory implementation does not coordinate across bot instances
  */
 export const notifyLimiter: INotifyLimiter = new InMemoryNotifyLimiter();
 

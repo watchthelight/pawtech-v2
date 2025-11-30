@@ -16,11 +16,11 @@ import {
   TICKET_ROLE_NAMES,
   ART_TYPE_DISPLAY,
   type ArtType,
-  moveToEnd,
   incrementAssignments,
   logAssignment,
   getArtist,
   getAllArtists,
+  processAssignment,
 } from "./index.js";
 
 /**
@@ -151,16 +151,19 @@ async function handleConfirm(
   }
 
   // Step 3: Update queue (if not override, move artist to end)
-  let newPosition: number | null = null;
   const artistInfo = getArtist(guild.id, data.artistId);
   const oldPosition = artistInfo?.position ?? null;
 
   if (!data.isOverride && oldPosition !== null) {
-    newPosition = moveToEnd(guild.id, data.artistId);
-    incrementAssignments(guild.id, data.artistId);
+    const result = processAssignment(guild.id, data.artistId);
 
-    const queueSize = getAllArtists(guild.id).length;
-    results.push(`Artist moved from #${oldPosition} to #${queueSize} in queue`);
+    if (result) {
+      const queueSize = getAllArtists(guild.id).length;
+      results.push(`Artist moved from #${result.oldPosition} to #${result.newPosition} in queue (${result.assignmentsCount} total assignments)`);
+    } else {
+      results.push(`*Failed to update queue - artist not found*`);
+      success = false;
+    }
   } else if (data.isOverride) {
     // Still increment assignments for override artist
     incrementAssignments(guild.id, data.artistId);

@@ -15,7 +15,7 @@ import { data as healthData } from "./health.js";
 import { data as updateData } from "./update.js";
 import { data as configData } from "./config.js";
 import { data as databaseData } from "./database.js";
-import { modmailCommand } from "../features/modmail.js";
+import { modmailCommand, modmailContextMenu } from "../features/modmail.js";
 import { analyticsData, analyticsExportData } from "./analytics.js";
 import { data as modstatsData } from "./modstats.js";
 import { data as sendData } from "./send.js";
@@ -42,6 +42,7 @@ import { data as suggestionsData } from "./suggestions.js";
 import { data as suggestionData } from "./suggestion.js";
 import { data as artistqueueData } from "./artistqueue.js";
 import { data as redeemrewardData } from "./redeemreward.js";
+import { data as cageData } from "./cage.js";
 
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
@@ -95,8 +96,10 @@ export function buildCommands() {
     artistqueueData.toJSON(),
     redeemrewardData.toJSON(),
 
-    // Context menu commands use a different registration endpoint (ApplicationCommandType.User/Message)
-    // and aren't included here. See Discord docs on context menus if you need to add them.
-    // modmailContextMenu.toJSON(),
+    // Fun commands
+    cageData.toJSON(),
+
+    // Context menu commands are registered alongside slash commands in Discord.js v14
+    modmailContextMenu.toJSON(),
   ];
 }

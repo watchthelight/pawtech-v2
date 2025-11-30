@@ -26,6 +26,7 @@ import {
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { isOwner } from "../utils/owner.js";
+import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 
 // Discord API hard limits. Exceeding these causes 400 Bad Request.
 // The embed limit is particularly useful for longer announcements.
@@ -171,7 +172,7 @@ async function sendAuditLog(
 
     await (loggingChannel as TextChannel).send({
       embeds: [auditEmbed],
-      allowedMentions: { parse: [] }, // Never ping from audit logs
+      allowedMentions: SAFE_ALLOWED_MENTIONS,
     });
   } catch (err) {
     // Log error but don't fail the command - audit logging is best-effort

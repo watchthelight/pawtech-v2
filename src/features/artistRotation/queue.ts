@@ -6,8 +6,14 @@
  *  - addArtist: Add new artist to end of queue
  *  - removeArtist: Remove artist and reorder positions
  *  - getNextArtist: Get next non-skipped artist in rotation
- *  - moveToEnd: After assignment, move artist to end of queue
+ *  - processAssignment: ATOMIC move artist to end + increment assignments (transaction)
+ *  - moveToEnd: Legacy function - prefer processAssignment for assignment flow
  *  - syncWithRole: Sync queue with current Server Artist role holders
+ *
+ * CONCURRENCY:
+ *  - processAssignment uses db.transaction() for atomic queue updates
+ *  - Prevents race conditions during simultaneous assignments
+ *  - better-sqlite3 transactions are synchronous and ACID-compliant
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -157,6 +163,10 @@ export function getNextArtist(guildId: string): NextArtistResult | null {
  * moveToEnd
  * WHAT: Move an artist to the end of the queue after assignment.
  * WHY: Rotate artists fairly - after handling a request, go to back of line.
+ *
+ * @deprecated Use processAssignment() instead when incrementing assignments.
+ *             This function should only be used for manual queue reordering.
+ *             Calling moveToEnd() + incrementAssignments() separately creates race conditions.
  */
 export function moveToEnd(guildId: string, userId: string): number {
   const artist = db
@@ -294,6 +304,75 @@ export function incrementAssignments(guildId: string, userId: string): void {
          last_assigned_at = datetime('now')
      WHERE guild_id = ? AND user_id = ?`
   ).run(guildId, userId);
+}
+
+/**
+ * processAssignment
+ * WHAT: Atomically move artist to end of queue and increment assignment count.
+ * WHY: Prevents race conditions when multiple assignments happen simultaneously.
+ * SECURITY: Uses transaction to ensure queue position and assignment count are updated atomically.
+ *
+ * @param guildId - Guild ID
+ * @param userId - Artist user ID
+ * @returns Object with old position, new position, and new assignment count
+ */
+export function processAssignment(
+  guildId: string,
+  userId: string
+): { oldPosition: number; newPosition: number; assignmentsCount: number } | null {
+  return db.transaction(() => {
+    // 1. Get current artist state
+    const artist = db
+      .prepare(`SELECT position, assignments_count FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
+      .get(guildId, userId) as { position: number; assignments_count: number } | undefined;
+
+    if (!artist) {
+      logger.warn({ guildId, userId }, "[artistQueue] Cannot process assignment - artist not in queue");
+      return null;
+    }
+
+    const currentPosition = artist.position;
+    const maxPosition = getMaxPosition(guildId);
+
+    // 2. Move artist to end (only if not already there)
+    if (currentPosition !== maxPosition) {
+      // Move everyone after this artist up by 1
+      db.prepare(
+        `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
+      ).run(guildId, currentPosition);
+
+      // Move this artist to the end
+      db.prepare(
+        `UPDATE artist_queue SET position = ? WHERE guild_id = ? AND user_id = ?`
+      ).run(maxPosition, guildId, userId);
+    }
+
+    // 3. Increment assignments and update timestamp
+    const newAssignmentsCount = artist.assignments_count + 1;
+    db.prepare(
+      `UPDATE artist_queue
+       SET assignments_count = ?,
+           last_assigned_at = datetime('now')
+       WHERE guild_id = ? AND user_id = ?`
+    ).run(newAssignmentsCount, guildId, userId);
+
+    logger.info(
+      {
+        guildId,
+        userId,
+        oldPosition: currentPosition,
+        newPosition: maxPosition,
+        assignmentsCount: newAssignmentsCount,
+      },
+      "[artistQueue] Assignment processed atomically"
+    );
+
+    return {
+      oldPosition: currentPosition,
+      newPosition: maxPosition,
+      assignmentsCount: newAssignmentsCount,
+    };
+  })();
 }
 
 /**

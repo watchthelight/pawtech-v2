@@ -26,6 +26,24 @@ import { ctx as reqCtx } from "./reqctx.js";
  *
  * Note: These hints appear in ephemeral embeds, so they can be slightly technical
  * since only the affected user sees them. Keep them actionable where possible.
+ *
+ * Supported Discord API error codes (sorted numerically):
+ * - 10003: Unknown Channel - channel deleted or bot lacks visibility
+ * - 10008: Unknown Message - message deleted or inaccessible
+ * - 10062: Unknown Interaction - interaction expired (3s window)
+ * - 30001: Maximum guilds reached - bot in too many servers
+ * - 30007: Maximum webhooks reached - channel webhook limit
+ * - 30010: Maximum roles reached - guild role limit
+ * - 30013: Maximum reactions reached - message reaction limit
+ * - 40001: Unauthorized - invalid token or missing OAuth2 scope
+ * - 40060: Already acknowledged - double reply attempt
+ * - 50001: Missing Access - bot can't access resource
+ * - 50013: Missing Permissions - insufficient channel/guild perms
+ * - 50035: Invalid Form Body - malformed API request (likely bot bug)
+ *
+ * Also handles:
+ * - SqliteError with "no such table" - schema mismatch
+ * - "Unhandled modal" message - modal router mismatch
  */
 export function hintFor(err: unknown): string {
   const error = err as { name?: string; message?: string; code?: unknown };
@@ -40,10 +58,45 @@ export function hintFor(err: unknown): string {
     return "Schema mismatch; avoid legacy __old; use truncate-only reset.";
   }
 
+  // 10003: Unknown Channel - channel was deleted or bot can't see it.
+  if (code === 10003) {
+    return "Channel not found. It may have been deleted or bot lacks visibility.";
+  }
+
+  // 10008: Unknown Message - message was deleted or is in an inaccessible channel.
+  if (code === 10008) {
+    return "Message not found. It may have been deleted or is in an inaccessible channel.";
+  }
+
   // 10062: "Unknown interaction" - the 3-second initial response window expired.
   // Usually means handler is too slow or forgot to defer for long operations.
   if (code === 10062) {
     return "Interaction expired; handler didn't defer in time.";
+  }
+
+  // 30001: Maximum number of guilds reached. Bot is in too many servers.
+  if (code === 30001) {
+    return "Bot has reached maximum number of servers. Contact Discord support to increase limit.";
+  }
+
+  // 30007: Maximum number of webhooks reached in a channel.
+  if (code === 30007) {
+    return "Maximum webhooks reached in this channel. Delete unused webhooks first.";
+  }
+
+  // 30010: Maximum number of roles reached in guild.
+  if (code === 30010) {
+    return "Maximum roles reached in this server. Delete unused roles first.";
+  }
+
+  // 30013: Maximum number of reactions reached on a message.
+  if (code === 30013) {
+    return "Maximum reactions reached on this message. Cannot add more.";
+  }
+
+  // 40001: Unauthorized - invalid token or missing OAuth2 scope.
+  if (code === 40001) {
+    return "Bot authentication failed. Token may be invalid or missing required scope.";
   }
 
   // 40060: Already replied. Typically a bug where code tries to reply twice.
@@ -51,9 +104,19 @@ export function hintFor(err: unknown): string {
     return "Already acknowledged; avoid double reply.";
   }
 
+  // 50001: Missing Access - bot can't see the resource (channel, guild, etc).
+  if (code === 50001) {
+    return "Bot lacks access to this resource. Check channel visibility and role permissions.";
+  }
+
   // 50013: Missing permissions. Bot can't do something in this channel/guild.
   if (code === 50013) {
     return "Missing Discord permission in this channel.";
+  }
+
+  // 50035: Invalid Form Body - malformed request, usually a bot bug.
+  if (code === 50035) {
+    return "Invalid request format. This is likely a bot bug; report to staff with trace ID.";
   }
 
   // Custom error from our modal router when no pattern matches the customId.

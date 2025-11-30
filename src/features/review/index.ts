@@ -43,7 +43,6 @@ export {
   claimGuard,
   getReviewClaim,
   getClaim,
-  upsertClaim,
   clearClaim,
 } from "./claims.js";
 

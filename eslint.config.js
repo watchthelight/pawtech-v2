@@ -35,8 +35,8 @@ export default [
     rules: {
       ...tseslint.configs.recommended.rules,
       ...prettier.rules,
-      // Relaxed rules for cleanup (avoid breaking changes)
-      "@typescript-eslint/no-explicit-any": "warn",
+      // Enforce no explicit any - use proper types or type guards instead
+      "@typescript-eslint/no-explicit-any": "error",
       "@typescript-eslint/no-unused-vars": [
         "warn",
         {

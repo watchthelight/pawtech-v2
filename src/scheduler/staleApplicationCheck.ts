@@ -290,23 +290,23 @@ async function checkStaleApplications(client: Client): Promise<number> {
  * WHY: Automatically alert Gatekeepers about unclaimed applications.
  *
  * @param client - Discord.js client instance
- * @returns Interval timer for cleanup
  *
  * @example
  * // In src/index.ts ClientReady event:
  * import { startStaleApplicationScheduler } from './scheduler/staleApplicationCheck.js';
- * const schedulerInterval = startStaleApplicationScheduler(client);
+ * startStaleApplicationScheduler(client);
  *
  * // Graceful shutdown:
+ * import { stopStaleApplicationScheduler } from './scheduler/staleApplicationCheck.js';
  * process.on('SIGTERM', () => {
- *   stopStaleApplicationScheduler(schedulerInterval);
+ *   stopStaleApplicationScheduler();
  * });
  */
-export function startStaleApplicationScheduler(client: Client): NodeJS.Timeout | null {
+export function startStaleApplicationScheduler(client: Client): void {
   // Opt-out for tests
   if (process.env.STALE_APP_SCHEDULER_DISABLED === "1") {
     logger.debug("[stale-alert] scheduler disabled via env flag");
-    return null;
+    return;
   }
 
   logger.info(
@@ -332,33 +332,22 @@ export function startStaleApplicationScheduler(client: Client): NodeJS.Timeout |
   interval.unref();
 
   _activeInterval = interval;
-  return interval;
 }
 
 /**
  * WHAT: Stop the stale application check scheduler.
  * WHY: Clean shutdown during bot termination.
  *
- * @param interval - Interval timer returned by startStaleApplicationScheduler
+ * @example
+ * import { stopStaleApplicationScheduler } from './scheduler/staleApplicationCheck.js';
+ * process.on('SIGTERM', () => {
+ *   stopStaleApplicationScheduler();
+ * });
  */
-export function stopStaleApplicationScheduler(interval: NodeJS.Timeout | null): void {
-  if (interval) {
-    clearInterval(interval);
+export function stopStaleApplicationScheduler(): void {
+  if (_activeInterval) {
+    clearInterval(_activeInterval);
+    _activeInterval = null;
     logger.info("[stale-alert] scheduler stopped");
-  }
-  if (_activeInterval) {
-    clearInterval(_activeInterval);
-    _activeInterval = null;
-  }
-}
-
-/**
- * WHAT: Stop scheduler (test-only).
- * WHY: Ensure test isolation without background intervals.
- */
-export function __test__stopScheduler(): void {
-  if (_activeInterval) {
-    clearInterval(_activeInterval);
-    _activeInterval = null;
   }
 }

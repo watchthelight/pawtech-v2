@@ -37,6 +37,7 @@ import { captureException } from "../../lib/sentry.js";
 import { shortCode } from "../../lib/ids.js";
 import { hasManageGuild, isReviewer, canRunAllCommands, getConfig } from "../../lib/config.js";
 import { logActionPretty } from "../../logging/pretty.js";
+import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 import type { GuildMember } from "discord.js";
 import type { ModmailTicket } from "./types.js";
 import {
@@ -662,19 +663,19 @@ export async function openPublicModmailThreadFor(params: {
       "[modmail] about to send first message to thread"
     );
 
-    await thread.send({ embeds: [embed], components: [buttons], allowedMentions: { parse: [] } });
+    await thread.send({ embeds: [embed], components: [buttons], allowedMentions: SAFE_ALLOWED_MENTIONS });
 
     // Try to DM the applicant
     try {
       await user.send({
         content: `Hi, a moderator opened a modmail thread regarding your application to **${interaction.guild.name}**.`,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     } catch (err) {
       logger.warn({ err, userId, ticketId }, "[modmail] failed to DM applicant on open");
       await thread.send({
         content: "Failed to DM the applicant (their DMs may be closed).",
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     }
 
@@ -778,7 +779,7 @@ async function trySendClosingMessage(
       .setColor(0x808080)
       .setTimestamp();
 
-    await thread.send({ embeds: [closeEmbed], allowedMentions: { parse: [] } });
+    await thread.send({ embeds: [closeEmbed], allowedMentions: SAFE_ALLOWED_MENTIONS });
     logger.debug({ threadId: thread.id }, "[modmail] close:closing_message ok");
     return "ok";
   } catch (err) {
@@ -992,7 +993,7 @@ export async function closeModmailThread(params: {
       const user = await interaction.client.users.fetch(ticket.user_id);
       await user.send({
         content: `Your modmail thread for **${interaction.guild?.name ?? "the server"}** has been closed by staff.`,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     } catch (err) {
       logger.warn(
@@ -1236,7 +1237,7 @@ export async function reopenModmailThread(params: {
       const user = await interaction.client.users.fetch(ticket.user_id);
       await user.send({
         content: `Your modmail thread for **${interaction.guild?.name ?? "the server"}** has been reopened by staff.`,
-        allowedMentions: { parse: [] },
+        allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     } catch (err) {
       logger.warn(
@@ -1404,7 +1405,7 @@ export async function closeModmailForApplication(
         .setColor(0x808080)
         .setTimestamp();
 
-      await user.send({ embeds: [closeEmbed], allowedMentions: { parse: [] } });
+      await user.send({ embeds: [closeEmbed], allowedMentions: SAFE_ALLOWED_MENTIONS });
       logger.debug({ ticketId, userId }, "[modmail] close:dm_user ok");
     } catch (err) {
       logger.debug({ err, ticketId, userId }, "[modmail] close:dm_user err (non-fatal)");

@@ -207,6 +207,65 @@ await interaction.reply({ content: "Done!", ephemeral: true });
 await interaction.reply({ content: "Server maintenance at 3 PM." }); // ephemeral: false (default)
 ```
 
+### When to Use Ephemeral vs Public Replies
+
+**Use Ephemeral (`ephemeral: true`) for:**
+- **Errors** - Validation failures, permission denials, invalid input
+  - Keeps channel clean and avoids distracting the team
+  - Example: "This command can only be used in a server."
+
+- **User Confirmations** - Personal acknowledgments with no team value
+  - Example: "Suggestion submitted!" (after /suggest)
+
+- **Status Queries** - Read-only information requests
+  - Example: "Panic mode is OFF" (after /panic status)
+
+- **Privacy-Critical** - Commands that must hide the actor
+  - Example: "Sent!" (after /send)
+
+**Use Public (`ephemeral: false`) for:**
+- **Moderation Actions** - Team needs audit trail and visibility
+  - Example: "User X has been unblocked" (after /unblock)
+  - Example: "PANIC MODE ENABLED" (after /panic on)
+
+- **Team Reports** - Analytics, stats, heatmaps for shared review
+  - Example: Activity heatmap embed (after /activity)
+  - Example: Moderator leaderboard (after /modstats)
+
+- **Long-Running Jobs** - Notifications about background tasks
+  - Example: "Starting backfill... you'll be pinged when complete" (after /backfill)
+
+**Default Behavior:**
+- `ephemeral` defaults to `false` if omitted
+- **Always be explicit** - don't rely on defaults for clarity
+- Deferred replies inherit ephemeral state from `deferReply()`
+
+**Example Pattern:**
+```typescript
+// Validation error - ephemeral
+if (!interaction.guild) {
+  await interaction.reply({
+    content: "This command can only be used in a server.",
+    ephemeral: true,
+  });
+  return;
+}
+
+// Moderation action - public
+await interaction.deferReply({ ephemeral: false });
+await performUnblock(userId);
+await interaction.editReply({
+  content: `User <@${userId}> has been unblocked.`,
+});
+
+// Status query - ephemeral
+const status = getPanicStatus(guildId);
+await interaction.reply({
+  content: status.enabled ? "Panic mode is ACTIVE" : "Panic mode is OFF",
+  ephemeral: true,
+});
+```
+
 ## Permission Checks and Owner Overrides
 
 ### Discord Permission Levels

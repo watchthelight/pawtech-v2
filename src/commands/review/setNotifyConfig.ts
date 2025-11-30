@@ -15,11 +15,10 @@
 
 import { SlashCommandBuilder, ChatInputCommandInteraction, PermissionFlagsBits } from "discord.js";
 import type { CommandContext } from "../../lib/cmdWrap.js";
-import { setNotifyConfig, getNotifyConfig } from "../../features/notifyConfig.js";
+import { setNotifyConfig, getNotifyConfig, type NotifyConfig } from "../../features/notifyConfig.js";
 import { logActionPretty } from "../../logging/pretty.js";
 import { logger } from "../../lib/logger.js";
-import { isOwner } from "../../utils/owner.js";
-import { hasStaffPermissions, getConfig } from "../../lib/config.js";
+import { requireAdminOrLeadership } from "../../utils/requireAdminOrLeadership.js";
 import { db } from "../../db/db.js";
 
 /**
@@ -96,33 +95,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Same auth logic as getNotifyConfig - ideally this would be extracted to a
-  // shared decorator/wrapper, but the copy-paste is fine for now.
-  if (isOwner(userId)) {
-    // Bot owner bypass
-  } else if (interaction.guild?.ownerId === userId) {
-    // Server owner
-  } else {
-    const member = interaction.member;
-    if (!member || typeof member.permissions === "string") {
-      await interaction.reply({
-        content: "❌ You must be a server administrator to use this command.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    const hasPerms = hasStaffPermissions(member as any, guildId);
-    const config = getConfig(guildId);
-    const hasLeadershipRole = config?.leadership_role_id && (member as any).roles.cache.has(config.leadership_role_id);
-
-    if (!hasPerms && !hasLeadershipRole) {
-      await interaction.reply({
-        content: "❌ You must be a server administrator to use this command.",
-        ephemeral: true,
-      });
-      return;
-    }
+  // Authorization check
+  const authorized = await requireAdminOrLeadership(interaction);
+  if (!authorized) {
+    await interaction.reply({
+      content: "❌ You must be a server administrator to use this command.",
+      ephemeral: true,
+    });
+    return;
   }
 
   await interaction.deferReply({ ephemeral: true });
@@ -141,8 +121,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
     // Build partial update - only include fields that were explicitly provided.
     // This allows users to update just one setting without touching others.
-    // Using `any` here because the config type is a union of all possible fields.
-    const updateConfig: any = {};
+    const updateConfig: Partial<NotifyConfig> = {};
 
     if (mode !== null) {
       updateConfig.notify_mode = mode;

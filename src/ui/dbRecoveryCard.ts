@@ -15,7 +15,6 @@ import {
   ActionRowBuilder,
   ButtonBuilder,
   ButtonStyle,
-  StringSelectMenuBuilder,
 } from "discord.js";
 import type { BackupCandidate, ValidationResult, RestoreResult } from "../features/dbRecovery.js";
 
@@ -382,37 +381,3 @@ export function buildCandidateActionRow(
   return row;
 }
 
-/**
- * Build select menu for choosing a candidate (alternative to multiple button rows)
- *
- * @param candidates - Array of backup candidates (up to 25)
- * @param nonce - Random nonce for custom ID security
- * @returns ActionRowBuilder with select menu
- */
-export function buildCandidateSelectMenu(
-  candidates: BackupCandidate[],
-  nonce: string
-): ActionRowBuilder<StringSelectMenuBuilder> {
-  const options = candidates.slice(0, 25).map((c) => {
-    const integrityIcon = c.integrity_result === "ok" ? "✅" : c.integrity_result ? "❌" : "⚪";
-    const label = c.filename.substring(0, 80); // Discord max 100 chars
-    const description = `${formatBytes(c.size_bytes)} | ${integrityIcon} ${c.integrity_result || "not validated"}`.substring(
-      0,
-      100
-    );
-
-    return {
-      label,
-      value: c.id,
-      description,
-      emoji: "📦",
-    };
-  });
-
-  const menu = new StringSelectMenuBuilder()
-    .setCustomId(`dbrecover:select:${nonce}`)
-    .setPlaceholder("Select a backup candidate to validate or restore")
-    .addOptions(options);
-
-  return new ActionRowBuilder<StringSelectMenuBuilder>().addComponents(menu);
-}

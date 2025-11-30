@@ -27,7 +27,6 @@ Sample data for testing and preview commands, particularly for the gate review s
 | `SAMPLE_ANSWERS_LONG`          | `ReviewAnswer[]` | Verbose responses for testing text wrapping/overflow  |
 | `SAMPLE_ANSWERS_REJECTED`      | `ReviewAnswer[]` | Low-effort responses demonstrating rejection criteria |
 | `SAMPLE_REJECTION_REASON`      | `string`         | Standard rejection message template                   |
-| `SAMPLE_REJECTION_REASON_LONG` | `string`         | Detailed rejection message for testing long text      |
 | `SAMPLE_HISTORY`               | `object[]`       | Sample action history timeline                        |
 
 ## Data Structure
@@ -92,18 +91,6 @@ SAMPLE_REJECTION_REASON = "Application contained incomplete or inconsistent resp
 - Used for simple rejections
 - Tests single-line display
 
-### Long
-
-```typescript
-SAMPLE_REJECTION_REASON_LONG; // ~120 lines of detailed feedback
-```
-
-- Multi-paragraph structured feedback
-- Numbered concerns
-- Actionable recommendations
-- Reapply instructions
-- Tests multi-line text rendering and embed limits
-
 ## Sample History
 
 Represents application lifecycle events:
@@ -155,14 +142,14 @@ expect(buildReviewCard({ answers: SAMPLE_ANSWERS_LONG })).toHaveEmbedFieldsWithi
 ### Rejection Preview
 
 ```typescript
-import { SAMPLE_ANSWERS_REJECTED, SAMPLE_REJECTION_REASON_LONG } from "../constants/sampleData.js";
+import { SAMPLE_ANSWERS_REJECTED, SAMPLE_REJECTION_REASON } from "../constants/sampleData.js";
 
 // Show sample rejected application
 await interaction.reply({
   embeds: [
     buildReviewCard({
       answers: SAMPLE_ANSWERS_REJECTED,
-      rejectionReason: SAMPLE_REJECTION_REASON_LONG,
+      rejectionReason: SAMPLE_REJECTION_REASON,
       // ... other fields
     }),
   ],

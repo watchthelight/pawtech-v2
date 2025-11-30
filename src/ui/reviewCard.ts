@@ -9,11 +9,9 @@ import {
   ButtonBuilder,
   ButtonStyle,
   type GuildMember,
-  type ChatInputCommandInteraction,
   type AttachmentBuilder,
 } from "discord.js";
 import { shortCode } from "../lib/ids.js";
-import { formatAbsolute, formatAbsoluteUtc, fmtAgeShort, toDiscordAbs, toDiscordRel } from "../lib/timefmt.js";
 import { ts } from "../utils/dt.js";
 
 // ============================================================================
@@ -115,81 +113,6 @@ const COLORS = {
 // ============================================================================
 
 /**
- * Escape markdown characters to prevent abuse
- */
-export function escapeMd(text: string): string {
-  return text
-    .replace(/\\/g, "\\\\")
-    .replace(/\*/g, "\\*")
-    .replace(/_/g, "\\_")
-    .replace(/~/g, "\\~")
-    .replace(/`/g, "\\`")
-    .replace(/\|/g, "\\|")
-    .replace(/>/g, "\\>")
-    .replace(/@/g, "@\u200b"); // zero-width space to prevent mentions
-}
-
-/**
- * Wrap text in code block with word wrapping at specified width
- */
-export function wrapCode(text: string, width: number = 72): string {
-  if (!text || text.trim().length === 0) return "```text\n(no response)\n```";
-
-  const words = text.split(/\s+/);
-  const lines: string[] = [];
-  let currentLine = "";
-
-  for (const word of words) {
-    // If word itself is longer than width, split it
-    if (word.length > width) {
-      if (currentLine) {
-        lines.push(currentLine);
-        currentLine = "";
-      }
-      // Split long word into chunks
-      for (let i = 0; i < word.length; i += width) {
-        lines.push(word.slice(i, i + width));
-      }
-      continue;
-    }
-
-    // Check if adding this word would exceed width
-    const testLine = currentLine ? `${currentLine} ${word}` : word;
-    if (testLine.length > width) {
-      if (currentLine) {
-        lines.push(currentLine);
-      }
-      currentLine = word;
-    } else {
-      currentLine = testLine;
-    }
-  }
-
-  if (currentLine) {
-    lines.push(currentLine);
-  }
-
-  return "```text\n" + lines.join("\n") + "\n```";
-}
-
-/**
- * Truncate answer with indicator
- */
-export function truncateAnswer(text: string, maxLen: number = 200): string {
-  if (!text) return "(no response)";
-  if (text.length <= maxLen) return text;
-  return text.slice(0, maxLen) + " (truncated)";
-}
-
-/**
- * Format timestamp as relative (e.g., "2h ago")
- */
-export function fmtRel(epochSec: number): string {
-  const now = Math.floor(Date.now() / 1000);
-  return fmtAgeShort(epochSec, now);
-}
-
-/**
  * Parse claimed_at timestamp from database (handles multiple formats)
  * Supports: Unix timestamps (numeric strings), SQLite datetime, ISO 8601
  */
@@ -221,28 +144,6 @@ function parseClaimedAt(value: string | number): number | null {
 }
 
 /**
- * Format timestamp as UTC string
- */
-export function fmtUtc(epochSec: number): string {
-  return formatAbsoluteUtc(epochSec);
-}
-
-/**
- * Format local date
- */
-export function fmtLocal(epochSec: number): string {
-  const date = new Date(epochSec * 1000);
-  return new Intl.DateTimeFormat("en-US", {
-    month: "2-digit",
-    day: "2-digit",
-    year: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).format(date);
-}
-
-/**
  * Get status color for embed
  */
 export function getStatusColor(status: ApplicationStatus): number {
@@ -267,14 +168,6 @@ export function getEmbedColor(status: ApplicationStatus, memberHasLeft: boolean)
     return COLORS.warning;
   }
   return getStatusColor(status);
-}
-
-/**
- * Format Discord timestamp tag
- * Formats: F = Full date/time, R = Relative, f = Short date/time
- */
-export function discordTimestamp(epochSec: number, format: "F" | "f" | "R" = "R"): string {
-  return `<t:${epochSec}:${format}>`;
 }
 
 /**
@@ -372,6 +265,40 @@ function estimateEmbedSize(embed: EmbedBuilder): number {
 const DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
 // Zero-width space for empty lines (prevents Discord auto-hyphen)
 const EMPTY = "\u200b";
+
+// ============================================================================
+// Embed Truncation Constants & Types
+// ============================================================================
+
+// Section priority for truncation (lower = remove first)
+const SECTION_PRIORITY = {
+  ACTION_HISTORY: 1,      // Remove first - moderator actions are in logs
+  APP_HISTORY: 2,         // Remove second - visible in database
+  AVATAR_SCAN: 3,         // Keep - critical for review decisions
+  MEMBER_INFO: 4,         // Keep - essential context
+  ANSWERS: 5,             // Keep - core application content
+} as const;
+
+// Discord embed description limit
+const _DISCORD_MAX_LENGTH = 4096; // eslint-disable-line -- documented constant
+const TARGET_LENGTH = 4000; // Buffer for safety
+
+interface EmbedSection {
+  priority: number;
+  name: string;
+  lines: string[];
+  estimatedSize: number;
+}
+
+function buildSection(priority: number, name: string, lines: string[]): EmbedSection {
+  const content = lines.join("\n");
+  return {
+    priority,
+    name,
+    lines,
+    estimatedSize: content.length,
+  };
+}
 
 // Status badges with emoji
 const STATUS_BADGE = {
@@ -567,55 +494,64 @@ export function buildReviewEmbedV3(
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SECTION: Application History (all past applications from this user)
+  // Built as EmbedSection for intelligent truncation
   // ═══════════════════════════════════════════════════════════════════════════
-  if (previousApps && previousApps.length > 1) {
-    // Only show if there are other applications besides this one
+  const appHistorySection: EmbedSection | null = (() => {
+    if (!previousApps || previousApps.length <= 1) return null;
     const otherApps = previousApps.filter(a => a.id !== app.id);
-    if (otherApps.length > 0) {
-      lines.push(`**Application History** (${previousApps.length} total)`);
-      for (const pastApp of otherApps) {
-        const statusIcon = pastApp.status === 'approved' ? '✅' :
-                          pastApp.status === 'rejected' ? '❌' :
-                          pastApp.status === 'kicked' ? '🚫' :
-                          pastApp.status === 'submitted' ? '⏳' : '📝';
-        const appCode = shortCode(pastApp.id);
-        const submittedTs = pastApp.submitted_at ? new Date(pastApp.submitted_at) : null;
-        const timeStr = submittedTs ? ts(submittedTs, 'R') : 'unknown';
-        let line = `${statusIcon} #${appCode} • ${pastApp.status} • ${timeStr}`;
-        if (pastApp.resolution_reason) {
-          const truncatedReason = pastApp.resolution_reason.length > 50
-            ? pastApp.resolution_reason.slice(0, 47) + '...'
-            : pastApp.resolution_reason;
-          line += ` — "${truncatedReason}"`;
-        }
-        lines.push(line);
+    if (otherApps.length === 0) return null;
+
+    const sectionLines: string[] = [];
+    sectionLines.push(`**Application History** (${previousApps.length} total)`);
+
+    for (const pastApp of otherApps) {
+      const statusIcon = pastApp.status === 'approved' ? '✅' :
+                        pastApp.status === 'rejected' ? '❌' :
+                        pastApp.status === 'kicked' ? '🚫' :
+                        pastApp.status === 'submitted' ? '⏳' : '📝';
+      const appCode = shortCode(pastApp.id);
+      const submittedTs = pastApp.submitted_at ? new Date(pastApp.submitted_at) : null;
+      const timeStr = submittedTs ? ts(submittedTs, 'R') : 'unknown';
+      let line = `${statusIcon} #${appCode} • ${pastApp.status} • ${timeStr}`;
+      if (pastApp.resolution_reason) {
+        const truncatedReason = pastApp.resolution_reason.length > 50
+          ? pastApp.resolution_reason.slice(0, 47) + '...'
+          : pastApp.resolution_reason;
+        line += ` — "${truncatedReason}"`;
       }
-      lines.push(EMPTY);
-      lines.push(DIVIDER);
-      lines.push(EMPTY);
+      sectionLines.push(line);
     }
-  }
+
+    sectionLines.push(EMPTY, DIVIDER, EMPTY);
+    return buildSection(SECTION_PRIORITY.APP_HISTORY, "Application History", sectionLines);
+  })();
 
   // ═══════════════════════════════════════════════════════════════════════════
   // SECTION: Action History Timeline (last 7 actions on THIS application)
+  // Built as EmbedSection for intelligent truncation
   // ═══════════════════════════════════════════════════════════════════════════
-  if (recentActions && recentActions.length > 0) {
-    lines.push(`**Action History (Last ${Math.min(recentActions.length, 7)})**`);
+  const actionHistorySection: EmbedSection | null = (() => {
+    if (!recentActions || recentActions.length === 0) return null;
+
+    const sectionLines: string[] = [];
+    sectionLines.push(`**Action History (Last ${Math.min(recentActions.length, 7)})**`);
+
     for (const a of recentActions.slice(0, 7)) {
       const actionDisplay = formatActionWithIcon(a.action);
-      lines.push(`${actionDisplay} by <@${a.moderator_id}> — ${ts(a.created_at * 1000, 'R')}`);
+      sectionLines.push(`${actionDisplay} by <@${a.moderator_id}> — ${ts(a.created_at * 1000, 'R')}`);
     }
-    lines.push(EMPTY);
-    lines.push(DIVIDER);
-    lines.push(EMPTY);
-  }
+
+    sectionLines.push(EMPTY, DIVIDER, EMPTY);
+    return buildSection(SECTION_PRIORITY.ACTION_HISTORY, "Action History", sectionLines);
+  })();
 
   // ═══════════════════════════════════════════════════════════════════════════
-  // SECTION: Answers (clean arrow format)
+  // SECTION: Answers (clean arrow format) - built separately for size tracking
   // ═══════════════════════════════════════════════════════════════════════════
+  const answersLines: string[] = [];
   const orderedAnswers = [...answers].sort((a, b) => a.q_index - b.q_index);
-  lines.push("**Answers:**");
-  lines.push(EMPTY);
+  answersLines.push("**Answers:**");
+  answersLines.push(EMPTY);
 
   if (orderedAnswers.length > 0) {
     for (let i = 0; i < orderedAnswers.length; i++) {
@@ -625,21 +561,21 @@ export function buildReviewEmbedV3(
       const answer = qa.answer?.trim() || "*(no response)*";
 
       // Question label
-      lines.push(`**Q${qNum}: ${question}**`);
+      answersLines.push(`**Q${qNum}: ${question}**`);
 
       // Answer with arrow format and quote styling
-      const answerLines = answer.split("\n");
-      for (const line of answerLines) {
-        lines.push(`> ${line}`);
+      const answerLinesSplit = answer.split("\n");
+      for (const line of answerLinesSplit) {
+        answersLines.push(`> ${line}`);
       }
 
       // Add spacing between questions (except last)
       if (i < orderedAnswers.length - 1) {
-        lines.push(EMPTY);
+        answersLines.push(EMPTY);
       }
     }
   } else {
-    lines.push("*(no answers recorded)*");
+    answersLines.push("*(no answers recorded)*");
   }
 
   // ═══════════════════════════════════════════════════════════════════════════
@@ -649,33 +585,80 @@ export function buildReviewEmbedV3(
   embed.setFooter({ text: footerText });
   embed.setTimestamp(submittedDate.getTime());
 
-  // Join lines and check size (Discord description limit: 4096 chars)
-  let description = lines.join("\n");
+  // ═══════════════════════════════════════════════════════════════════════════
+  // Smart Truncation: Assemble description with priority-based section removal
+  // ═══════════════════════════════════════════════════════════════════════════
 
-  // If too long, try removing history sections first
-  if (description.length > 4000) {
-    // Try removing action history first
-    const actionHistoryStart = description.indexOf("**Action History");
-    const answersStart = description.indexOf("**Answers:**");
-    if (actionHistoryStart !== -1 && answersStart !== -1 && actionHistoryStart < answersStart) {
-      description = description.slice(0, actionHistoryStart) + description.slice(answersStart);
-      description = description.replace(/\n{3,}/g, "\n\n");
+  // Core content (always included): lines array contains header, alerts, member info, status
+  const coreContent = lines.join("\n");
+  const answersContent = answersLines.join("\n");
+
+  // Calculate base size (core + answers - always included)
+  const baseSize = coreContent.length + 1 + answersContent.length; // +1 for newline between
+
+  // Collect optional sections (may be null if not applicable)
+  const optionalSections: EmbedSection[] = [
+    appHistorySection,
+    actionHistorySection,
+  ].filter((s): s is EmbedSection => s !== null);
+
+  // Sort by priority (lowest = remove first, so we add highest priority first)
+  optionalSections.sort((a, b) => b.priority - a.priority);
+
+  // Determine which sections fit within the target length
+  const includedSections: EmbedSection[] = [];
+  let currentSize = baseSize;
+
+  for (const section of optionalSections) {
+    const projectedSize = currentSize + section.estimatedSize + 1; // +1 for newline
+    if (projectedSize <= TARGET_LENGTH) {
+      includedSections.push(section);
+      currentSize = projectedSize;
     }
   }
 
-  // If still too long, try removing application history
-  if (description.length > 4000) {
-    const appHistoryStart = description.indexOf("**Application History");
-    const actionHistoryStart = description.indexOf("**Action History");
-    const nextSection = actionHistoryStart !== -1 ? actionHistoryStart : description.indexOf("**Answers:**");
-    if (appHistoryStart !== -1 && nextSection !== -1 && appHistoryStart < nextSection) {
-      description = description.slice(0, appHistoryStart) + description.slice(nextSection);
-      description = description.replace(/\n{3,}/g, "\n\n");
-    }
+  // Build final description in document order:
+  // 1. Core content (header, alerts, member info, status)
+  // 2. Application History (if included)
+  // 3. Action History (if included)
+  // 4. Answers (always included)
+  const finalParts: string[] = [coreContent];
+
+  // Add sections in document order (App History before Action History)
+  const appHistoryIncluded = includedSections.find(s => s.name === "Application History");
+  const actionHistoryIncluded = includedSections.find(s => s.name === "Action History");
+
+  if (appHistoryIncluded) {
+    finalParts.push(appHistoryIncluded.lines.join("\n"));
+  }
+  if (actionHistoryIncluded) {
+    finalParts.push(actionHistoryIncluded.lines.join("\n"));
   }
 
-  // If still too long, truncate answers
-  if (description.length > 4000) {
+  finalParts.push(answersContent);
+
+  let description = finalParts.join("\n");
+
+  // Clean up excessive newlines
+  description = description.replace(/\n{3,}/g, "\n\n");
+
+  // Log truncation events for monitoring
+  const removedSections = optionalSections.filter(s => !includedSections.includes(s));
+  if (removedSections.length > 0) {
+    const removedNames = removedSections.map(s => s.name);
+    console.warn(
+      `[reviewCard] Truncated embed for app ${shortCode(app.id)}: ` +
+      `removed sections: ${removedNames.join(", ")} ` +
+      `(original ${baseSize + removedSections.reduce((sum, s) => sum + s.estimatedSize, 0)} chars)`
+    );
+  }
+
+  // Final safety check with hard truncation (only if answers section alone is too large)
+  if (description.length > TARGET_LENGTH) {
+    console.warn(
+      `[reviewCard] Hard truncation for app ${shortCode(app.id)}: ` +
+      `${description.length} chars -> 3950 chars`
+    );
     description = description.slice(0, 3950) + "\n\n*...content truncated for Discord limits*";
   }
 

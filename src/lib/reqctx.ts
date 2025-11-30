@@ -3,6 +3,10 @@
  * WHAT: Minimal async-local request context for tracing interaction flows.
  * WHY: Lets us attach traceId/cmd/kind across nested async calls without threading params everywhere.
  * FLOWS: newTraceId() → runWithCtx(meta, fn) → ctx() inside nested helpers
+ *
+ * NOTE: This is the ONLY tracing system in the codebase. Previously tracer.ts existed
+ * but was removed in favor of this async-context-based approach.
+ *
  * DOCS:
  *  - Node AsyncLocalStorage: https://nodejs.org/api/async_context.html#class-asynclocalstorage
  */

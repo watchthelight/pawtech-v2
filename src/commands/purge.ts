@@ -20,7 +20,12 @@ import {
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
-import crypto from "node:crypto";
+import { secureCompare } from "../lib/secureCompare.js";
+import {
+  DISCORD_BULK_DELETE_AGE_LIMIT_MS,
+  MESSAGE_DELETE_BATCH_DELAY_MS,
+  BULK_DELETE_ITERATION_DELAY_MS,
+} from "../lib/constants.js";
 
 /**
  * Discord API constraints that shape this entire implementation:
@@ -52,25 +57,6 @@ export const data = new SlashCommandBuilder()
       .setMaxValue(10000)
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageMessages);
-
-/**
- * Constant-time string comparison to prevent timing attacks.
- *
- * The early return on length mismatch technically leaks length info, but
- * for this use case (admin password) it's acceptable - an attacker who
- * knows the password length still can't brute-force without the actual value.
- * crypto.timingSafeEqual requires same-length buffers anyway.
- */
-function constantTimeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 /**
  * execute
@@ -108,7 +94,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  if (!constantTimeCompare(password, correctPassword)) {
+  if (!secureCompare(password, correctPassword)) {
     logger.warn({ userId: interaction.user.id, guildId }, "[purge] incorrect password attempt");
     await interaction.reply({
       content: "Incorrect password.",
@@ -156,7 +142,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   );
 
   try {
-    const twoWeeksAgo = Date.now() - 14 * 24 * 60 * 60 * 1000;
+    const twoWeeksAgo = Date.now() - DISCORD_BULK_DELETE_AGE_LIMIT_MS;
     let oldMessagesDeleted = 0;
 
     // Main deletion loop - handles both bulk (fast) and individual (slow) deletion.
@@ -207,10 +193,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
               }
             })
           );
-          // 1.5s delay is conservative but safe. Discord's rate limits are
+          // MESSAGE_DELETE_BATCH_DELAY_MS delay is conservative but safe. Discord's rate limits are
           // per-route and can vary; this keeps us well under the threshold.
           if (i + INDIVIDUAL_DELETE_BATCH < oldArray.length) {
-            await new Promise((resolve) => setTimeout(resolve, 1500));
+            await new Promise((resolve) => setTimeout(resolve, MESSAGE_DELETE_BATCH_DELAY_MS));
           }
         }
       }
@@ -222,7 +208,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
       // Small delay to avoid rate limits
       if (iterations < MAX_ITERATIONS && totalDeleted < targetCount) {
-        await new Promise((resolve) => setTimeout(resolve, 1000));
+        await new Promise((resolve) => setTimeout(resolve, BULK_DELETE_ITERATION_DELAY_MS));
       }
     }
 

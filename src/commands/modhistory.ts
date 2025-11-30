@@ -23,6 +23,7 @@ import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import { isOwner } from "../utils/owner.js";
 import { hasStaffPermissions, getConfig } from "../lib/config.js";
+import { isGuildMember } from "../utils/typeGuards.js";
 import { db } from "../db/db.js";
 import { computePercentiles } from "../lib/percentiles.js";
 import { detectModeratorAnomalies } from "../lib/anomaly.js";
@@ -93,14 +94,18 @@ async function requireLeadership(interaction: ChatInputCommandInteraction): Prom
     return true;
   }
 
-  // Staff permissions
-  if (hasStaffPermissions(member as any, guildId)) {
+  // Staff permissions - hasStaffPermissions accepts the union type natively
+  if (hasStaffPermissions(member, guildId)) {
     return true;
   }
 
-  // Leadership role
+  // Leadership role - need type guard to access roles.cache
   const config = getConfig(guildId);
-  if (config?.leadership_role_id && (member as any).roles.cache.has(config.leadership_role_id)) {
+  if (
+    config?.leadership_role_id &&
+    isGuildMember(member) &&
+    member.roles.cache.has(config.leadership_role_id)
+  ) {
     return true;
   }
 

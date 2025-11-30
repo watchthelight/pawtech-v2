@@ -17,8 +17,7 @@ import type { CommandContext } from "../../lib/cmdWrap.js";
 import { getNotifyConfig } from "../../features/notifyConfig.js";
 import { logActionPretty } from "../../logging/pretty.js";
 import { logger } from "../../lib/logger.js";
-import { isOwner } from "../../utils/owner.js";
-import { hasStaffPermissions, getConfig } from "../../lib/config.js";
+import { requireAdminOrLeadership } from "../../utils/requireAdminOrLeadership.js";
 import { db } from "../../db/db.js";
 
 export const data = new SlashCommandBuilder()
@@ -40,39 +39,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Multi-tier authorization check. The order matters for performance -
-  // owner checks are cheapest (single ID comparison), guild owner is next,
-  // then we fall through to the more expensive role/permission lookups.
-  if (isOwner(userId)) {
-    // Bot owner always allowed - useful for debugging across all servers
-  } else if (interaction.guild?.ownerId === userId) {
-    // Server owner - they own the place, let them in
-  } else {
-    const member = interaction.member;
-    // String permissions = we got the API version instead of the cached GuildMember.
-    // This usually happens in uncached guilds. Deny by default.
-    if (!member || typeof member.permissions === "string") {
-      await interaction.reply({
-        content: "❌ You must be a server administrator to use this command.",
-        ephemeral: true,
-      });
-      return;
-    }
-
-    // hasStaffPermissions checks for Admin/ManageGuild permissions
-    const hasPerms = hasStaffPermissions(member as any, guildId);
-    const config = getConfig(guildId);
-    // Leadership role is a configurable role that grants admin-like access
-    // without actual Discord admin permissions. Useful for head mods.
-    const hasLeadershipRole = config?.leadership_role_id && (member as any).roles.cache.has(config.leadership_role_id);
-
-    if (!hasPerms && !hasLeadershipRole) {
-      await interaction.reply({
-        content: "❌ You must be a server administrator to use this command.",
-        ephemeral: true,
-      });
-      return;
-    }
+  // Authorization check
+  const authorized = await requireAdminOrLeadership(interaction);
+  if (!authorized) {
+    await interaction.reply({
+      content: "❌ You must be a server administrator to use this command.",
+      ephemeral: true,
+    });
+    return;
   }
 
   await interaction.deferReply({ ephemeral: true });

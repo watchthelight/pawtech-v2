@@ -351,43 +351,23 @@ async function buildListEmbed(
     appUrls.push({ appId: app.id, url: appUrl });
 
     // Try to fetch applicant user info
-    let displayName: string;
+    const member = await guild.members.fetch(app.user_id).catch(() => null);
+    const user = member ? null : await interaction.client.users.fetch(app.user_id).catch(() => null);
 
-    try {
-      const member = await guild.members.fetch(app.user_id).catch(() => null);
-
-      if (member) {
-        displayName = member.user.tag;
-      } else {
-        const user = await interaction.client.users.fetch(app.user_id).catch(() => null);
-
-        if (user) {
-          displayName = user.tag;
-        } else {
-          displayName = `User ${app.user_id}`;
-        }
-      }
-    } catch {
-      displayName = `User ${app.user_id}`;
-    }
+    const displayName = member?.user.tag ?? user?.tag ?? `User ${app.user_id}`;
 
     // Fetch reviewer info for "all" view, or show "Unclaimed" if no claim
     let claimInfo = "";
     if (viewMode === "all") {
       if (app.reviewer_id) {
-        try {
-          const reviewerMember = await guild.members.fetch(app.reviewer_id).catch(() => null);
-          if (reviewerMember) {
-            claimInfo = `\n**Claimed by:** <@${app.reviewer_id}>`;
-          } else {
-            const reviewerUser = await interaction.client.users.fetch(app.reviewer_id).catch(() => null);
-            if (reviewerUser) {
-              claimInfo = `\n**Claimed by:** ${reviewerUser.tag}`;
-            } else {
-              claimInfo = `\n**Claimed by:** User ${app.reviewer_id}`;
-            }
-          }
-        } catch {
+        const reviewerMember = await guild.members.fetch(app.reviewer_id).catch(() => null);
+        const reviewerUser = reviewerMember ? null : await interaction.client.users.fetch(app.reviewer_id).catch(() => null);
+
+        if (reviewerMember) {
+          claimInfo = `\n**Claimed by:** <@${app.reviewer_id}>`;
+        } else if (reviewerUser) {
+          claimInfo = `\n**Claimed by:** ${reviewerUser.tag}`;
+        } else {
           claimInfo = `\n**Claimed by:** User ${app.reviewer_id}`;
         }
       } else {

@@ -108,25 +108,6 @@ export const SAMPLE_ANSWERS_REJECTED: ReviewAnswer[] = [
 export const SAMPLE_REJECTION_REASON = `Application contained incomplete or inconsistent responses.`;
 
 /**
- * Long rejection reason (for testing)
- */
-export const SAMPLE_REJECTION_REASON_LONG = `After careful review of your application, we have determined that you do not meet our community standards at this time.
-
-Specific concerns:
-1. Your answers indicate you may not be familiar with our community guidelines and expectations
-2. The tone and content of your responses suggest misalignment with our server culture
-3. Your account age and activity history raise concerns about your intentions
-
-We encourage you to:
-- Review our server rules and guidelines more thoroughly
-- Spend more time in similar communities to understand furry community norms
-- Consider reapplying in the future when you have more experience with online furry communities
-
-This decision is final for this application. You may reapply after 30 days if you believe you can better demonstrate alignment with our community values.
-
-Thank you for your interest in Pawtropolis.`;
-
-/**
  * Sample history actions
  */
 export const SAMPLE_HISTORY = [

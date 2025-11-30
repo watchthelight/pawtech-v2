@@ -21,6 +21,7 @@ import { logger } from "../lib/logger.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { getNotifyConfig } from "../features/notifyConfig.js";
 import { notifyLimiter } from "../lib/notifyLimiter.js";
+import { DISCORD_RETRY_DELAY_MS, SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 
 export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
   try {
@@ -43,8 +44,8 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
       // Discord race condition: threadCreate fires before starter message exists
       // Retry once after a short delay (error 10008 = Unknown Message)
       if (err.code === 10008) {
-        logger.info({ threadId: thread.id, guildId }, "[forumPostNotify] starter message not ready, retrying in 2s");
-        await new Promise((resolve) => setTimeout(resolve, 2000));
+        logger.info({ threadId: thread.id, guildId }, "[forumPostNotify] starter message not ready, retrying");
+        await new Promise((resolve) => setTimeout(resolve, DISCORD_RETRY_DELAY_MS));
         try {
           starterMessage = await thread.fetchStarterMessage();
         } catch (retryErr) {
@@ -118,7 +119,7 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
         });
       }
       if (failureReason === "role_not_mentionable") {
-        try { await thread.send({ content: `New feedback post by ${starterMessage.author} - role <@&${roleId}> (not mentionable): ${threadUrl}`, allowedMentions: { parse: [] } }); } catch {}
+        try { await thread.send({ content: `New feedback post by ${starterMessage.author} - role <@&${roleId}> (not mentionable): ${threadUrl}`, allowedMentions: SAFE_ALLOWED_MENTIONS }); } catch {}
       }
     }
   } catch (err) {

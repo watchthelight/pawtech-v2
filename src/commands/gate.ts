@@ -66,7 +66,7 @@ import {
   withSql,
 } from "../lib/cmdWrap.js";
 import { db } from "../db/db.js";
-import { timingSafeEqual } from "node:crypto";
+import { secureCompare } from "../lib/secureCompare.js";
 import { logger } from "../lib/logger.js";
 import { env } from "../lib/env.js";
 
@@ -96,6 +96,7 @@ import { env } from "../lib/env.js";
 import { closeModmailForApplication } from "../features/modmail.js";
 import { shortCode } from "../lib/ids.js";
 import type { GuildMember } from "discord.js";
+import { isGuildMember } from "../utils/typeGuards.js";
 
 export const data = new SlashCommandBuilder()
   .setName("gate")
@@ -197,23 +198,6 @@ export const data = new SlashCommandBuilder()
       .addStringOption((o) => o.setName("q5").setDescription("Question 5").setRequired(false).setMaxLength(500))
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.SendMessages);
-
-/**
- * Constant-time string comparison to prevent timing attacks on password validation.
- *
- * SECURITY: Standard === comparison leaks information via timing differences.
- * An attacker can measure response time to guess characters one by one.
- * timingSafeEqual always takes the same time regardless of where strings differ.
- *
- * The length check happens first (leaking only length info, not content), then
- * the actual byte comparison runs in constant time.
- */
-function safeEq(a: string, b: string): boolean {
-  const ab = Buffer.from(a, "utf8");
-  const bb = Buffer.from(b, "utf8");
-  if (ab.length !== bb.length) return false;
-  return timingSafeEqual(ab, bb);
-}
 
 async function executeSetup(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
@@ -328,7 +312,8 @@ export const handleResetModal = wrapCommand<ModalSubmitInteraction>("gate:reset"
   }
 
   ctx.step("permission_check");
-  const member = interaction.member as GuildMember | null;
+  // Use type guard to safely narrow member type
+  const member = isGuildMember(interaction.member) ? interaction.member : null;
   // Check canRunAllCommands first (owner + mod roles), then fall back to hasManageGuild/isReviewer
   // DOCS:
   //  - canRunAllCommands: checks OWNER_IDS and mod_role_ids from guild config
@@ -367,7 +352,7 @@ export const handleResetModal = wrapCommand<ModalSubmitInteraction>("gate:reset"
     return;
   }
 
-  if (!safeEq(password, env.RESET_PASSWORD)) {
+  if (!secureCompare(password, env.RESET_PASSWORD)) {
     logger.warn(
       {
         evt: "gate_reset_denied",
@@ -391,7 +376,7 @@ export const handleResetModal = wrapCommand<ModalSubmitInteraction>("gate:reset"
   // Re-validate permissions immediately before destructive operation.
   // User's permissions could have changed between modal open and submit (race condition).
   ctx.step("permission_recheck");
-  const memberRecheck = interaction.member as GuildMember | null;
+  const memberRecheck = isGuildMember(interaction.member) ? interaction.member : null;
   const stillHasPermission =
     canRunAllCommands(memberRecheck, guildId) ||
     hasManageGuild(memberRecheck) ||
@@ -481,16 +466,9 @@ export const handleResetModal = wrapCommand<ModalSubmitInteraction>("gate:reset"
   const cfg = getConfig(guildId);
   if (cfg && cfg.gate_channel_id) {
     try {
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      const fakeCtx: CommandContext<ChatInputCommandInteraction> = {
-        interaction: interaction as any,
-        step: ctx.step,
-        currentPhase: ctx.currentPhase,
-        setLastSql: ctx.setLastSql,
-        getTraceId: ctx.getTraceId,
-        traceId: ctx.traceId,
-      };
-      await ensureGateEntry(fakeCtx, guildId!);
+      // ensureGateEntry accepts CmdCtx (CommandContext<InstrumentedInteraction>)
+      // which includes ModalSubmitInteraction, so we can pass ctx directly
+      await ensureGateEntry(ctx, guildId!);
     } catch (err) {
       logger.warn({ err, guildId }, "Failed to ensure gate entry after reset");
     }

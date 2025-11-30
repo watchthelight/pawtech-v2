@@ -16,6 +16,7 @@ import { REST, Routes } from "discord.js";
 import { getAllSlashCommands } from "./registry.js";
 import { env } from "../lib/env.js";
 import { logger } from "../lib/logger.js";
+import { DISCORD_COMMAND_SYNC_DELAY_MS } from "../lib/constants.js";
 
 /**
  * Syncs slash commands to a specific guild using bulk overwrite.
@@ -60,7 +61,7 @@ export async function syncCommandsToGuild(guildId: string): Promise<void> {
 export async function syncCommandsToAllGuilds(guildIds: string[]): Promise<void> {
   for (const guildId of guildIds) {
     await syncCommandsToGuild(guildId);
-    // 650ms > 500ms (2/sec limit) gives us headroom for clock skew and jitter
-    await new Promise((resolve) => setTimeout(resolve, 650));
+    // DISCORD_COMMAND_SYNC_DELAY_MS > 500ms (2/sec limit) gives us headroom for clock skew and jitter
+    await new Promise((resolve) => setTimeout(resolve, DISCORD_COMMAND_SYNC_DELAY_MS));
   }
 }

@@ -190,6 +190,19 @@ function getMovieAttendanceMode(guildId: string): "cumulative" | "continuous" {
 }
 
 /**
+ * Get guild's movie night qualification threshold in minutes.
+ * Defaults to 30 minutes if not configured.
+ */
+function getMovieQualificationThreshold(guildId: string): number {
+  const stmt = db.prepare(`
+    SELECT qualification_threshold_minutes FROM guild_movie_config
+    WHERE guild_id = ?
+  `);
+  const result = stmt.get(guildId) as { qualification_threshold_minutes: number } | undefined;
+  return result?.qualification_threshold_minutes ?? 30;
+}
+
+/**
  * Finalize attendance and save to database
  */
 export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
@@ -200,11 +213,14 @@ export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
   }
 
   const mode = getMovieAttendanceMode(guild.id);
+  const threshold = getMovieQualificationThreshold(guild.id);
+
   logger.info({
     evt: "finalizing_movie_attendance",
     guildId: guild.id,
     eventDate: event.eventDate,
     mode,
+    threshold,
     participantCount: movieSessions.size,
   }, "Finalizing movie night attendance");
 
@@ -229,12 +245,11 @@ export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
       session.currentSessionStart = null;
     }
 
-    // 30-minute threshold is hardcoded. If this needs to be configurable per
-    // guild, add a threshold column to guild_movie_config.
+    // Qualification based on configured threshold (default 30 minutes)
     const qualified =
       mode === "continuous"
-        ? session.longestSessionMinutes >= 30
-        : session.totalMinutes >= 30;
+        ? session.longestSessionMinutes >= threshold
+        : session.totalMinutes >= threshold;
 
     stmt.run(
       guildId,
@@ -255,7 +270,8 @@ export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
       longestSession: session.longestSessionMinutes,
       qualified,
       mode,
-    }, `Attendance recorded: ${qualified ? "✅ Qualified" : "❌ Not qualified"}`);
+      threshold,
+    }, `Attendance recorded: ${qualified ? "Qualified" : "Not qualified"}`);
   }
 
   // Clear ALL sessions, not just this guild's. This is a simplification since

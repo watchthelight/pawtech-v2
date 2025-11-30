@@ -22,7 +22,7 @@ import { __test__clearModMetricsCache as clearModMetricsCache } from "../feature
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { logActionPretty } from "../logging/pretty.js";
-import crypto from "node:crypto";
+import { secureCompare } from "../lib/secureCompare.js";
 
 export const data = new SlashCommandBuilder()
   .setName("resetdata")
@@ -34,22 +34,6 @@ export const data = new SlashCommandBuilder()
       .setRequired(true)
   )
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild);
-
-/**
- * Constant-time string comparison to prevent timing attacks.
- * Duplicated from purge.ts - consider extracting to a shared util if
- * more commands need password protection.
- */
-function constantTimeCompare(a: string, b: string): boolean {
-  if (a.length !== b.length) {
-    return false;
-  }
-
-  const bufA = Buffer.from(a, "utf8");
-  const bufB = Buffer.from(b, "utf8");
-
-  return crypto.timingSafeEqual(bufA, bufB);
-}
 
 /**
  * execute
@@ -86,7 +70,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  if (!constantTimeCompare(password, correctPassword)) {
+  if (!secureCompare(password, correctPassword)) {
     logger.warn({ userId: interaction.user.id, guildId }, "[resetdata] incorrect password attempt");
 
     await interaction.editReply({

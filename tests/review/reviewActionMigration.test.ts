@@ -32,11 +32,12 @@ async function loadMigration(db: BetterDb) {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      debug: vi.fn(),
     },
   }));
 
-  const mod = await import("../../migrations/2025-10-20_review_action_free_text.js");
-  return mod.migrateReviewActionFreeText as (db: BetterDb) => void;
+  const mod = await import("../../migrations/028_review_action_free_text.js");
+  return mod.migrate028ReviewActionFreeText as (db: BetterDb) => void;
 }
 
 /**
@@ -52,6 +53,7 @@ async function loadEnsure(db: BetterDb) {
       info: vi.fn(),
       warn: vi.fn(),
       error: vi.fn(),
+      debug: vi.fn(),
     },
   }));
 
@@ -427,6 +429,165 @@ describe("ensureReviewActionFreeText", () => {
         count: number;
       };
       expect(countAfter.count).toBe(1); // No duplication
+    } finally {
+      db.close();
+    }
+  });
+});
+
+/**
+ * Tests for DDL-based CHECK constraint detection.
+ * These verify that the migration correctly detects schema states using sqlite_master
+ * introspection instead of fragile probe inserts that could fail on FK constraints.
+ */
+describe("DDL introspection for CHECK constraint detection", () => {
+  it("detects CHECK constraint in legacy schema via sqlite_master", async () => {
+    const db = new Database(":memory:");
+
+    try {
+      // Create application table (needed for FK in new table) and legacy review_action with CHECK
+      db.exec(`
+        CREATE TABLE application (id TEXT PRIMARY KEY);
+        CREATE TABLE review_action (
+          id INTEGER PRIMARY KEY,
+          app_id TEXT NOT NULL,
+          moderator_id TEXT NOT NULL,
+          action TEXT NOT NULL CHECK(action IN ('approved','rejected','kicked')),
+          reason TEXT,
+          message_link TEXT,
+          meta TEXT,
+          created_at TEXT
+        )
+      `);
+
+      // Migration should detect and run
+      const migrate = await loadMigration(db);
+      migrate(db);
+
+      // Verify CHECK constraint is removed
+      const schema = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE name='review_action'`)
+        .get() as { sql: string };
+      expect(schema.sql).not.toMatch(/CHECK/i);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("skips migration when CHECK already removed but created_at is TEXT", async () => {
+    const db = new Database(":memory:");
+
+    try {
+      // Create application table (needed for FK in new table) and review_action without CHECK
+      db.exec(`
+        CREATE TABLE application (id TEXT PRIMARY KEY);
+        CREATE TABLE review_action (
+          id INTEGER PRIMARY KEY,
+          app_id TEXT NOT NULL,
+          moderator_id TEXT NOT NULL,
+          action TEXT NOT NULL,
+          reason TEXT,
+          message_link TEXT,
+          meta TEXT,
+          created_at TEXT
+        )
+      `);
+
+      const migrate = await loadMigration(db);
+      migrate(db);
+
+      // Verify created_at was converted to INTEGER
+      const cols = getColumnInfo(db, "review_action");
+      const createdAt = cols.find((c) => c.name === "created_at");
+      expect(createdAt?.type).toBe("INTEGER");
+    } finally {
+      db.close();
+    }
+  });
+
+  it("is idempotent - no-op when already migrated", async () => {
+    const db = new Database(":memory:");
+
+    try {
+      // Create final schema (no CHECK, INTEGER created_at, all columns)
+      db.exec(`
+        CREATE TABLE review_action (
+          id INTEGER PRIMARY KEY,
+          app_id TEXT NOT NULL,
+          moderator_id TEXT NOT NULL,
+          action TEXT NOT NULL,
+          reason TEXT,
+          message_link TEXT,
+          meta TEXT,
+          created_at INTEGER NOT NULL
+        )
+      `);
+
+      const beforeSql = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE name='review_action'`)
+        .get() as { sql: string };
+
+      const migrate = await loadMigration(db);
+      migrate(db);
+
+      const afterSql = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE name='review_action'`)
+        .get() as { sql: string };
+      expect(afterSql.sql).toEqual(beforeSql.sql);
+    } finally {
+      db.close();
+    }
+  });
+
+  it("handles missing table gracefully", async () => {
+    const db = new Database(":memory:");
+
+    try {
+      // No review_action table exists
+      const migrate = await loadMigration(db);
+      expect(() => migrate(db)).not.toThrow();
+    } finally {
+      db.close();
+    }
+  });
+
+  it("detects CHECK constraint correctly (DDL introspection has no FK dependency)", async () => {
+    const db = new Database(":memory:");
+
+    try {
+      // Create application table and review_action with CHECK constraint.
+      // The key point: DDL introspection correctly detects CHECK constraint
+      // without needing to attempt a probe insert that could fail on FK.
+      // This is more reliable because it queries sqlite_master directly.
+      db.exec(`
+        CREATE TABLE application (id TEXT PRIMARY KEY);
+        CREATE TABLE review_action (
+          id INTEGER PRIMARY KEY,
+          app_id TEXT NOT NULL,
+          moderator_id TEXT NOT NULL,
+          action TEXT NOT NULL CHECK(action IN ('approve','reject')),
+          reason TEXT,
+          message_link TEXT,
+          meta TEXT,
+          created_at TEXT NOT NULL DEFAULT (datetime('now')),
+          FOREIGN KEY (app_id) REFERENCES application(id) ON DELETE CASCADE
+        )
+      `);
+
+      // With DDL introspection, this works correctly regardless of FK relationships
+      const migrate = await loadMigration(db);
+      migrate(db);
+
+      // Verify CHECK was removed
+      const schema = db
+        .prepare(`SELECT sql FROM sqlite_master WHERE name='review_action'`)
+        .get() as { sql: string };
+      expect(schema.sql).not.toMatch(/CHECK/i);
+
+      // Verify created_at is INTEGER
+      const cols = getColumnInfo(db, "review_action");
+      const createdAt = cols.find((c) => c.name === "created_at");
+      expect(createdAt?.type).toBe("INTEGER");
     } finally {
       db.close();
     }

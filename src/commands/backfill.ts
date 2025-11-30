@@ -37,11 +37,9 @@ export const data = new SlashCommandBuilder()
       .setRequired(false)
   );
 
-// Hardcoded channel/role IDs - these are specific to the Pawtropolis server.
-// If this bot ever runs on other servers, these should move to per-guild config.
-// The notification role ping alerts staff when a long-running backfill completes.
+// Hardcoded channel ID - this is specific to the Pawtropolis server.
+// If this bot ever runs on other servers, this should move to per-guild config.
 const NOTIFICATION_CHANNEL_ID = '1429947536793145374';
-const NOTIFICATION_ROLE_ID = '1120074045883420753';
 
 /**
  * execute
@@ -187,10 +185,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       // The "send" in channel check is a TypeScript narrowing trick. channels.fetch()
       // returns a Channel | null, but not all Channel types have send(). TextChannel,
       // NewsChannel, etc. do, but CategoryChannel doesn't. This check satisfies TS.
-      // Note: role ping requires the bot to have permission to mention the role.
       if ("send" in channel) {
         await channel.send({
-          content: `<@&${NOTIFICATION_ROLE_ID}>`,
           embeds: [embed],
         });
       }

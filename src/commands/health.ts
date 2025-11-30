@@ -11,6 +11,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
+import { HEALTH_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 
 /*
  * Health Check Command
@@ -80,13 +81,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         )
         .setTimestamp();
 
+      // Public by default (team status check), ephemeral only on timeout
       // Single message path; no need to defer. Keep within 3s SLA.
       await interaction.reply({ embeds: [embed] });
     });
   })();
 
   const timeoutPromise = new Promise<never>((_, reject) => {
-    setTimeout(() => reject(new Error('Health check timeout')), 5000);
+    setTimeout(() => reject(new Error('Health check timeout')), HEALTH_CHECK_TIMEOUT_MS);
   });
 
   try {

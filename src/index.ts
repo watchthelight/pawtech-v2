@@ -27,6 +27,7 @@ import {
   setTag,
   captureException,
 } from "./lib/sentry.js";
+import { UNCAUGHT_EXCEPTION_EXIT_DELAY_MS } from "./lib/constants.js";
 initializeSentry();
 
 import "dotenv/config";
@@ -66,14 +67,13 @@ process.on("uncaughtException", (error, origin) => {
   captureException(error, { context: "uncaughtException", origin });
   // For uncaught exceptions, we should exit after logging
   // Give Sentry time to flush, then exit
-  setTimeout(() => process.exit(1), 1000);
+  setTimeout(() => process.exit(1), UNCAUGHT_EXCEPTION_EXIT_DELAY_MS);
 });
 
-import { newTrace, tlog, withStep } from "./lib/tracer.js";
 import { isOwner } from "./utils/owner.js";
 import { TRACE_INTERACTIONS, OWNER_IDS } from "./config.js";
 import type { ModalSubmitInteraction } from "discord.js";
-import { wrapEvent, wrapEventRateLimited } from "./lib/eventWrap.js";
+import { wrapEvent } from "./lib/eventWrap.js";
 import { env } from "./lib/env.js";
 import { requireEnv } from "./util/ensureEnv.js";
 import * as health from "./commands/health.js";
@@ -96,6 +96,7 @@ import {
 import {
   handleModmailOpenButton,
   handleModmailCloseButton,
+  handleModmailContextMenu,
   executeModmailCommand,
   getOpenTicketByUser,
   getTicketByThread,
@@ -250,6 +251,10 @@ import * as redeemreward from "./commands/redeemreward.js";
 commands.set(artistqueue.data.name, wrapCommand("artistqueue", artistqueue.execute));
 commands.set(redeemreward.data.name, wrapCommand("redeemreward", redeemreward.execute));
 
+// Fun commands
+import * as cage from "./commands/cage.js";
+commands.set(cage.data.name, wrapCommand("cage", cage.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work
@@ -269,6 +274,14 @@ client.once(Events.ClientReady, async () => {
     } = await import("./db/ensure.js");
     const { ensureBotStatusSchema } = await import("./features/statusStore.js");
     const { ensureSuggestionSchema, ensureSuggestionConfigColumns } = await import("./features/suggestions/store.js");
+    const {
+      ensureUnverifiedChannelColumn,
+      ensureWelcomeTemplateColumn,
+      ensureWelcomeChannelsColumns,
+      ensureModRolesColumns,
+      ensureDadModeColumns,
+      ensureListopenPublicOutputColumn,
+    } = await import("./lib/config.js");
     ensureAvatarScanSchema();
     ensureApplicationPermaRejectColumn();
     ensureOpenModmailTable();
@@ -283,6 +296,13 @@ client.once(Events.ClientReady, async () => {
     ensureBotStatusSchema();
     ensureSuggestionSchema();
     ensureSuggestionConfigColumns();
+    // Config column migrations (moved from getConfig/upsertConfig for performance)
+    ensureUnverifiedChannelColumn();
+    ensureWelcomeTemplateColumn();
+    ensureWelcomeChannelsColumns();
+    ensureModRolesColumns();
+    ensureDadModeColumns();
+    ensureListopenPublicOutputColumn();
   } catch (err) {
     logger.error({ err }, "[startup] schema ensure failed");
   }
@@ -360,18 +380,13 @@ client.once(Events.ClientReady, async () => {
   // ========================================
 
   // ===== Scheduler Initialization =====
-  // Store interval handles for coordinated shutdown
-  let metricsInterval: NodeJS.Timeout | null = null;
-  let healthInterval: NodeJS.Timeout | null = null;
-  let staleAppInterval: NodeJS.Timeout | null = null;
-
   // Start mod metrics periodic refresh scheduler
   // WHAT: Recalculates mod_metrics table every 15 minutes
   // WHY: Keeps performance analytics current without manual triggers
   // DOCS: See src/scheduler/modMetricsScheduler.ts
   try {
     const { startModMetricsScheduler } = await import("./scheduler/modMetricsScheduler.js");
-    metricsInterval = startModMetricsScheduler(client);
+    startModMetricsScheduler(client);
   } catch (err) {
     logger.warn(
       { err },
@@ -387,7 +402,7 @@ client.once(Events.ClientReady, async () => {
     const { startOpsHealthScheduler } = await import("./scheduler/opsHealthScheduler.js");
     const { setHealthClient } = await import("./features/opsHealth.js");
     setHealthClient(client);
-    healthInterval = startOpsHealthScheduler(client);
+    startOpsHealthScheduler(client);
   } catch (err) {
     logger.warn(
       { err },
@@ -401,7 +416,7 @@ client.once(Events.ClientReady, async () => {
   // DOCS: See src/scheduler/staleApplicationCheck.ts
   try {
     const { startStaleApplicationScheduler } = await import("./scheduler/staleApplicationCheck.js");
-    staleAppInterval = startStaleApplicationScheduler(client);
+    startStaleApplicationScheduler(client);
   } catch (err) {
     logger.warn(
       { err },
@@ -422,7 +437,7 @@ client.once(Events.ClientReady, async () => {
   // ===== Coordinated Graceful Shutdown =====
   // WHAT: Single handler for SIGTERM/SIGINT that shuts down all subsystems in order
   // WHY: Prevents data loss, ensures transcripts are flushed, stops schedulers cleanly
-  // ORDER: 1) Log, 2) Stop schedulers, 3) Cleanup features, 4) Destroy client, 5) Close DB
+  // ORDER: 1) Log, 2) Stop schedulers, 3) Cleanup features, 4) Remove listeners, 5) Destroy client, 6) Close DB
   let isShuttingDown = false;
 
   const gracefulShutdown = async (signal: string) => {
@@ -436,21 +451,14 @@ client.once(Events.ClientReady, async () => {
 
     try {
       // 1. Stop schedulers
-      if (metricsInterval) {
-        const { stopModMetricsScheduler } = await import("./scheduler/modMetricsScheduler.js");
-        stopModMetricsScheduler(metricsInterval);
-        logger.debug("[shutdown] Mod metrics scheduler stopped");
-      }
-      if (healthInterval) {
-        const { stopOpsHealthScheduler } = await import("./scheduler/opsHealthScheduler.js");
-        stopOpsHealthScheduler(healthInterval);
-        logger.debug("[shutdown] Ops health scheduler stopped");
-      }
-      if (staleAppInterval) {
-        const { stopStaleApplicationScheduler } = await import("./scheduler/staleApplicationCheck.js");
-        stopStaleApplicationScheduler(staleAppInterval);
-        logger.debug("[shutdown] Stale application scheduler stopped");
-      }
+      const { stopModMetricsScheduler } = await import("./scheduler/modMetricsScheduler.js");
+      stopModMetricsScheduler();
+
+      const { stopOpsHealthScheduler } = await import("./scheduler/opsHealthScheduler.js");
+      stopOpsHealthScheduler();
+
+      const { stopStaleApplicationScheduler } = await import("./scheduler/staleApplicationCheck.js");
+      stopStaleApplicationScheduler();
 
       // 2. Flush message activity buffer before shutdown
       try {
@@ -481,11 +489,16 @@ client.once(Events.ClientReady, async () => {
         logger.warn({ err }, "[shutdown] Notify limiter cleanup failed (non-fatal)");
       }
 
-      // 5. Destroy Discord client (closes WebSocket connection)
+      // 5. Remove all event listeners before destroying client
+      // WHY: Explicit cleanup prevents race conditions and makes shutdown behavior predictable
+      client.removeAllListeners();
+      logger.debug("[shutdown] Event listeners removed");
+
+      // 6. Destroy Discord client (closes WebSocket connection)
       client.destroy();
       logger.debug("[shutdown] Discord client destroyed");
 
-      // 6. Close database
+      // 7. Close database
       try {
         db.close();
         logger.debug("[shutdown] Database closed");
@@ -763,33 +776,6 @@ client.on("voiceStateUpdate", wrapEvent("voiceStateUpdate", async (oldState, new
 }));
 
 client.on("interactionCreate", async (interaction) => {
-  const trace = newTrace("gate", "interactionCreate"); // feature tag "gate" keeps logs grouped
-
-  try {
-    // Make traceId available on the object for downstream logs
-    (interaction as any).__trace = trace;
-    (interaction as any).__ownerBypass = isOwner(interaction.user.id);
-
-    if (TRACE_INTERACTIONS) {
-      tlog(trace, "info", "interaction received", {
-        kind: interaction.isChatInputCommand()
-          ? "slash"
-          : interaction.isButton()
-            ? "button"
-            : interaction.type,
-        command: (interaction as any).commandName ?? (interaction as any).customId,
-        guildId: interaction.guildId ?? "DM",
-        channelType: interaction.channel?.type ?? ChannelType.GuildText,
-        userId: interaction.user?.id,
-        ownerBypass: (interaction as any).__ownerBypass,
-      });
-    }
-
-    // … your existing router
-  } catch (err) {
-    tlog(trace, "error", "interaction handler error", { err });
-  }
-
   // Global owner override: allow owners to bypass permission checks
   if (isOwner(interaction.user.id)) {
     logger.info(
@@ -811,14 +797,16 @@ client.on("interactionCreate", async (interaction) => {
     );
   }
 
-  // router map: slash → button → modal; anything else early‑return
+  // router map: slash → button → modal → contextMenu; anything else early‑return
   const kind = interaction.isChatInputCommand()
     ? "slash"
     : interaction.isButton()
       ? "button"
       : interaction.isModalSubmit()
         ? "modal"
-        : "other";
+        : interaction.isContextMenuCommand()
+          ? "contextMenu"
+          : "other";
 
   if (kind === "other") {
     return;
@@ -1361,6 +1349,25 @@ client.on("interactionCreate", async (interaction) => {
             return;
           }
           succeeded = true;
+        }
+
+        // Context menu commands
+        if (kind === "contextMenu" && interaction.isMessageContextMenuCommand()) {
+          if (interaction.commandName === "Modmail: Open") {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "contextMenu",
+                route: "modmail_open",
+                commandName: interaction.commandName,
+                traceId,
+              },
+              "route: modmail context menu"
+            );
+            await handleModmailContextMenu(interaction);
+            succeeded = true;
+            return;
+          }
         }
       } catch (err) {
         const error = err instanceof Error ? err : new Error(String(err));

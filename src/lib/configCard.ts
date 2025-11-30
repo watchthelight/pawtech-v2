@@ -19,6 +19,7 @@ import {
 } from "discord.js";
 import { logger } from "./logger.js";
 import { replyOrEdit } from "./cmdWrap.js";
+import { SAFE_ALLOWED_MENTIONS } from "./constants.js";
 
 export type GateConfigCardData = {
   reviewChannelId: string;
@@ -92,12 +93,12 @@ export async function postGateConfigCard(
       .setURL(`https://discord.com/channels/${guild.id}/${cfg.generalChannelId}`)
   );
 
-  // allowedMentions: { parse: [] } prevents the role mentions from pinging everyone.
+  // SAFE_ALLOWED_MENTIONS prevents the role mentions from pinging everyone.
   // We want to show @Reviewer but not actually notify the whole team.
   const message = await textChannel.send({
     embeds: [embed],
     components: [buttons],
-    allowedMentions: { parse: [] },
+    allowedMentions: SAFE_ALLOWED_MENTIONS,
   });
 
   // Auto-pin is nice-to-have, not critical. Common failure: bot lacks MANAGE_MESSAGES

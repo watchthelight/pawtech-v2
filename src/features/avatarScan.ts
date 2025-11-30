@@ -5,13 +5,11 @@
  * FLOWS:
  *  - scanAvatar(): resolve URL → Google Vision API → return scores
  *  - getScan(): read stored scores for a given application_id from SQLite
- *  - buildReverseImageUrl(): build review‑time link to image search (e.g., Google Lens)
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import type { User } from "discord.js";
 import { logger } from "../lib/logger.js";
 import { db } from "../db/db.js";
-import type { GuildConfig } from "../lib/config.js";
 
 // Types for NSFW risk assessment
 export type RiskReason = "hard_evidence" | "soft_evidence" | "suggestive" | "none";
@@ -204,21 +202,6 @@ export async function scanAvatar(
 
 type StoredEvidence = RiskSummary["evidence"];
 
-function serializeEvidence(evidence: StoredEvidence): {
-  hard: string | null;
-  soft: string | null;
-  safe: string | null;
-} {
-  // Store evidence arrays as JSON strings in SQLite.
-  // We use null for empty arrays to save space and make queries simpler
-  // (checking for NULL is faster than parsing empty JSON arrays).
-  return {
-    hard: evidence.hard.length > 0 ? JSON.stringify(evidence.hard) : null,
-    soft: evidence.soft.length > 0 ? JSON.stringify(evidence.soft) : null,
-    safe: evidence.safe.length > 0 ? JSON.stringify(evidence.safe) : null,
-  };
-}
-
 function deserializeEvidence(
   hard: string | null,
   soft: string | null,
@@ -229,68 +212,6 @@ function deserializeEvidence(
     soft: soft ? JSON.parse(soft) : [],
     safe: safe ? JSON.parse(safe) : [],
   };
-}
-
-export async function storeScan(
-  applicationId: string,
-  scanResult: ScanResult,
-  config: GuildConfig
-): Promise<void> {
-  /**
-   * storeScan
-   * WHAT: Persists an avatar scan result into the SQLite database
-   * WHY: Review cards need to retrieve the saved scores later
-   * PARAMS:
-   *  - applicationId: The application.id (primary key in applications table)
-   *  - scanResult: The result from scanAvatar()
-   *  - config: Guild config (not currently used but kept for consistency)
-   * THROWS: Never throws; logs errors
-   */
-  if (!db) {
-    logger.warn({ applicationId }, "[avatarScan] db not available, cannot store scan");
-    return;
-  }
-
-  try {
-    const { avatarUrl, nsfwScore, edgeScore, finalPct, furryScore, scalieScore, reason, evidence } =
-      scanResult;
-    const evidenceSerialized = serializeEvidence(evidence);
-
-    db.prepare(
-      `INSERT INTO avatar_scan (
-        application_id, avatar_url, nsfw_score, edge_score, final_pct,
-        furry_score, scalie_score, reason,
-        evidence_hard, evidence_soft, evidence_safe, scanned_at
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
-      ON CONFLICT(application_id) DO UPDATE SET
-        avatar_url=excluded.avatar_url,
-        nsfw_score=excluded.nsfw_score,
-        edge_score=excluded.edge_score,
-        final_pct=excluded.final_pct,
-        furry_score=excluded.furry_score,
-        scalie_score=excluded.scalie_score,
-        reason=excluded.reason,
-        evidence_hard=excluded.evidence_hard,
-        evidence_soft=excluded.evidence_soft,
-        evidence_safe=excluded.evidence_safe,
-        scanned_at=excluded.scanned_at`
-    ).run(
-      applicationId,
-      avatarUrl,
-      nsfwScore,
-      edgeScore,
-      finalPct,
-      furryScore,
-      scalieScore,
-      reason,
-      evidenceSerialized.hard,
-      evidenceSerialized.soft,
-      evidenceSerialized.safe
-    );
-    logger.debug({ applicationId, finalPct }, "[avatarScan] scan stored");
-  } catch (err) {
-    logger.warn({ err, applicationId }, "[avatarScan] failed to store scan");
-  }
 }
 
 export function getScan(applicationId: string): ScanResult {
@@ -367,34 +288,4 @@ export function googleReverseImageUrl(imageUrl: string): string {
    */
   const encoded = encodeURIComponent(imageUrl);
   return `https://lens.google.com/uploadbyurl?url=${encoded}`;
-}
-
-export function buildReverseImageUrl(
-  config: Pick<GuildConfig, "image_search_url_template">,
-  avatarUrl: string
-): string {
-  /**
-   * buildReverseImageUrl
-   * WHAT: Builds a reverse image search URL using the guild's configured template
-   * WHY: Allows guilds to customize their preferred image search service
-   * PARAMS:
-   *  - config: Guild config with image_search_url_template
-   *  - avatarUrl: The avatar URL to search for
-   * RETURNS: A formatted URL for reverse image search
-   * THROWS: Never throws
-   */
-  const template = config.image_search_url_template;
-  const encoded = encodeURIComponent(avatarUrl);
-
-  // Two URL construction modes:
-  // 1. Template with {avatarUrl} placeholder (preferred) - gives full control
-  // 2. Fallback: append as ?avatar= or &avatar= query param
-  // Mode 2 exists for backwards compatibility and simpler configs.
-  if (template.includes("{avatarUrl}")) {
-    return template.replace("{avatarUrl}", encoded);
-  }
-
-  // Otherwise append as query parameter
-  const separator = template.includes("?") ? "&" : "?";
-  return `${template}${separator}avatar=${encoded}`;
 }

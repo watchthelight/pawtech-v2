@@ -13,6 +13,7 @@
 
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
+import { FLAG_REASON_MAX_LENGTH } from "../lib/constants.js";
 
 export interface FlagRow {
   guild_id: string;
@@ -98,8 +99,8 @@ export function upsertManualFlag(params: {
 }): FlagRow {
   const { guildId, userId, reason, flaggedBy, joinedAt } = params;
 
-  // Sanitize and truncate reason to 512 chars
-  const sanitizedReason = reason.trim().slice(0, 512);
+  // Sanitize and truncate reason to FLAG_REASON_MAX_LENGTH chars
+  const sanitizedReason = reason.trim().slice(0, FLAG_REASON_MAX_LENGTH);
 
   // Current timestamp (unix seconds)
   const now = Math.floor(Date.now() / 1000);

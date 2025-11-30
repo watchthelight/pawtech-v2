@@ -17,6 +17,7 @@ import { buildValidationEmbed, buildRestoreSummaryEmbed } from "../ui/dbRecovery
 import { logActionPretty } from "../logging/pretty.js";
 import { hasManageGuild } from "../lib/config.js";
 import { isOwner } from "../utils/owner.js";
+import { isGuildMember } from "../utils/typeGuards.js";
 
 /**
  * Handle database recovery button interactions
@@ -58,10 +59,10 @@ export async function handleDbRecoveryButton(interaction: ButtonInteraction): Pr
   await interaction.deferReply({ ephemeral: true });
 
   try {
-    const member = interaction.member ?
-      (typeof interaction.member.permissions === 'undefined' ? null : interaction.member) : null;
+    // Use type guard to safely check if member is a full GuildMember
+    const member = isGuildMember(interaction.member) ? interaction.member : null;
     const isOwnerUser = isOwner(user.id);
-    const hasManagePerms = member && 'permissions' in member ? hasManageGuild(member as any) : false;
+    const hasManagePerms = hasManageGuild(member);
 
     if (!isOwnerUser && !hasManagePerms) {
       await interaction.editReply({

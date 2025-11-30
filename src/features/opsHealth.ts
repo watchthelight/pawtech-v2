@@ -565,8 +565,51 @@ function upsertAlert(
 }
 
 /**
+ * Format alert as human-readable message for external systems
+ */
+function formatAlertMessage(alert: HealthAlert): string {
+  const severity = alert.severity === "critical" ? "CRITICAL" : "WARNING";
+
+  switch (alert.alert_type) {
+    case "queue_backlog":
+      return `${severity}: Queue backlog at ${alert.meta?.actual || "unknown"} (threshold: ${alert.meta?.threshold || "unknown"})`;
+    case "p95_response_high":
+      return `${severity}: P95 response time ${alert.meta?.actual || "unknown"}ms (threshold: ${alert.meta?.threshold || "unknown"}ms)`;
+    case "ws_ping_high":
+      return `${severity}: WebSocket ping ${alert.meta?.actual || "unknown"}ms (threshold: ${alert.meta?.threshold || "unknown"}ms)`;
+    case "db_integrity_fail":
+      return `${severity}: Database integrity check failed - ${alert.meta?.message || "unknown error"}`;
+    case "modmail_orphaned_tickets":
+      return `${severity}: ${alert.meta?.count || "unknown"} orphaned modmail tickets detected`;
+    default:
+      if (alert.alert_type.startsWith("pm2_")) {
+        return `${severity}: PM2 process ${alert.meta?.process || "unknown"} is ${alert.meta?.status || "down"}`;
+      }
+      return `${severity}: ${alert.alert_type} - ${JSON.stringify(alert.meta)}`;
+  }
+}
+
+/**
  * WHAT: Send alert notification (action_log + optional webhook).
  * WHY: Alert operators of critical issues.
+ *
+ * Webhook Payload Format:
+ * POST to HEALTH_ALERT_WEBHOOK with JSON body:
+ * {
+ *   "alert_id": 123,
+ *   "alert_type": "queue_backlog",
+ *   "severity": "warn" | "critical",
+ *   "triggered_at": 1732960000,
+ *   "message": "WARNING: Queue backlog at 250 (threshold: 200)",
+ *   "meta": { "threshold": 200, "actual": 250 },
+ *   "timestamp": "2025-11-30T12:00:00.000Z"
+ * }
+ *
+ * Compatible with:
+ * - Slack incoming webhooks (use "message" as "text" field)
+ * - Discord webhooks (use "message" as "content" field)
+ * - PagerDuty Events API v2 (map to "summary" field)
+ * - Generic webhook receivers (parse "message" or "meta")
  */
 async function notifyAlert(guildId: string, alert: HealthAlert, client: Client): Promise<void> {
   try {
@@ -593,8 +636,48 @@ async function notifyAlert(guildId: string, alert: HealthAlert, client: Client):
     // Webhook support for external alerting (PagerDuty, Slack, etc.)
     const webhookUrl = process.env.HEALTH_ALERT_WEBHOOK;
     if (webhookUrl) {
-      // TODO: POST to webhook with alert payload. For now, Discord is enough.
-      logger.debug({ alertId: alert.id }, "[opshealth] webhook notification skipped (not implemented)");
+      try {
+        const payload = {
+          alert_id: alert.id,
+          alert_type: alert.alert_type,
+          severity: alert.severity,
+          triggered_at: alert.triggered_at,
+          message: formatAlertMessage(alert),
+          meta: alert.meta,
+          timestamp: new Date(alert.triggered_at * 1000).toISOString(),
+        };
+
+        const response = await fetch(webhookUrl, {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            "User-Agent": "Pawtropolis-Tech-Bot/1.0",
+          },
+          body: JSON.stringify(payload),
+          signal: AbortSignal.timeout(5000), // 5 second timeout
+        });
+
+        if (!response.ok) {
+          logger.error(
+            {
+              alertId: alert.id,
+              status: response.status,
+              statusText: response.statusText,
+            },
+            "[opshealth] webhook notification failed"
+          );
+        } else {
+          logger.info(
+            { alertId: alert.id, webhookUrl: webhookUrl.substring(0, 30) + "..." },
+            "[opshealth] webhook notification sent"
+          );
+        }
+      } catch (err: any) {
+        logger.error(
+          { err: err.message, alertId: alert.id },
+          "[opshealth] webhook notification error"
+        );
+      }
     }
   } catch (err: any) {
     // Don't throw - notification failure shouldn't break health checks

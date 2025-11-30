@@ -22,6 +22,7 @@ import { nowUtc } from "../lib/time.js";
 import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { generateLeaderboardImage, type ModStats } from "../lib/leaderboardImage.js";
+import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 
 export const data = new SlashCommandBuilder()
   .setName("modstats")
@@ -529,7 +530,7 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
 
   await interaction.editReply({
     embeds: [embed],
-    allowedMentions: { parse: [] }, // Suppress mentions
+    allowedMentions: SAFE_ALLOWED_MENTIONS,
   });
 
   logger.info(
@@ -555,9 +556,24 @@ async function handleUser(interaction: ChatInputCommandInteraction): Promise<voi
  *
  * The cooldown applies even to successful attempts conceptually, but we
  * clear the entry on success (line ~630) to avoid penalizing legitimate use.
+ *
+ * Memory management:
+ * - Entry TTL: 24 hours (cleanup removes stale entries)
+ * - Cleanup interval: 1 hour
  */
 const resetRateLimiter = new Map<string, number>();
 const RESET_RATE_LIMIT_MS = 30000; // 30 seconds
+const RESET_COOLDOWN_TTL_MS = 24 * 60 * 60 * 1000; // 24 hours - entries expire after this
+
+// Cleanup expired entries every hour
+setInterval(() => {
+  const now = Date.now();
+  for (const [userId, timestamp] of resetRateLimiter) {
+    if (now - timestamp > RESET_COOLDOWN_TTL_MS) {
+      resetRateLimiter.delete(userId);
+    }
+  }
+}, 60 * 60 * 1000);
 
 /**
  * WHAT: Handle /modstats reset subcommand.
