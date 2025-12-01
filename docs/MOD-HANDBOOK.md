@@ -764,6 +764,7 @@ Your Art Jobs
 
 2 active jobs
 ```
+*Note: Timestamps are live-updating Discord relative timestamps.*
 
 #### `/art bump`
 Update a job's status or add progress notes.
@@ -800,6 +801,7 @@ Status: ✏️ Sketching
 Assigned: Nov 28, 2025 (4 days ago)
 Notes: "Working on pose"
 ```
+*Note: Timestamps are live-updating Discord relative timestamps.*
 
 #### `/art leaderboard`
 View completion statistics for all Server Artists.
@@ -830,6 +832,7 @@ Half-body by @OtherArtist
 
 2 pieces in progress
 ```
+*Note: Timestamps are live-updating Discord relative timestamps.*
 
 If you have no art being worked on, you'll see: "You don't have any art being worked on!"
 
