@@ -104,8 +104,14 @@ export const data = new SlashCommandBuilder()
   .addUserOption((option) =>
     option
       .setName("user")
-      .setDescription("The user to search for")
-      .setRequired(true)
+      .setDescription("Select a user from the server")
+      .setRequired(false)
+  )
+  .addStringOption((option) =>
+    option
+      .setName("query")
+      .setDescription("Search by user ID or username (for users not in server)")
+      .setRequired(false)
   )
   .setDefaultMemberPermissions(null) // Make discoverable, enforce at runtime
   .setDMPermission(false); // Guild-only command
@@ -152,11 +158,118 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  const targetUser = interaction.options.getUser("user", true);
+  const targetUser = interaction.options.getUser("user");
+  const queryString = interaction.options.getString("query");
+
+  // Require at least one search parameter
+  if (!targetUser && !queryString) {
+    await interaction.reply({
+      content: "❌ Please provide either a user or a search query (user ID or username).",
+      ephemeral: true,
+    });
+    return;
+  }
 
   await interaction.deferReply({ ephemeral: false });
 
+  // Declare outside try block for error logging
+  let targetUserId: string | undefined;
+
   try {
+    // Resolve target user ID and display info
+    let displayName: string;
+    let avatarUrl: string | null = null;
+
+    if (targetUser) {
+      // User was selected from the picker
+      targetUserId = targetUser.id;
+      displayName = targetUser.tag;
+      avatarUrl = targetUser.displayAvatarURL({ size: 128 });
+    } else if (queryString) {
+      // Search by query string - could be UID or username
+      const trimmedQuery = queryString.trim();
+
+      // Check if it looks like a Discord user ID (17-20 digit snowflake)
+      const isSnowflake = /^\d{17,20}$/.test(trimmedQuery);
+
+      if (isSnowflake) {
+        // Search directly by user ID
+        targetUserId = trimmedQuery;
+
+        // Try to fetch user info from Discord for display
+        try {
+          const fetchedUser = await interaction.client.users.fetch(trimmedQuery);
+          displayName = fetchedUser.tag;
+          avatarUrl = fetchedUser.displayAvatarURL({ size: 128 });
+        } catch {
+          // User doesn't exist or can't be fetched - still search DB
+          displayName = `User ${trimmedQuery}`;
+        }
+      } else {
+        // Search by username - try to find in guild members first
+        const members = await interaction.guild!.members.fetch({ query: trimmedQuery, limit: 10 });
+        const exactMatch = members.find(
+          (m) =>
+            m.user.username.toLowerCase() === trimmedQuery.toLowerCase() ||
+            m.user.tag.toLowerCase() === trimmedQuery.toLowerCase() ||
+            m.displayName.toLowerCase() === trimmedQuery.toLowerCase()
+        );
+
+        if (exactMatch) {
+          targetUserId = exactMatch.id;
+          displayName = exactMatch.user.tag;
+          avatarUrl = exactMatch.user.displayAvatarURL({ size: 128 });
+        } else if (members.size > 0) {
+          // Use first partial match
+          const firstMatch = members.first()!;
+          targetUserId = firstMatch.id;
+          displayName = firstMatch.user.tag;
+          avatarUrl = firstMatch.user.displayAvatarURL({ size: 128 });
+        } else {
+          // No member found - search DB for applications by users with matching username pattern
+          // This finds applications from users who may have left the server
+          const usernameSearchQuery = `
+            SELECT DISTINCT a.user_id
+            FROM application a
+            WHERE a.guild_id = ?
+            LIMIT 100
+          `;
+          const candidateUserIds = db.prepare(usernameSearchQuery).all(guildId) as { user_id: string }[];
+
+          // Try to resolve each user and check username
+          let foundUserId: string | null = null;
+          for (const { user_id } of candidateUserIds) {
+            try {
+              const user = await interaction.client.users.fetch(user_id);
+              if (
+                user.username.toLowerCase().includes(trimmedQuery.toLowerCase()) ||
+                user.tag.toLowerCase().includes(trimmedQuery.toLowerCase())
+              ) {
+                foundUserId = user_id;
+                displayName = user.tag;
+                avatarUrl = user.displayAvatarURL({ size: 128 });
+                break;
+              }
+            } catch {
+              // User can't be fetched, skip
+            }
+          }
+
+          if (!foundUserId) {
+            await interaction.editReply({
+              content: `❌ No user found matching "${trimmedQuery}". Try searching by user ID instead.`,
+            });
+            return;
+          }
+          targetUserId = foundUserId;
+        }
+      }
+    } else {
+      // Should never reach here due to earlier check
+      await interaction.editReply({ content: "❌ Invalid search parameters." });
+      return;
+    }
+
     // Query all applications for the user in this guild
     // LEFT JOIN with review_card to get message link info
     const query = `
@@ -177,7 +290,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
     const applications = db
       .prepare(query)
-      .all(guildId, targetUser.id, MAX_APPLICATIONS) as ApplicationRow[];
+      .all(guildId, targetUserId, MAX_APPLICATIONS) as ApplicationRow[];
 
     // Count total applications (in case there are more than MAX_APPLICATIONS)
     const countQuery = `
@@ -185,18 +298,21 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       FROM application
       WHERE guild_id = ? AND user_id = ?
     `;
-    const countResult = db.prepare(countQuery).get(guildId, targetUser.id) as { total: number } | undefined;
+    const countResult = db.prepare(countQuery).get(guildId, targetUserId) as { total: number } | undefined;
     const totalApplications = countResult?.total ?? 0;
 
     // Handle no applications case
     if (applications.length === 0) {
       const embed = new EmbedBuilder()
-        .setTitle(`Application History for ${targetUser.tag}`)
+        .setTitle(`Application History for ${displayName}`)
         .setDescription("No applications found for this user.")
         .setColor(0x5865f2) // Discord blurple
-        .setThumbnail(targetUser.displayAvatarURL({ size: 128 }))
         .setTimestamp()
-        .setFooter({ text: `User ID: ${targetUser.id}` });
+        .setFooter({ text: `User ID: ${targetUserId}` });
+
+      if (avatarUrl) {
+        embed.setThumbnail(avatarUrl);
+      }
 
       await interaction.editReply({ embeds: [embed] });
       return;
@@ -204,11 +320,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
     // Build the embed
     const embed = new EmbedBuilder()
-      .setTitle(`Application History for ${targetUser.tag}`)
+      .setTitle(`Application History for ${displayName}`)
       .setColor(0x5865f2) // Discord blurple
-      .setThumbnail(targetUser.displayAvatarURL({ size: 128 }))
       .setTimestamp()
-      .setFooter({ text: `User ID: ${targetUser.id}` });
+      .setFooter({ text: `User ID: ${targetUserId}` });
+
+    if (avatarUrl) {
+      embed.setThumbnail(avatarUrl);
+    }
 
     // Add total count description
     if (totalApplications > MAX_APPLICATIONS) {
@@ -253,11 +372,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     await interaction.editReply({ embeds: [embed] });
 
     logger.info(
-      { guildId, reviewerId, targetUserId: targetUser.id, applicationCount: applications.length },
+      { guildId, reviewerId, targetUserId, applicationCount: applications.length },
       "[search] moderator searched user application history"
     );
   } catch (err) {
-    logger.error({ err, guildId, reviewerId, targetUserId: targetUser.id }, "[search] command failed");
+    logger.error({ err, guildId, reviewerId, targetUserId: targetUserId ?? queryString }, "[search] command failed");
 
     await interaction.editReply({
       content: "❌ Failed to fetch application history. Please try again later.",

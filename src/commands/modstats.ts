@@ -29,7 +29,8 @@ import { requireStaff } from "../lib/config.js";
 export const data = new SlashCommandBuilder()
   .setName("modstats")
   .setDescription("View moderator analytics and leaderboards")
-  .setDefaultMemberPermissions(PermissionFlagsBits.ManageGuild)
+  // Visible to all, enforced via requireStaff() which checks mod_roles config
+  .setDefaultMemberPermissions(null)
   .addSubcommand((sub) =>
     sub
       .setName("leaderboard")

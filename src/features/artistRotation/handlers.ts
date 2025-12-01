@@ -22,6 +22,7 @@ import {
   getAllArtists,
   processAssignment,
 } from "./index.js";
+import { createJob } from "../artJobs/index.js";
 
 /**
  * Parse redeemreward button customId
@@ -183,6 +184,15 @@ async function handleConfirm(
     override: data.isOverride,
   });
   results.push(`Assignment logged`);
+
+  // Step 5: Create art job for tracking
+  const job = createJob({
+    guildId: guild.id,
+    artistId: data.artistId,
+    recipientId: data.recipientId,
+    ticketType: data.artType,
+  });
+  results.push(`Job #${String(job.jobNumber).padStart(4, "0")} created`);
 
   // Build result embed
   const embed = new EmbedBuilder()

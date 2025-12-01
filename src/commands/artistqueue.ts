@@ -31,6 +31,7 @@ import {
   unskipArtist,
   getAssignmentHistory,
   getArtistStats,
+  IGNORED_ARTIST_USER_IDS,
 } from "../features/artistRotation/index.js";
 import { fmtAgeShort } from "../lib/timefmt.js";
 import { nowUtc } from "../lib/time.js";
@@ -218,10 +219,12 @@ async function handleSync(
     return;
   }
 
-  // Ensure we have all members cached
-  await guild.members.fetch();
-
-  const roleHolderIds = role.members.map((m) => m.id);
+  // Fetch all members and filter by role (role.members may not update after fetch)
+  // Also exclude ignored user IDs
+  const members = await guild.members.fetch();
+  const roleHolderIds = members
+    .filter((m) => m.roles.cache.has(artistConfig.artistRoleId) && !IGNORED_ARTIST_USER_IDS.has(m.id))
+    .map((m) => m.id);
 
   ctx.step("sync_queue");
   const result = syncWithRoleMembers(guild.id, roleHolderIds);
@@ -501,8 +504,10 @@ async function handleSetup(
   try {
     const role = await guild.roles.fetch(artistConfig.artistRoleId);
     if (role) {
-      await guild.members.fetch();
-      const roleHolderIds = role.members.map((m) => m.id);
+      const members = await guild.members.fetch();
+      const roleHolderIds = members
+        .filter((m) => m.roles.cache.has(artistConfig.artistRoleId) && !IGNORED_ARTIST_USER_IDS.has(m.id))
+        .map((m) => m.id);
       const syncResult = syncWithRoleMembers(guild.id, roleHolderIds);
       results.push(
         `Queue synced: ${syncResult.added.length} added, ${syncResult.removed.length} removed, ${syncResult.unchanged.length} unchanged`

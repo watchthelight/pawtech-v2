@@ -709,6 +709,206 @@ With the new launch of our VRChat World, there are bugs to come. These tickets a
 
 ---
 
+## 10. Server Artist Program
+
+The Server Artist Program is a reward system where verified artists in the community take turns creating art for members who have earned art rewards through community engagement.
+
+### Overview
+
+Server Artists are members with the **Server Artist** role who have volunteered to create artwork for community reward recipients. The system automatically manages a rotation queue to ensure fair distribution of assignments.
+
+### How the Queue Works
+
+When someone receives the Server Artist role:
+- They are automatically added to the end of the rotation queue
+- When the role is removed, they are automatically removed from the queue
+
+The queue operates on a **round-robin** basis: the artist at position #1 gets the next assignment, then moves to the back of the line.
+
+### Art Job Tracking System
+
+Every assignment creates a **job** that artists can track and manage. Jobs have:
+- **Job Number**: Personal ID for the artist (e.g., #0001, #0002)
+- **Global Number**: Server-wide ID for staff reference
+- **Status**: Current progress stage
+- **Client**: The user receiving the artwork
+- **Type**: Headshot, Half-body, Emoji, or Full-body
+
+#### Job Statuses
+
+| Status | Description |
+|--------|-------------|
+| Assigned | Job created, not started |
+| Sketching | Working on initial sketch |
+| Lining | Line art in progress |
+| Coloring | Adding color/shading |
+| Done | Artwork completed |
+
+### Artist Commands
+
+Artists use the `/art` command to manage their jobs:
+
+#### `/art jobs`
+View all your active (incomplete) jobs.
+
+**Example Output:**
+```
+Your Art Jobs
+
+#0001 | @User's Headshot
+✏️ Sketching • Assigned 3 days ago
+📝 "Working on pose"
+
+#0002 | @User2's Half-body
+📋 Assigned • Assigned 1 day ago
+
+2 active jobs
+```
+
+#### `/art bump`
+Update a job's status or add progress notes.
+
+**Usage Options:**
+- By job ID: `/art bump id:1 stage:sketching`
+- By client: `/art bump user:@Client type:headshot stage:lining`
+- Add notes: `/art bump id:1 notes:"Starting lineart today"`
+
+**Available Stages:** `sketching`, `lining`, `coloring`
+
+#### `/art finish`
+Mark a job as complete.
+
+**Usage Options:**
+- By job ID: `/art finish id:1`
+- By client: `/art finish user:@Client type:headshot`
+
+This sets the status to "Done" and records the completion time.
+
+#### `/art view`
+View detailed information about a specific job.
+
+**Usage Options:**
+- By job ID: `/art view id:1`
+- By client: `/art view user:@Client type:headshot`
+
+**Example Output:**
+```
+Job #0001 (Global #0042)
+Client: @Username
+Type: OC Headshot
+Status: ✏️ Sketching
+Assigned: Nov 28, 2025 (4 days ago)
+Notes: "Working on pose"
+```
+
+#### `/art leaderboard`
+View completion statistics for all Server Artists.
+
+Shows:
+- **This Month**: Artists ranked by completions this month
+- **All Time**: Artists ranked by total completions
+
+### Recipient Commands
+
+Members who have redeemed an art reward can check on their art's progress:
+
+#### `/art getstatus`
+Check the status of your art reward(s).
+
+This command is available to anyone and shows only your own art jobs. The response is private (only visible to you).
+
+**Example Output:**
+```
+Your Art Status
+
+Headshot by @ArtistName
+✏️ Sketching • Assigned 3 days ago
+📝 Artist notes: "Working on the lineart today!"
+
+Half-body by @OtherArtist
+📋 Assigned • Assigned 1 day ago
+
+2 pieces in progress
+```
+
+If you have no art being worked on, you'll see: "You don't have any art being worked on!"
+
+### Staff Commands
+
+Staff members have additional commands to manage the program:
+
+#### `/art all`
+View all active jobs across all artists (staff only).
+
+Shows global job numbers, assigned artist, client, type, and status for every incomplete job in the server.
+
+#### `/art assign`
+Manually assign a job to an artist (staff only).
+
+**For User Assignments:**
+```
+/art assign artist:@Artist scope:user recipient:@Client type:headshot
+```
+
+**For Special Tasks:**
+```
+/art assign artist:@Artist scope:special description:"Create server banner"
+```
+
+Special tasks appear in the artist's job list without a client mention, showing only the task description.
+
+#### `/artistqueue` Commands
+
+| Command | Description |
+|---------|-------------|
+| `/artistqueue list` | View the current rotation order |
+| `/artistqueue sync` | Re-sync queue with Server Artist role holders |
+| `/artistqueue move @user position` | Manually reorder an artist |
+| `/artistqueue skip @user [reason]` | Temporarily skip an artist |
+| `/artistqueue unskip @user` | Remove skip status |
+| `/artistqueue history [@user]` | View assignment history |
+| `/artistqueue setup` | Initial setup (permissions + sync) |
+
+#### `/redeemreward`
+Assign an art reward to a user.
+
+```
+/redeemreward user:@Recipient type:headshot [artist:@Artist]
+```
+
+- If no artist specified, the next artist in queue is selected
+- If artist specified, that's an "override" and doesn't affect queue position
+- Creates a job automatically for the assigned artist
+
+### Workflow Summary
+
+```
+1. Member earns art reward (tokens, raffle, etc.)
+2. Ambassador uses /redeemreward user:@Winner type:headshot
+3. Bot confirms assignment, creates job for artist
+4. Artist receives notification, sees job in /art jobs
+5. Recipient can check progress anytime with /art getstatus
+6. Artist updates progress with /art bump
+7. Artist completes work with /art finish
+8. Artist moves to back of queue for next assignment
+```
+
+### Best Practices for Artists
+
+- **Update your status regularly** - Use `/art bump` to keep clients informed
+- **Add notes** - Brief descriptions help track where you left off
+- **Finish promptly** - Use `/art finish` when done so the job is recorded
+- **Check /art jobs daily** - Stay on top of your active assignments
+
+### Best Practices for Staff
+
+- **Run /artistqueue sync** after manually adding/removing Server Artist role
+- **Use /art all** to monitor overall workload and identify bottlenecks
+- **Use /artistqueue skip** if an artist needs a temporary break
+- **Check /art leaderboard** to recognize top contributors
+
+---
+
 ## Quick Reference
 
 ### Warning Levels & Decay

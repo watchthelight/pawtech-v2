@@ -42,6 +42,7 @@ import { data as suggestionsData } from "./suggestions.js";
 import { data as suggestionData } from "./suggestion.js";
 import { data as artistqueueData } from "./artistqueue.js";
 import { data as redeemrewardData } from "./redeemreward.js";
+import { data as artData } from "./art.js";
 
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
@@ -94,6 +95,7 @@ export function buildCommands() {
     // Artist rotation commands
     artistqueueData.toJSON(),
     redeemrewardData.toJSON(),
+    artData.toJSON(),
 
     // Context menu commands are registered alongside slash commands in Discord.js v14
     modmailContextMenu.toJSON(),

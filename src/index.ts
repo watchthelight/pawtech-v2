@@ -267,8 +267,10 @@ commands.set(suggestion.data.name, wrapCommand("suggestion", suggestion.execute)
 // Artist rotation commands
 import * as artistqueue from "./commands/artistqueue.js";
 import * as redeemreward from "./commands/redeemreward.js";
+import * as art from "./commands/art.js";
 commands.set(artistqueue.data.name, wrapCommand("artistqueue", artistqueue.execute));
 commands.set(redeemreward.data.name, wrapCommand("redeemreward", redeemreward.execute));
+commands.set(art.data.name, wrapCommand("art", art.execute));
 
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else

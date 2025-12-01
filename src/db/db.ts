@@ -314,6 +314,40 @@ db.prepare(
   `CREATE INDEX IF NOT EXISTS idx_artist_assignment_log_artist ON artist_assignment_log(artist_id)`
 ).run();
 
+// Art job tracking: tracks individual art jobs for Server Artists
+// Used by /art jobs, /art bump, /art finish commands
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS art_job (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    job_number INTEGER NOT NULL,
+    artist_id TEXT NOT NULL,
+    artist_job_number INTEGER NOT NULL,
+    recipient_id TEXT NOT NULL,
+    ticket_type TEXT NOT NULL,
+    status TEXT NOT NULL DEFAULT 'assigned',
+    assigned_at TEXT DEFAULT (datetime('now')),
+    updated_at TEXT DEFAULT (datetime('now')),
+    completed_at TEXT,
+    notes TEXT,
+    assignment_log_id INTEGER,
+    UNIQUE(guild_id, job_number)
+  )
+`
+).run();
+
+// Indexes for art job queries
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_art_job_guild_status ON art_job(guild_id, status)`
+).run();
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_art_job_artist ON art_job(artist_id, status)`
+).run();
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_art_job_artist_number ON art_job(guild_id, artist_id, artist_job_number)`
+).run();
+
 // Movie night qualification threshold: per-guild configurable threshold
 // Default 30 minutes preserves backward compatibility
 // WHY: Allows guilds to customize the threshold for short films vs feature films
