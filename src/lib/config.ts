@@ -76,6 +76,21 @@ export type GuildConfig = {
   gate_answer_max_length?: number | null; // Max characters for gate answers (default: 1000)
   banner_sync_interval_minutes?: number | null; // Minutes between banner syncs (default: 10)
   modmail_forward_max_size?: number | null; // Max size for modmail forward tracking (default: 10000)
+  // Retry and circuit breaker settings
+  retry_max_attempts?: number | null; // Max retry attempts (default: 3)
+  retry_initial_delay_ms?: number | null; // Initial retry delay in ms (default: 100)
+  retry_max_delay_ms?: number | null; // Max retry delay in ms (default: 5000)
+  circuit_breaker_threshold?: number | null; // Failures before opening circuit (default: 5)
+  circuit_breaker_reset_ms?: number | null; // Time before retry after circuit opens (default: 60000)
+  // Avatar scan thresholds
+  avatar_scan_hard_threshold?: number | null; // NSFW hard evidence threshold (default: 0.8)
+  avatar_scan_soft_threshold?: number | null; // NSFW soft evidence threshold (default: 0.5)
+  avatar_scan_racy_threshold?: number | null; // Racy content threshold (default: 0.8)
+  // Flag rate limiting
+  flag_rate_limit_ms?: number | null; // Cooldown between flag commands (default: 2000)
+  flag_cooldown_ttl_ms?: number | null; // TTL for flag cooldown cache (default: 3600000)
+  // Banner sync toggle
+  banner_sync_enabled?: number | null; // 1=enabled, 0=disabled (default: 1)
   image_search_url_template: string;
   reapply_cooldown_hours: number;
   min_account_age_hours: number;
@@ -480,6 +495,10 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
       "artist_role_id", "ambassador_role_id", "server_artist_channel_id", "artist_ticket_roles_json",
       "artist_ignored_users_json", "backfill_notification_channel_id", "bot_dev_role_id",
       "gate_answer_max_length", "banner_sync_interval_minutes", "modmail_forward_max_size",
+      "retry_max_attempts", "retry_initial_delay_ms", "retry_max_delay_ms",
+      "circuit_breaker_threshold", "circuit_breaker_reset_ms",
+      "avatar_scan_hard_threshold", "avatar_scan_soft_threshold", "avatar_scan_racy_threshold",
+      "flag_rate_limit_ms", "flag_cooldown_ttl_ms", "banner_sync_enabled",
     ]);
 
     const validKeys = keys.filter((k) => ALLOWED_CONFIG_COLUMNS.has(k as string));

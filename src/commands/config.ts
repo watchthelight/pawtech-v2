@@ -273,6 +273,138 @@ export const data = new SlashCommandBuilder()
               .setMaxValue(100000)
           )
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("retry_config")
+          .setDescription("Configure retry settings for API calls")
+          .addIntegerOption((o) =>
+            o
+              .setName("max_attempts")
+              .setDescription("Max retry attempts (1-10, default: 3)")
+              .setRequired(false)
+              .setMinValue(1)
+              .setMaxValue(10)
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("initial_delay_ms")
+              .setDescription("Initial delay in ms (50-1000, default: 100)")
+              .setRequired(false)
+              .setMinValue(50)
+              .setMaxValue(1000)
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("max_delay_ms")
+              .setDescription("Max delay in ms (1000-30000, default: 5000)")
+              .setRequired(false)
+              .setMinValue(1000)
+              .setMaxValue(30000)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("circuit_breaker")
+          .setDescription("Configure circuit breaker for API resilience")
+          .addIntegerOption((o) =>
+            o
+              .setName("threshold")
+              .setDescription("Failures before opening (1-20, default: 5)")
+              .setRequired(false)
+              .setMinValue(1)
+              .setMaxValue(20)
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("reset_ms")
+              .setDescription("Time before retry in ms (10000-300000, default: 60000)")
+              .setRequired(false)
+              .setMinValue(10000)
+              .setMaxValue(300000)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("avatar_thresholds")
+          .setDescription("Configure avatar scan NSFW thresholds")
+          .addNumberOption((o) =>
+            o
+              .setName("hard")
+              .setDescription("Hard evidence threshold (0.5-1.0, default: 0.8)")
+              .setRequired(false)
+              .setMinValue(0.5)
+              .setMaxValue(1.0)
+          )
+          .addNumberOption((o) =>
+            o
+              .setName("soft")
+              .setDescription("Soft evidence threshold (0.3-0.9, default: 0.5)")
+              .setRequired(false)
+              .setMinValue(0.3)
+              .setMaxValue(0.9)
+          )
+          .addNumberOption((o) =>
+            o
+              .setName("racy")
+              .setDescription("Racy content threshold (0.5-1.0, default: 0.8)")
+              .setRequired(false)
+              .setMinValue(0.5)
+              .setMaxValue(1.0)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("flag_rate_limit")
+          .setDescription("Configure flag command rate limiting")
+          .addIntegerOption((o) =>
+            o
+              .setName("cooldown_ms")
+              .setDescription("Cooldown between flags in ms (500-10000, default: 2000)")
+              .setRequired(false)
+              .setMinValue(500)
+              .setMaxValue(10000)
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("ttl_ms")
+              .setDescription("Cache TTL in ms (60000-7200000, default: 3600000)")
+              .setRequired(false)
+              .setMinValue(60000)
+              .setMaxValue(7200000)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("notify_config")
+          .setDescription("Configure forum post notification settings")
+          .addIntegerOption((o) =>
+            o
+              .setName("cooldown_seconds")
+              .setDescription("Cooldown between notifications (1-60, default: 5)")
+              .setRequired(false)
+              .setMinValue(1)
+              .setMaxValue(60)
+          )
+          .addIntegerOption((o) =>
+            o
+              .setName("max_per_hour")
+              .setDescription("Max notifications per hour (1-100, default: 10)")
+              .setRequired(false)
+              .setMinValue(1)
+              .setMaxValue(100)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("banner_sync_toggle")
+          .setDescription("Enable or disable banner sync feature")
+          .addBooleanOption((o) =>
+            o
+              .setName("enabled")
+              .setDescription("Enable banner sync (default: true)")
+              .setRequired(true)
+          )
+      )
   )
   .addSubcommandGroup((group) =>
     group
@@ -765,8 +897,8 @@ async function executeGetFlags(ctx: CommandContext<ChatInputCommandInteraction>)
 async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * executeView
-   * WHAT: Displays current guild configuration including new mod role settings.
-   * WHY: Allows staff to verify current configuration.
+   * WHAT: Displays ALL guild configuration variables and values.
+   * WHY: Allows staff to verify current configuration at a glance.
    * PARAMS: ctx — command context.
    * RETURNS: Promise<void> after displaying config.
    */
@@ -786,70 +918,156 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
 
   ctx.step("format_display");
   const { EmbedBuilder, Colors } = await import("discord.js");
-  const embed = new EmbedBuilder()
-    .setTitle("Guild Configuration")
-    .setColor(Colors.Blue)
-    .setTimestamp();
+  const embeds: EmbedBuilder[] = [];
+
+  // Helper to format value
+  const fmt = (v: unknown, type?: "channel" | "role" | "user"): string => {
+    if (v === null || v === undefined) return "*not set*";
+    if (type === "channel") return `<#${v}>`;
+    if (type === "role") return `<@&${v}>`;
+    if (type === "user") return `<@${v}>`;
+    if (typeof v === "boolean") return v ? "yes" : "no";
+    if (typeof v === "number") return v.toLocaleString();
+    return String(v);
+  };
+
+  // EMBED 1: Permission & Channel Settings
+  const embed1 = new EmbedBuilder()
+    .setTitle("Guild Configuration (1/3)")
+    .setColor(Colors.Blue);
 
   // Permission Settings
   let permValue = "";
   if (cfg.mod_role_ids && cfg.mod_role_ids.trim().length > 0) {
-    const roleIds = cfg.mod_role_ids
-      .split(",")
-      .map((id) => id.trim())
-      .filter((id) => id.length > 0);
-    const roleList = roleIds.map((id) => `<@&${id}>`).join(", ");
-    permValue += `**Moderator roles:** ${roleList}\n`;
+    const roleIds = cfg.mod_role_ids.split(",").map(id => id.trim()).filter(id => id);
+    permValue += `• mod_role_ids: ${roleIds.map(id => `<@&${id}>`).join(", ")}\n`;
   } else {
-    permValue += "**Moderator roles:** not set\n";
+    permValue += "• mod_role_ids: *not set*\n";
   }
-
-  if (cfg.gatekeeper_role_id) {
-    permValue += `**Gatekeeper role:** <@&${cfg.gatekeeper_role_id}>`;
-  } else {
-    permValue += "**Gatekeeper role:** not set";
-  }
-
-  embed.addFields({ name: "Permission Settings", value: permValue, inline: false });
+  permValue += `• gatekeeper_role_id: ${fmt(cfg.gatekeeper_role_id, "role")}\n`;
+  permValue += `• reviewer_role_id: ${fmt(cfg.reviewer_role_id, "role")}\n`;
+  permValue += `• leadership_role_id: ${fmt(cfg.leadership_role_id, "role")}\n`;
+  permValue += `• bot_dev_role_id: ${fmt(cfg.bot_dev_role_id, "role")}`;
+  embed1.addFields({ name: "🔐 Permission Settings", value: permValue, inline: false });
 
   // Channel Settings
   let channelValue = "";
-  if (cfg.modmail_log_channel_id) {
-    channelValue += `**Modmail log channel:** <#${cfg.modmail_log_channel_id}>\n`;
-  } else {
-    channelValue += "**Modmail log channel:** not set\n";
-  }
+  channelValue += `• review_channel_id: ${fmt(cfg.review_channel_id, "channel")}\n`;
+  channelValue += `• gate_channel_id: ${fmt(cfg.gate_channel_id, "channel")}\n`;
+  channelValue += `• general_channel_id: ${fmt(cfg.general_channel_id, "channel")}\n`;
+  channelValue += `• unverified_channel_id: ${fmt(cfg.unverified_channel_id, "channel")}\n`;
+  channelValue += `• modmail_log_channel_id: ${fmt(cfg.modmail_log_channel_id, "channel")}\n`;
+  channelValue += `• logging_channel_id: ${fmt(cfg.logging_channel_id, "channel")}\n`;
+  channelValue += `• flags_channel_id: ${fmt(cfg.flags_channel_id, "channel")}\n`;
+  channelValue += `• suggestion_channel_id: ${fmt(cfg.suggestion_channel_id, "channel")}\n`;
+  channelValue += `• forum_channel_id: ${fmt(cfg.forum_channel_id, "channel")}\n`;
+  channelValue += `• notification_channel_id: ${fmt(cfg.notification_channel_id, "channel")}\n`;
+  channelValue += `• backfill_notification_channel_id: ${fmt(cfg.backfill_notification_channel_id, "channel")}\n`;
+  channelValue += `• support_channel_id: ${fmt(cfg.support_channel_id, "channel")}\n`;
+  channelValue += `• server_artist_channel_id: ${fmt(cfg.server_artist_channel_id, "channel")}`;
+  embed1.addFields({ name: "📺 Channel Settings", value: channelValue, inline: false });
 
-  channelValue += `**Review channel:** ${cfg.review_channel_id ? `<#${cfg.review_channel_id}>` : "not set"}\n`;
-  channelValue += `**Gate channel:** ${cfg.gate_channel_id ? `<#${cfg.gate_channel_id}>` : "not set"}\n`;
-  channelValue += `**General channel:** ${cfg.general_channel_id ? `<#${cfg.general_channel_id}>` : "not set"}\n`;
-  channelValue += `**Unverified channel:** ${cfg.unverified_channel_id ? `<#${cfg.unverified_channel_id}>` : "not set"}`;
+  embeds.push(embed1);
 
-  embed.addFields({ name: "Channel Settings", value: channelValue, inline: false });
+  // EMBED 2: Role & Feature Settings
+  const embed2 = new EmbedBuilder()
+    .setTitle("Guild Configuration (2/3)")
+    .setColor(Colors.Blue);
 
   // Role Settings
   let roleValue = "";
-  roleValue += `**Accepted role:** ${cfg.accepted_role_id ? `<@&${cfg.accepted_role_id}>` : "not set"}\n`;
-  roleValue += `**Reviewer role:** ${cfg.reviewer_role_id ? `<@&${cfg.reviewer_role_id}>` : "not set (uses channel perms)"}`;
+  roleValue += `• accepted_role_id: ${fmt(cfg.accepted_role_id, "role")}\n`;
+  roleValue += `• welcome_ping_role_id: ${fmt(cfg.welcome_ping_role_id, "role")}\n`;
+  roleValue += `• notify_role_id: ${fmt(cfg.notify_role_id, "role")}\n`;
+  roleValue += `• artist_role_id: ${fmt(cfg.artist_role_id, "role")}\n`;
+  roleValue += `• ambassador_role_id: ${fmt(cfg.ambassador_role_id, "role")}`;
+  embed2.addFields({ name: "🎭 Role Settings", value: roleValue, inline: false });
 
-  const loggingChannelId = getLoggingChannelId(interaction.guildId!);
-  if (loggingChannelId) {
-    roleValue += `\n**Action logging channel:** <#${loggingChannelId}>`;
-  } else {
-    roleValue += "\n**Action logging channel:** not set (using env default)";
-  }
-
-  embed.addFields({ name: "Role Settings", value: roleValue, inline: false });
-
-  // Feature Settings
+  // Feature Toggles
   let featureValue = "";
-  featureValue += `**Avatar scan enabled:** ${cfg.avatar_scan_enabled ? "yes" : "no"}\n`;
-  featureValue += `**Dad Mode:** ${cfg.dadmode_enabled ? `ON (1 in ${cfg.dadmode_odds ?? 1000})` : "OFF"}`;
+  featureValue += `• avatar_scan_enabled: ${cfg.avatar_scan_enabled ? "yes" : "no"}\n`;
+  featureValue += `• dadmode_enabled: ${cfg.dadmode_enabled ? `yes (1 in ${cfg.dadmode_odds ?? 1000})` : "no"}\n`;
+  featureValue += `• ping_dev_on_app: ${cfg.ping_dev_on_app ? "yes" : "no"}\n`;
+  featureValue += `• listopen_public_output: ${cfg.listopen_public_output ? "public" : "ephemeral"}\n`;
+  featureValue += `• modmail_delete_on_close: ${cfg.modmail_delete_on_close ? "yes" : "no"}\n`;
+  featureValue += `• banner_sync_enabled: ${(cfg.banner_sync_enabled ?? 1) ? "yes" : "no"}\n`;
+  featureValue += `• review_roles_mode: ${cfg.review_roles_mode ?? "all"}\n`;
+  featureValue += `• notify_mode: ${cfg.notify_mode ?? "post"}`;
+  embed2.addFields({ name: "⚙️ Feature Toggles", value: featureValue, inline: false });
 
-  embed.addFields({ name: "Feature Settings", value: featureValue, inline: false });
+  // Timing & Thresholds
+  let timingValue = "";
+  timingValue += `• reapply_cooldown_hours: ${cfg.reapply_cooldown_hours ?? 24}\n`;
+  timingValue += `• min_account_age_hours: ${cfg.min_account_age_hours ?? 0}\n`;
+  timingValue += `• min_join_age_hours: ${cfg.min_join_age_hours ?? 0}\n`;
+  timingValue += `• silent_first_msg_days: ${cfg.silent_first_msg_days ?? 90}\n`;
+  timingValue += `• suggestion_cooldown: ${(cfg.suggestion_cooldown ?? 3600) / 60}min\n`;
+  timingValue += `• notify_cooldown_seconds: ${cfg.notify_cooldown_seconds ?? 5}s\n`;
+  timingValue += `• notify_max_per_hour: ${cfg.notify_max_per_hour ?? 10}\n`;
+  timingValue += `• banner_sync_interval_minutes: ${cfg.banner_sync_interval_minutes ?? 10}min\n`;
+  timingValue += `• gate_answer_max_length: ${cfg.gate_answer_max_length ?? 1000} chars`;
+  embed2.addFields({ name: "⏱️ Timing & Limits", value: timingValue, inline: false });
+
+  embeds.push(embed2);
+
+  // EMBED 3: Advanced Settings
+  const embed3 = new EmbedBuilder()
+    .setTitle("Guild Configuration (3/3)")
+    .setColor(Colors.Blue)
+    .setTimestamp();
+
+  // Avatar Scan Settings
+  let avatarValue = "";
+  avatarValue += `• avatar_scan_nsfw_threshold: ${cfg.avatar_scan_nsfw_threshold ?? 0.6}\n`;
+  avatarValue += `• avatar_scan_skin_edge_threshold: ${cfg.avatar_scan_skin_edge_threshold ?? 0.18}\n`;
+  avatarValue += `• avatar_scan_weight_model: ${cfg.avatar_scan_weight_model ?? 0.7}\n`;
+  avatarValue += `• avatar_scan_weight_edge: ${cfg.avatar_scan_weight_edge ?? 0.3}\n`;
+  avatarValue += `• avatar_scan_hard_threshold: ${cfg.avatar_scan_hard_threshold ?? 0.8}\n`;
+  avatarValue += `• avatar_scan_soft_threshold: ${cfg.avatar_scan_soft_threshold ?? 0.5}\n`;
+  avatarValue += `• avatar_scan_racy_threshold: ${cfg.avatar_scan_racy_threshold ?? 0.8}`;
+  embed3.addFields({ name: "🔍 Avatar Scan", value: avatarValue, inline: false });
+
+  // Retry & Circuit Breaker
+  let retryValue = "";
+  retryValue += `• retry_max_attempts: ${cfg.retry_max_attempts ?? 3}\n`;
+  retryValue += `• retry_initial_delay_ms: ${cfg.retry_initial_delay_ms ?? 100}ms\n`;
+  retryValue += `• retry_max_delay_ms: ${cfg.retry_max_delay_ms ?? 5000}ms\n`;
+  retryValue += `• circuit_breaker_threshold: ${cfg.circuit_breaker_threshold ?? 5}\n`;
+  retryValue += `• circuit_breaker_reset_ms: ${cfg.circuit_breaker_reset_ms ?? 60000}ms`;
+  embed3.addFields({ name: "🔄 Retry & Circuit Breaker", value: retryValue, inline: false });
+
+  // Flag Rate Limiting
+  let flagValue = "";
+  flagValue += `• flag_rate_limit_ms: ${cfg.flag_rate_limit_ms ?? 2000}ms\n`;
+  flagValue += `• flag_cooldown_ttl_ms: ${cfg.flag_cooldown_ttl_ms ?? 3600000}ms`;
+  embed3.addFields({ name: "🚩 Flag Rate Limiting", value: flagValue, inline: false });
+
+  // Modmail Settings
+  let modmailValue = "";
+  modmailValue += `• modmail_forward_max_size: ${cfg.modmail_forward_max_size ?? 10000}`;
+  embed3.addFields({ name: "📬 Modmail", value: modmailValue, inline: false });
+
+  // JSON Config Fields (truncated display)
+  const safeJsonLen = (json: string | null | undefined): string => {
+    if (!json) return "*not set*";
+    try {
+      const parsed = JSON.parse(json);
+      return Array.isArray(parsed) ? `${parsed.length} items` : "configured";
+    } catch {
+      return "*invalid JSON*";
+    }
+  };
+  let jsonValue = "";
+  jsonValue += `• artist_ignored_users_json: ${safeJsonLen(cfg.artist_ignored_users_json)}\n`;
+  jsonValue += `• artist_ticket_roles_json: ${cfg.artist_ticket_roles_json ? "configured" : "*not set*"}\n`;
+  jsonValue += `• poke_category_ids_json: ${safeJsonLen(cfg.poke_category_ids_json)}\n`;
+  jsonValue += `• poke_excluded_channel_ids_json: ${safeJsonLen(cfg.poke_excluded_channel_ids_json)}`;
+  embed3.addFields({ name: "📋 JSON Configs", value: jsonValue, inline: false });
+
+  embeds.push(embed3);
 
   ctx.step("reply");
-  await replyOrEdit(interaction, { embeds: [embed] });
+  await replyOrEdit(interaction, { embeds });
 }
 
 async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction>) {
@@ -1783,6 +2001,287 @@ async function executeSetModmailForwardSize(ctx: CommandContext<ChatInputCommand
   });
 }
 
+async function executeSetRetryConfig(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Configures retry settings for API calls.
+   * Replaces hardcoded retry values in various services.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const maxAttempts = interaction.options.getInteger("max_attempts");
+  const initialDelay = interaction.options.getInteger("initial_delay_ms");
+  const maxDelay = interaction.options.getInteger("max_delay_ms");
+
+  if (maxAttempts === null && initialDelay === null && maxDelay === null) {
+    // Show current config
+    const cfg = getConfig(interaction.guildId!);
+    await replyOrEdit(interaction, {
+      content: `**Retry Configuration**\n` +
+        `• Max attempts: ${cfg?.retry_max_attempts ?? 3}\n` +
+        `• Initial delay: ${cfg?.retry_initial_delay_ms ?? 100}ms\n` +
+        `• Max delay: ${cfg?.retry_max_delay_ms ?? 5000}ms\n\n` +
+        `Use options to change values.`,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+  const updates: Record<string, number> = {};
+  const changes: string[] = [];
+
+  if (maxAttempts !== null) {
+    updates.retry_max_attempts = maxAttempts;
+    changes.push(`Max attempts: ${maxAttempts}`);
+  }
+  if (initialDelay !== null) {
+    updates.retry_initial_delay_ms = initialDelay;
+    changes.push(`Initial delay: ${initialDelay}ms`);
+  }
+  if (maxDelay !== null) {
+    updates.retry_max_delay_ms = maxDelay;
+    changes.push(`Max delay: ${maxDelay}ms`);
+  }
+
+  upsertConfig(interaction.guildId!, updates);
+
+  logger.info(
+    { evt: "config_set_retry", guildId: interaction.guildId, updates },
+    "[config] retry config updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Retry configuration updated:\n${changes.map(c => `• ${c}`).join("\n")}`,
+  });
+}
+
+async function executeSetCircuitBreaker(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Configures circuit breaker settings for API resilience.
+   * Prevents cascading failures when external services are down.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const threshold = interaction.options.getInteger("threshold");
+  const resetMs = interaction.options.getInteger("reset_ms");
+
+  if (threshold === null && resetMs === null) {
+    // Show current config
+    const cfg = getConfig(interaction.guildId!);
+    await replyOrEdit(interaction, {
+      content: `**Circuit Breaker Configuration**\n` +
+        `• Failure threshold: ${cfg?.circuit_breaker_threshold ?? 5} failures\n` +
+        `• Reset time: ${cfg?.circuit_breaker_reset_ms ?? 60000}ms\n\n` +
+        `Use options to change values.`,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+  const updates: Record<string, number> = {};
+  const changes: string[] = [];
+
+  if (threshold !== null) {
+    updates.circuit_breaker_threshold = threshold;
+    changes.push(`Failure threshold: ${threshold}`);
+  }
+  if (resetMs !== null) {
+    updates.circuit_breaker_reset_ms = resetMs;
+    changes.push(`Reset time: ${resetMs}ms`);
+  }
+
+  upsertConfig(interaction.guildId!, updates);
+
+  logger.info(
+    { evt: "config_set_circuit_breaker", guildId: interaction.guildId, updates },
+    "[config] circuit breaker config updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Circuit breaker configuration updated:\n${changes.map(c => `• ${c}`).join("\n")}`,
+  });
+}
+
+async function executeSetAvatarThresholds(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Configures avatar scan NSFW detection thresholds.
+   * Allows tuning sensitivity for different community needs.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const hard = interaction.options.getNumber("hard");
+  const soft = interaction.options.getNumber("soft");
+  const racy = interaction.options.getNumber("racy");
+
+  if (hard === null && soft === null && racy === null) {
+    // Show current config
+    const cfg = getConfig(interaction.guildId!);
+    await replyOrEdit(interaction, {
+      content: `**Avatar Scan Thresholds**\n` +
+        `• Hard evidence: ${cfg?.avatar_scan_hard_threshold ?? 0.8}\n` +
+        `• Soft evidence: ${cfg?.avatar_scan_soft_threshold ?? 0.5}\n` +
+        `• Racy content: ${cfg?.avatar_scan_racy_threshold ?? 0.8}\n\n` +
+        `Use options to change values.`,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+  const updates: Record<string, number> = {};
+  const changes: string[] = [];
+
+  if (hard !== null) {
+    updates.avatar_scan_hard_threshold = hard;
+    changes.push(`Hard evidence: ${hard}`);
+  }
+  if (soft !== null) {
+    updates.avatar_scan_soft_threshold = soft;
+    changes.push(`Soft evidence: ${soft}`);
+  }
+  if (racy !== null) {
+    updates.avatar_scan_racy_threshold = racy;
+    changes.push(`Racy content: ${racy}`);
+  }
+
+  upsertConfig(interaction.guildId!, updates);
+
+  logger.info(
+    { evt: "config_set_avatar_thresholds", guildId: interaction.guildId, updates },
+    "[config] avatar thresholds updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Avatar scan thresholds updated:\n${changes.map(c => `• ${c}`).join("\n")}`,
+  });
+}
+
+async function executeSetFlagRateLimit(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Configures flag command rate limiting.
+   * Prevents spam and abuse of flag features.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const cooldownMs = interaction.options.getInteger("cooldown_ms");
+  const ttlMs = interaction.options.getInteger("ttl_ms");
+
+  if (cooldownMs === null && ttlMs === null) {
+    // Show current config
+    const cfg = getConfig(interaction.guildId!);
+    await replyOrEdit(interaction, {
+      content: `**Flag Rate Limit Configuration**\n` +
+        `• Cooldown: ${cfg?.flag_rate_limit_ms ?? 2000}ms\n` +
+        `• Cache TTL: ${cfg?.flag_cooldown_ttl_ms ?? 3600000}ms\n\n` +
+        `Use options to change values.`,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+  const updates: Record<string, number> = {};
+  const changes: string[] = [];
+
+  if (cooldownMs !== null) {
+    updates.flag_rate_limit_ms = cooldownMs;
+    changes.push(`Cooldown: ${cooldownMs}ms`);
+  }
+  if (ttlMs !== null) {
+    updates.flag_cooldown_ttl_ms = ttlMs;
+    changes.push(`Cache TTL: ${ttlMs}ms`);
+  }
+
+  upsertConfig(interaction.guildId!, updates);
+
+  logger.info(
+    { evt: "config_set_flag_rate_limit", guildId: interaction.guildId, updates },
+    "[config] flag rate limit updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Flag rate limit configuration updated:\n${changes.map(c => `• ${c}`).join("\n")}`,
+  });
+}
+
+async function executeSetNotifyConfig(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Configures forum post notification settings.
+   * Controls cooldown and rate limiting for notifications.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const cooldownSeconds = interaction.options.getInteger("cooldown_seconds");
+  const maxPerHour = interaction.options.getInteger("max_per_hour");
+
+  if (cooldownSeconds === null && maxPerHour === null) {
+    // Show current config
+    const cfg = getConfig(interaction.guildId!);
+    await replyOrEdit(interaction, {
+      content: `**Notify Configuration**\n` +
+        `• Cooldown: ${cfg?.notify_cooldown_seconds ?? 5} seconds\n` +
+        `• Max per hour: ${cfg?.notify_max_per_hour ?? 10}\n\n` +
+        `Use options to change values.`,
+    });
+    return;
+  }
+
+  ctx.step("update_config");
+  const updates: Record<string, number> = {};
+  const changes: string[] = [];
+
+  if (cooldownSeconds !== null) {
+    updates.notify_cooldown_seconds = cooldownSeconds;
+    changes.push(`Cooldown: ${cooldownSeconds}s`);
+  }
+  if (maxPerHour !== null) {
+    updates.notify_max_per_hour = maxPerHour;
+    changes.push(`Max per hour: ${maxPerHour}`);
+  }
+
+  upsertConfig(interaction.guildId!, updates);
+
+  logger.info(
+    { evt: "config_set_notify_config", guildId: interaction.guildId, updates },
+    "[config] notify config updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Notify configuration updated:\n${changes.map(c => `• ${c}`).join("\n")}`,
+  });
+}
+
+async function executeSetBannerSyncToggle(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Enables or disables banner sync feature.
+   * Allows guilds to opt out of automatic banner synchronization.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const enabled = interaction.options.getBoolean("enabled", true);
+
+  ctx.step("update_config");
+  upsertConfig(interaction.guildId!, { banner_sync_enabled: enabled ? 1 : 0 });
+
+  logger.info(
+    { evt: "config_set_banner_sync_toggle", guildId: interaction.guildId, enabled },
+    "[config] banner sync toggle updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Banner sync **${enabled ? "enabled" : "disabled"}**`,
+  });
+}
+
 async function executePokeList(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * executePokeList
@@ -1931,6 +2430,18 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetBannerSyncInterval(ctx);
     } else if (subcommand === "modmail_forward_size") {
       await executeSetModmailForwardSize(ctx);
+    } else if (subcommand === "retry_config") {
+      await executeSetRetryConfig(ctx);
+    } else if (subcommand === "circuit_breaker") {
+      await executeSetCircuitBreaker(ctx);
+    } else if (subcommand === "avatar_thresholds") {
+      await executeSetAvatarThresholds(ctx);
+    } else if (subcommand === "flag_rate_limit") {
+      await executeSetFlagRateLimit(ctx);
+    } else if (subcommand === "notify_config") {
+      await executeSetNotifyConfig(ctx);
+    } else if (subcommand === "banner_sync_toggle") {
+      await executeSetBannerSyncToggle(ctx);
     }
   } else if (subcommandGroup === "get") {
     if (subcommand === "logging") {

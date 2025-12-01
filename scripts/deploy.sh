@@ -105,7 +105,7 @@ echo -e "${GREEN}✓ Build complete${NC}"
 # Step 4: Create deployment tarball
 echo -e "${YELLOW}[4/6]${NC} Creating deployment package..."
 rm -f deploy.tar.gz
-tar -czf deploy.tar.gz dist package.json package-lock.json
+tar -czf deploy.tar.gz dist package.json package-lock.json migrations scripts
 TARBALL_SIZE=$(ls -lh deploy.tar.gz | awk '{print $5}')
 echo -e "${GREEN}✓ Created deploy.tar.gz ($TARBALL_SIZE)${NC}"
 
