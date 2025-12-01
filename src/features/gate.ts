@@ -55,8 +55,18 @@ import { isPanicMode } from "./panicStore.js";
 
 // Discord modal limits - these are API-enforced, not arbitrary.
 // See: https://discord.com/developers/docs/interactions/message-components#text-inputs
-const ANSWER_MAX_LENGTH = 1000;
+const DEFAULT_ANSWER_MAX_LENGTH = 1000;
 const INPUT_MAX_LENGTH = 1000;
+
+/**
+ * getAnswerMaxLength
+ * WHAT: Get the max character length for gate answers
+ * WHY: Now configurable via /config set gate_answer_length (100-4000)
+ */
+function getAnswerMaxLength(guildId: string): number {
+  const cfg = getConfig(guildId);
+  return cfg?.gate_answer_max_length ?? DEFAULT_ANSWER_MAX_LENGTH;
+}
 const LABEL_MAX_LENGTH = 45;    // Discord enforces 45 chars max for labels
 const PLACEHOLDER_MAX_LENGTH = 100;
 const BRAND_COLOR = 0x22ccaa;   // Teal - matches server branding
@@ -281,7 +291,8 @@ function upsertAnswer(
   ) as { prompt: string } | undefined;
   if (!question) throw new Error("Question not found");
 
-  const trimmed = value.length > ANSWER_MAX_LENGTH ? value.slice(0, ANSWER_MAX_LENGTH) : value;
+  const answerMaxLength = getAnswerMaxLength(app.guild_id);
+  const trimmed = value.length > answerMaxLength ? value.slice(0, answerMaxLength) : value;
 
   const upsertSql = `
       INSERT INTO application_response (app_id, q_index, question, answer, created_at)

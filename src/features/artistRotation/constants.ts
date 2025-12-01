@@ -32,10 +32,35 @@ export interface TicketRolesConfig {
 /** Server Artist role - members with this role are in the rotation queue */
 export const ARTIST_ROLE_ID = "896070888749940770";
 
-/** User IDs to exclude from the artist queue (e.g., bots, special accounts) */
-export const IGNORED_ARTIST_USER_IDS: Set<string> = new Set([
-  "840832083084836942", // TODO: Move to database config
+/** User IDs to exclude from the artist queue - FALLBACK only (prefer getIgnoredArtistUsers) */
+const FALLBACK_IGNORED_ARTIST_USER_IDS: Set<string> = new Set([
+  "840832083084836942", // Legacy hardcoded value
 ]);
+
+/**
+ * getIgnoredArtistUsers
+ * WHAT: Get the set of user IDs to exclude from artist queue for a guild.
+ * WHY: Allows per-guild configuration of ignored users via /config set artist_ignored_users.
+ * @param guildId - The guild ID to get config for
+ * @returns Set of user IDs to exclude
+ */
+export function getIgnoredArtistUsers(guildId: string): Set<string> {
+  const cfg = getConfig(guildId);
+  if (cfg?.artist_ignored_users_json) {
+    try {
+      const parsed = JSON.parse(cfg.artist_ignored_users_json);
+      if (Array.isArray(parsed)) {
+        return new Set(parsed);
+      }
+    } catch {
+      // JSON parse failed, use fallback
+    }
+  }
+  return FALLBACK_IGNORED_ARTIST_USER_IDS;
+}
+
+/** @deprecated Use getIgnoredArtistUsers(guildId) instead */
+export const IGNORED_ARTIST_USER_IDS = FALLBACK_IGNORED_ARTIST_USER_IDS;
 
 /** Community Ambassador role - can use /redeemreward command */
 export const AMBASSADOR_ROLE_ID = "896070888762535967";

@@ -11,7 +11,7 @@
 import type { Guild, GuildMember, PartialGuildMember } from "discord.js";
 import { logger } from "../../lib/logger.js";
 import { logActionPretty } from "../../logging/pretty.js";
-import { getArtistRoleId, IGNORED_ARTIST_USER_IDS } from "./constants.js";
+import { getArtistRoleId, getIgnoredArtistUsers } from "./constants.js";
 import { addArtist, removeArtist, getArtist } from "./queue.js";
 
 /**
@@ -23,8 +23,9 @@ export async function handleArtistRoleAdded(
   guild: Guild,
   member: GuildMember
 ): Promise<void> {
-  // Skip ignored users
-  if (IGNORED_ARTIST_USER_IDS.has(member.id)) {
+  // Skip ignored users (now configurable via /config set artist_ignored_users)
+  const ignoredUsers = getIgnoredArtistUsers(guild.id);
+  if (ignoredUsers.has(member.id)) {
     logger.debug({ guildId: guild.id, userId: member.id }, "[artistRotation] Ignored user, skipping queue add");
     return;
   }

@@ -207,6 +207,72 @@ export const data = new SlashCommandBuilder()
             o.setName("fullbody_ticket").setDescription("Full-body ticket role").setRequired(false)
           )
       )
+      .addSubcommand((sc) =>
+        sc
+          .setName("artist_ignored_users")
+          .setDescription("Manage users excluded from artist queue")
+          .addUserOption((o) =>
+            o.setName("add").setDescription("User to add to ignore list").setRequired(false)
+          )
+          .addUserOption((o) =>
+            o.setName("remove").setDescription("User to remove from ignore list").setRequired(false)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("backfill_channel")
+          .setDescription("Set channel for backfill completion notifications")
+          .addChannelOption((o) =>
+            o.setName("channel").setDescription("Notification channel").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("bot_dev_role")
+          .setDescription("Set role to ping on new applications (with pingdevonapp enabled)")
+          .addRoleOption((o) =>
+            o.setName("role").setDescription("Bot Dev role to ping").setRequired(true)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("gate_answer_length")
+          .setDescription("Set max characters for gate application answers")
+          .addIntegerOption((o) =>
+            o
+              .setName("length")
+              .setDescription("Max characters (100-4000, default: 1000)")
+              .setRequired(true)
+              .setMinValue(100)
+              .setMaxValue(4000)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("banner_sync_interval")
+          .setDescription("Set minutes between banner sync updates")
+          .addIntegerOption((o) =>
+            o
+              .setName("minutes")
+              .setDescription("Minutes between syncs (1-60, default: 10)")
+              .setRequired(true)
+              .setMinValue(1)
+              .setMaxValue(60)
+          )
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("modmail_forward_size")
+          .setDescription("Set max size for modmail forward tracking")
+          .addIntegerOption((o) =>
+            o
+              .setName("size")
+              .setDescription("Max entries (1000-100000, default: 10000)")
+              .setRequired(true)
+              .setMinValue(1000)
+              .setMaxValue(100000)
+          )
+      )
   )
   .addSubcommandGroup((group) =>
     group
@@ -1503,6 +1569,220 @@ async function executePokeIncludeChannel(ctx: CommandContext<ChatInputCommandInt
   });
 }
 
+// ============================================================
+// NEW CONFIGURABLE SETTINGS (previously hardcoded)
+// ============================================================
+
+async function executeSetArtistIgnoredUsers(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Manages the list of users to exclude from the artist queue.
+   * Replaces hardcoded IGNORED_ARTIST_USER_IDS constant.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const addUser = interaction.options.getUser("add");
+  const removeUser = interaction.options.getUser("remove");
+
+  if (!addUser && !removeUser) {
+    // Show current list
+    const cfg = getConfig(interaction.guildId!);
+    let ignoredIds: string[] = [];
+    if (cfg?.artist_ignored_users_json) {
+      try {
+        ignoredIds = JSON.parse(cfg.artist_ignored_users_json);
+      } catch {
+        // Invalid JSON
+      }
+    }
+
+    if (ignoredIds.length === 0) {
+      await replyOrEdit(interaction, {
+        content: "No users are currently ignored from the artist queue.\n\nUse `/config set artist_ignored_users add:@user` to add users.",
+      });
+    } else {
+      const userList = ignoredIds.map((id) => `<@${id}>`).join("\n");
+      await replyOrEdit(interaction, {
+        content: `**Users ignored from artist queue (${ignoredIds.length}):**\n${userList}`,
+      });
+    }
+    return;
+  }
+
+  ctx.step("update_config");
+  const cfg = getConfig(interaction.guildId!);
+  let ignoredIds: string[] = [];
+  if (cfg?.artist_ignored_users_json) {
+    try {
+      ignoredIds = JSON.parse(cfg.artist_ignored_users_json);
+    } catch {
+      // Invalid JSON, start fresh
+    }
+  }
+
+  if (addUser) {
+    if (ignoredIds.includes(addUser.id)) {
+      await replyOrEdit(interaction, {
+        content: `<@${addUser.id}> is already in the ignore list.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    ignoredIds.push(addUser.id);
+    upsertConfig(interaction.guildId!, { artist_ignored_users_json: JSON.stringify(ignoredIds) });
+    logger.info(
+      { evt: "artist_ignored_user_added", guildId: interaction.guildId, userId: addUser.id },
+      "[config] artist ignored user added"
+    );
+    await replyOrEdit(interaction, {
+      content: `Added <@${addUser.id}> to the artist queue ignore list.\n\nTotal ignored: ${ignoredIds.length}`,
+    });
+  } else if (removeUser) {
+    const idx = ignoredIds.indexOf(removeUser.id);
+    if (idx === -1) {
+      await replyOrEdit(interaction, {
+        content: `<@${removeUser.id}> is not in the ignore list.`,
+        flags: MessageFlags.Ephemeral,
+      });
+      return;
+    }
+    ignoredIds.splice(idx, 1);
+    upsertConfig(interaction.guildId!, { artist_ignored_users_json: JSON.stringify(ignoredIds) });
+    logger.info(
+      { evt: "artist_ignored_user_removed", guildId: interaction.guildId, userId: removeUser.id },
+      "[config] artist ignored user removed"
+    );
+    await replyOrEdit(interaction, {
+      content: `Removed <@${removeUser.id}> from the artist queue ignore list.\n\nRemaining ignored: ${ignoredIds.length}`,
+    });
+  }
+}
+
+async function executeSetBackfillChannel(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Sets the channel for backfill completion notifications.
+   * Replaces hardcoded channel ID in backfill.ts.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_channel");
+  const channel = interaction.options.getChannel("channel", true);
+
+  ctx.step("persist_channel");
+  upsertConfig(interaction.guildId!, { backfill_notification_channel_id: channel.id });
+
+  logger.info(
+    { evt: "config_set_backfill_channel", guildId: interaction.guildId, channelId: channel.id },
+    "[config] backfill notification channel updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Backfill notification channel set to <#${channel.id}>\n\nBackfill completion messages will now be posted here.`,
+  });
+}
+
+async function executeSetBotDevRole(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Sets the role to ping on new applications (when ping_dev_on_app is enabled).
+   * Replaces hardcoded "Bot Dev" role lookup in review/card.ts.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_role");
+  const role = interaction.options.getRole("role", true);
+
+  ctx.step("persist_role");
+  upsertConfig(interaction.guildId!, { bot_dev_role_id: role.id });
+
+  logger.info(
+    { evt: "config_set_bot_dev_role", guildId: interaction.guildId, roleId: role.id, roleName: role.name },
+    "[config] bot dev role updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Bot Dev role set to <@&${role.id}>\n\nThis role will be pinged on new applications when \`/config set pingdevonapp enabled:true\` is set.`,
+  });
+}
+
+async function executeSetGateAnswerLength(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Sets the max character length for gate application answers.
+   * Replaces hardcoded 1000 char limit in gate.ts.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_length");
+  const length = interaction.options.getInteger("length", true);
+
+  ctx.step("persist_length");
+  upsertConfig(interaction.guildId!, { gate_answer_max_length: length });
+
+  logger.info(
+    { evt: "config_set_gate_answer_length", guildId: interaction.guildId, length },
+    "[config] gate answer max length updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Gate answer max length set to **${length} characters**\n\nApplication answers will be limited to this length.`,
+  });
+}
+
+async function executeSetBannerSyncInterval(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Sets the interval between banner sync updates.
+   * Replaces hardcoded 10 minute interval in bannerSync.ts.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_minutes");
+  const minutes = interaction.options.getInteger("minutes", true);
+
+  ctx.step("persist_interval");
+  upsertConfig(interaction.guildId!, { banner_sync_interval_minutes: minutes });
+
+  logger.info(
+    { evt: "config_set_banner_sync_interval", guildId: interaction.guildId, minutes },
+    "[config] banner sync interval updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Banner sync interval set to **${minutes} minute${minutes === 1 ? "" : "s"}**\n\nBanner updates will be rate-limited to this interval.`,
+  });
+}
+
+async function executeSetModmailForwardSize(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Sets the max size for modmail forward tracking.
+   * Replaces hardcoded 10000 limit in modmail/routing.ts.
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  ctx.step("get_size");
+  const size = interaction.options.getInteger("size", true);
+
+  ctx.step("persist_size");
+  upsertConfig(interaction.guildId!, { modmail_forward_max_size: size });
+
+  logger.info(
+    { evt: "config_set_modmail_forward_size", guildId: interaction.guildId, size },
+    "[config] modmail forward max size updated"
+  );
+
+  ctx.step("reply");
+  await replyOrEdit(interaction, {
+    content: `✅ Modmail forward tracking max size set to **${size.toLocaleString()} entries**\n\nOlder entries will be evicted when this limit is reached.`,
+  });
+}
+
 async function executePokeList(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * executePokeList
@@ -1639,6 +1919,18 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetMovieThreshold(ctx);
     } else if (subcommand === "artist_rotation") {
       await executeSetArtistRotation(ctx);
+    } else if (subcommand === "artist_ignored_users") {
+      await executeSetArtistIgnoredUsers(ctx);
+    } else if (subcommand === "backfill_channel") {
+      await executeSetBackfillChannel(ctx);
+    } else if (subcommand === "bot_dev_role") {
+      await executeSetBotDevRole(ctx);
+    } else if (subcommand === "gate_answer_length") {
+      await executeSetGateAnswerLength(ctx);
+    } else if (subcommand === "banner_sync_interval") {
+      await executeSetBannerSyncInterval(ctx);
+    } else if (subcommand === "modmail_forward_size") {
+      await executeSetModmailForwardSize(ctx);
     }
   } else if (subcommandGroup === "get") {
     if (subcommand === "logging") {

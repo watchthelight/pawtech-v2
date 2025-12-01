@@ -69,6 +69,13 @@ export type GuildConfig = {
   ambassador_role_id?: string | null;
   server_artist_channel_id?: string | null;
   artist_ticket_roles_json?: string | null;
+  // Configurable settings (previously hardcoded)
+  artist_ignored_users_json?: string | null; // JSON array of user IDs to exclude from artist queue
+  backfill_notification_channel_id?: string | null; // Channel for backfill completion notifications
+  bot_dev_role_id?: string | null; // Role to ping on new applications (when ping_dev_on_app is enabled)
+  gate_answer_max_length?: number | null; // Max characters for gate answers (default: 1000)
+  banner_sync_interval_minutes?: number | null; // Minutes between banner syncs (default: 10)
+  modmail_forward_max_size?: number | null; // Max size for modmail forward tracking (default: 10000)
   image_search_url_template: string;
   reapply_cooldown_hours: number;
   min_account_age_hours: number;
@@ -471,6 +478,8 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
       "notify_max_per_hour", "suggestion_channel_id", "suggestion_cooldown",
       "support_channel_id", "poke_category_ids_json", "poke_excluded_channel_ids_json",
       "artist_role_id", "ambassador_role_id", "server_artist_channel_id", "artist_ticket_roles_json",
+      "artist_ignored_users_json", "backfill_notification_channel_id", "bot_dev_role_id",
+      "gate_answer_max_length", "banner_sync_interval_minutes", "modmail_forward_max_size",
     ]);
 
     const validKeys = keys.filter((k) => ALLOWED_CONFIG_COLUMNS.has(k as string));

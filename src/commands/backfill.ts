@@ -16,7 +16,7 @@ import {
 } from 'discord.js';
 import { spawn } from 'child_process';
 import { type CommandContext } from '../lib/cmdWrap.js';
-import { requireStaff } from '../lib/config.js';
+import { requireStaff, getConfig } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 
 export const data = new SlashCommandBuilder()
@@ -37,9 +37,18 @@ export const data = new SlashCommandBuilder()
       .setRequired(false)
   );
 
-// Hardcoded channel ID - this is specific to the Pawtropolis server.
-// If this bot ever runs on other servers, this should move to per-guild config.
-const NOTIFICATION_CHANNEL_ID = '1429947536793145374';
+// Fallback channel ID - used if not configured via /config set backfill_channel
+const FALLBACK_NOTIFICATION_CHANNEL_ID = '1429947536793145374';
+
+/**
+ * getBackfillNotificationChannelId
+ * WHAT: Get the notification channel for backfill completion
+ * WHY: Now configurable via /config set backfill_channel
+ */
+function getBackfillNotificationChannelId(guildId: string): string {
+  const cfg = getConfig(guildId);
+  return cfg?.backfill_notification_channel_id ?? FALLBACK_NOTIFICATION_CHANNEL_ID;
+}
 
 /**
  * execute
@@ -151,10 +160,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     );
 
     try {
-      // Get notification channel
-      const channel = await interaction.client.channels.fetch(NOTIFICATION_CHANNEL_ID);
+      // Get notification channel (now configurable via /config set backfill_channel)
+      const notificationChannelId = getBackfillNotificationChannelId(guildId);
+      const channel = await interaction.client.channels.fetch(notificationChannelId);
       if (!channel?.isTextBased()) {
-        logger.warn({ channelId: NOTIFICATION_CHANNEL_ID }, '[backfill] Notification channel not found or not text-based');
+        logger.warn({ channelId: notificationChannelId }, '[backfill] Notification channel not found or not text-based');
         return;
       }
 
