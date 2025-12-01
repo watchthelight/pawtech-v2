@@ -1318,12 +1318,12 @@ Every time an art reward is assigned via `/redeemreward`, the bot creates a **jo
 
 ```mermaid
 flowchart LR
-    A[/redeemreward] --> B[Job Created<br/>Status: Assigned]
+    A[redeemreward] --> B[Job Created<br/>Status: Assigned]
     B --> C[Artist starts work]
-    C --> D[/art bump<br/>Status: Sketching]
-    D --> E[/art bump<br/>Status: Lining]
-    E --> F[/art bump<br/>Status: Coloring]
-    F --> G[/art finish<br/>Status: Done]
+    C --> D[art bump<br/>Status: Sketching]
+    D --> E[art bump<br/>Status: Lining]
+    E --> F[art bump<br/>Status: Coloring]
+    F --> G[art finish<br/>Status: Done]
     G --> H[Logged to leaderboard]
 ```
 
