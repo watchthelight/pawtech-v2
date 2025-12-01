@@ -52,6 +52,8 @@ Everything you need to know about the bot — what it does, who can use it, and 
 - 4.3 [Sync System](#sync-system)
 - 4.4 [/artistqueue](#artistqueue) — Manage the artist queue
 - 4.5 [/redeemreward](#redeemreward) — Assign art rewards
+- 4.6 [Art Job Tracking System](#art-job-tracking-system)
+- 4.7 [/art](#art) — Manage art jobs (artists, recipients, and staff)
 
 ### 5. [Movie Night](#movie-night)
 - 5.1 [How It Works](#how-it-works-1)
@@ -1287,6 +1289,227 @@ The bot checks if the recipient has the correct ticket role for the type of art 
 /redeemreward user:@Winner type:fullbody artist:@SpecificArtist
 /redeemreward user:@EventPrizeWinner type:emoji
 ```
+
+---
+
+### Art Job Tracking System
+
+Every time an art reward is assigned via `/redeemreward`, the bot creates a **job** that tracks the artwork from assignment to completion. This gives artists a way to manage their workload and lets recipients check on their art's progress.
+
+**What each job tracks:**
+- **Job Number**: Two IDs — a personal number for the artist (e.g., #0001, #0002) and a global server-wide number for staff reference
+- **Status**: Current progress stage (assigned → sketching → lining → coloring → done)
+- **Client**: The user receiving the artwork
+- **Type**: Headshot, Half-body, Emoji, or Full-body
+- **Artist**: Who's creating the artwork
+- **Timestamps**: When assigned, last updated, and when completed
+
+**Job Statuses:**
+
+| Status | Meaning |
+|--------|---------|
+| Assigned | Job created, artist hasn't started yet |
+| Sketching | Working on initial sketch/concept |
+| Lining | Line art in progress |
+| Coloring | Adding color, shading, finishing touches |
+| Done | Artwork completed and delivered |
+
+**How jobs flow:**
+
+```mermaid
+flowchart LR
+    A[/redeemreward] --> B[Job Created<br/>Status: Assigned]
+    B --> C[Artist starts work]
+    C --> D[/art bump<br/>Status: Sketching]
+    D --> E[/art bump<br/>Status: Lining]
+    E --> F[/art bump<br/>Status: Coloring]
+    F --> G[/art finish<br/>Status: Done]
+    G --> H[Logged to leaderboard]
+```
+
+---
+
+### `/art`
+**Who can use it:** Server Artists, Recipients, and Staff (varies by subcommand)
+
+The `/art` command has different subcommands for different users:
+
+| Subcommand | Who can use it | What it does |
+|------------|----------------|--------------|
+| `jobs` | Server Artists | View your active jobs |
+| `bump` | Server Artists | Update a job's status |
+| `finish` | Server Artists | Mark a job as complete |
+| `view` | Server Artists | See details of a specific job |
+| `leaderboard` | Everyone | View artist completion stats |
+| `getstatus` | Everyone | Check progress of your art reward (recipients) |
+| `all` | Staff | View all active jobs server-wide |
+| `assign` | Staff | Manually assign a job to an artist |
+
+#### `/art jobs`
+**Who can use it:** Server Artists only
+
+View all your current active (incomplete) jobs.
+
+**Example Output:**
+```
+Your Art Jobs
+
+#0001 | @User's Headshot
+✏️ Sketching • Assigned 3 days ago
+📝 "Working on pose"
+
+#0002 | @User2's Half-body
+📋 Assigned • Assigned 1 day ago
+
+2 active jobs
+```
+*Note: Timestamps are live-updating Discord relative timestamps.*
+
+---
+
+#### `/art bump`
+**Who can use it:** Server Artists only
+
+Update a job's status or add progress notes so recipients know how their art is coming along.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `id` | No | Your job number (e.g., 1) |
+| `user` | No | Client (alternative to id) |
+| `type` | No | Ticket type (required if using user) |
+| `stage` | No | New status: sketching, lining, or coloring |
+| `notes` | No | Custom notes about your progress |
+
+**Usage Options:**
+- By job ID: `/art bump id:1 stage:sketching`
+- By client: `/art bump user:@Client type:headshot stage:lining`
+- Add notes: `/art bump id:1 notes:"Starting lineart today"`
+
+You must provide either `stage` or `notes` (or both).
+
+---
+
+#### `/art finish`
+**Who can use it:** Server Artists only
+
+Mark a job as complete. This sets the status to "Done", records the completion time, and adds to your leaderboard stats.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `id` | No | Your job number |
+| `user` | No | Client (alternative to id) |
+| `type` | No | Ticket type (required if using user) |
+
+**Usage Options:**
+- By job ID: `/art finish id:1`
+- By client: `/art finish user:@Client type:headshot`
+
+---
+
+#### `/art view`
+**Who can use it:** Server Artists only
+
+View detailed information about a specific job.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `id` | No | Your job number |
+| `user` | No | Client (alternative to id) |
+| `type` | No | Ticket type (required if using user) |
+
+**Example Output:**
+```
+Job #0001 (Global #0042)
+Client: @Username
+Type: OC Headshot
+Status: ✏️ Sketching
+Assigned: Nov 28, 2025 (4 days ago)
+Notes: "Working on pose"
+```
+*Note: Timestamps are live-updating Discord relative timestamps.*
+
+---
+
+#### `/art leaderboard`
+**Who can use it:** Everyone
+
+View completion statistics for all Server Artists. Shows both monthly and all-time rankings.
+
+**What you'll see:**
+- **This Month**: Artists ranked by jobs completed this calendar month
+- **All Time**: Artists ranked by total jobs completed ever
+
+Top 3 artists get medal emojis (🥇🥈🥉).
+
+---
+
+#### `/art getstatus`
+**Who can use it:** Everyone (shows only your own art)
+
+Check the progress of art being made for you. This is for **recipients** (people who redeemed an art reward), not artists.
+
+The response is **ephemeral** (only visible to you) so you can check privately.
+
+**Example Output:**
+```
+Your Art Status
+
+Headshot by @ArtistName
+✏️ Sketching • Assigned 3 days ago
+📝 Artist notes: "Working on the lineart today!"
+
+Half-body by @OtherArtist
+📋 Assigned • Assigned 1 day ago
+
+2 pieces in progress
+```
+*Note: Timestamps are live-updating Discord relative timestamps.*
+
+If you don't have any art being worked on, you'll see: "You don't have any art being worked on!"
+
+---
+
+#### `/art all`
+**Who can use it:** Staff only
+
+View all active (incomplete) jobs across all artists in the server. Shows global job numbers instead of per-artist numbers.
+
+**What you'll see:**
+- Global job number
+- Which artist is assigned
+- Who the recipient is
+- Art type
+- Current status
+- How long ago it was assigned
+
+Good for checking overall workload and identifying bottlenecks.
+
+---
+
+#### `/art assign`
+**Who can use it:** Staff only
+
+Manually assign a job to an artist. Use this for special cases outside the normal `/redeemreward` flow.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `artist` | **Yes** | Artist to assign the job to |
+| `scope` | **Yes** | `user` (art for someone) or `special` (custom task) |
+| `recipient` | No | User receiving art (for scope:user) |
+| `type` | No | Art type (for scope:user) |
+| `description` | No | Task description (for scope:special) |
+
+**For User Assignments:**
+```
+/art assign artist:@Artist scope:user recipient:@Client type:headshot
+```
+
+**For Special Tasks:**
+```
+/art assign artist:@Artist scope:special description:"Create server banner"
+```
+
+Special tasks appear in the artist's job list without a client mention, showing only the task description.
 
 ---
 

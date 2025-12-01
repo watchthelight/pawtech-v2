@@ -49,6 +49,16 @@
 9. [Ticket Guide](#9-ticket-guide)
    - [Rules for Handling Tickets](#rules-for-handling-tickets)
    - [Ticket Types](#ticket-types)
+10. [Server Artist Program](#10-server-artist-program)
+    - [Overview](#overview)
+    - [How the Queue Works](#how-the-queue-works)
+    - [Art Job Tracking System](#art-job-tracking-system)
+    - [Artist Commands](#artist-commands)
+    - [Recipient Commands](#recipient-commands)
+    - [Staff Commands](#staff-commands)
+    - [Workflow Summary](#workflow-summary)
+    - [Best Practices for Artists](#best-practices-for-artists)
+    - [Best Practices for Staff](#best-practices-for-staff)
 
 ---
 
