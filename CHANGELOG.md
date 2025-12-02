@@ -9,6 +9,74 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.4.4] - 2025-12-03
+
+### Changed
+- **Modmail Threads Full Decomposition** - Completed decomposition of `threads.ts` (1,709 LOC):
+  - `threadState.ts` - In-memory OPEN_MODMAIL_THREADS set and hydration
+  - `threadPerms.ts` - Permission checks, setup, and retrofit functions
+  - `threadOpen.ts` - Thread opening with race condition protection
+  - `threadClose.ts` - Thread closing and auto-close on decisions
+  - `threadReopen.ts` - Thread reopening within 7-day window
+  - `threads.ts` now barrel file re-exporting from modules
+- **Modstats Decomposition** - Split `modstats.ts` (824 LOC) into modular structure:
+  - `modstats/index.ts` - Command definition and execute router
+  - `modstats/helpers.ts` - Time formatting and DB query utilities
+  - `modstats/leaderboard.ts` - Leaderboard and CSV export handlers
+  - `modstats/userStats.ts` - Individual moderator statistics handler
+  - `modstats/reset.ts` - Reset handler with rate limiting
+  - Original `modstats.ts` now barrel file re-exporting from modstats/
+- **Gate Commands Decomposition** - Split `gate.ts` (1,405 LOC) into modular structure:
+  - `gate/index.ts` - Re-exports all commands
+  - `gate/shared.ts` - Shared imports and utilities
+  - `gate/gateMain.ts` - Main /gate command (setup, reset, status, config, welcome)
+  - `gate/accept.ts` - /accept command for approving applications
+  - `gate/reject.ts` - /reject command with permanent rejection option
+  - `gate/kick.ts` - /kick command for removing applicants
+  - `gate/unclaim.ts` - /unclaim command for releasing claims
+  - Original `gate.ts` now barrel file re-exporting from gate/
+- **Config Commands Decomposition** - Split `config.ts` (2,525 LOC) into modular structure:
+  - `config/index.ts` - Execute router
+  - `config/data.ts` - SlashCommandBuilder definition
+  - `config/shared.ts` - Shared imports and utilities
+  - `config/setRoles.ts` - Role setting handlers (6 handlers)
+  - `config/setChannels.ts` - Channel setting handlers (7 handlers)
+  - `config/setFeatures.ts` - Feature toggle handlers (8 handlers)
+  - `config/setAdvanced.ts` - Advanced/timing handlers (13 handlers)
+  - `config/artist.ts` - Artist rotation handlers (3 handlers)
+  - `config/movie.ts` - Movie night handlers (2 handlers)
+  - `config/poke.ts` - Poke configuration handlers (5 handlers)
+  - `config/get.ts` - View and getter handlers (3 handlers)
+  - Original `config.ts` now barrel file re-exporting from config/
+- **Decomposition Plan Completed** - All 5 large files decomposed (100%)
+  - `handlers.ts` ✅ (v4.4.3)
+  - `threads.ts` ✅ (v4.4.4)
+  - `modstats.ts` ✅ (v4.4.4)
+  - `gate.ts` ✅ (v4.4.4)
+  - `config.ts` ✅ (v4.4.4)
+
+---
+
+## [4.4.3] - 2025-12-03
+
+### Added
+- **Decomposition Plan** (`docs/DECOMPOSITION-PLAN.md`) - Technical plan to break down 5 large files into smaller modules for better maintainability
+
+### Changed
+- **Review Handlers Decomposition** - Split `handlers.ts` (1,643 LOC) into modular structure:
+  - `handlers/helpers.ts` - Helper functions and modal openers
+  - `handlers/actionRunners.ts` - Approve/reject/kick action orchestration
+  - `handlers/claimHandlers.ts` - Claim/unclaim handlers
+  - `handlers/buttons.ts` - Button interaction handlers
+  - `handlers/modals.ts` - Modal submission handlers
+  - `handlers/index.ts` - Barrel file for re-exports
+  - Original `handlers.ts` now re-exports from handlers/ for backward compatibility
+- **Modmail Thread State** - Extracted `threadState.ts` from `threads.ts`:
+  - OPEN_MODMAIL_THREADS set and hydration logic
+  - Helper functions: addOpenThread, removeOpenThread, isOpenModmailThread
+
+---
+
 ## [4.4.2] - 2025-12-03
 
 ### Changed
