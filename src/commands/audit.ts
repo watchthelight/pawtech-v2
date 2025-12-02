@@ -46,6 +46,7 @@ import {
   cancelSession,
   type AuditSession,
 } from "../store/auditSessionStore.js";
+import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 
 // Allowed role IDs (Community Manager + Bot Developer)
 const ALLOWED_ROLES = [
@@ -320,6 +321,27 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
     return;
   }
 
+  // Security: Rate limit expensive audit operations per guild
+  // Skip rate limit check for resume (user is continuing existing work)
+  if (action !== "resume") {
+    const cooldownMs = subcommand === "nsfw" ? COOLDOWNS.AUDIT_NSFW_MS : COOLDOWNS.AUDIT_MEMBERS_MS;
+    const cooldownKey = `audit:${subcommand}`;
+    const cooldownResult = checkCooldown(cooldownKey, guild.id, cooldownMs);
+
+    if (!cooldownResult.allowed) {
+      const remaining = formatCooldown(cooldownResult.remainingMs!);
+      await interaction.reply({
+        content: `This guild is on cooldown for ${subcommand} audits. Please wait ${remaining} before running another audit.`,
+        ephemeral: true,
+      });
+      logger.info(
+        { guildId: guild.id, subcommand, remainingMs: cooldownResult.remainingMs },
+        "[audit] Rate limited"
+      );
+      return;
+    }
+  }
+
   // Handle "fresh" - cancel old session and start new
   if (action === "fresh" && sessionId) {
     cancelSession(sessionId);
@@ -357,12 +379,42 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
 
   // Run the appropriate audit in background (don't await - would timeout with large member counts)
   if (subcommand === "nsfw") {
-    runNsfwAudit(interaction, guild, channel as TextChannel, (scope as "all" | "flagged") ?? "all", resumeSession).catch((err) => {
+    runNsfwAudit(interaction, guild, channel as TextChannel, (scope as "all" | "flagged") ?? "all", resumeSession).catch(async (err) => {
       logger.error({ err, guildId: guild.id, scope }, "[audit:nsfw] Background audit failed");
+
+      // Notify user of catastrophic failure
+      try {
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Audit Failed")
+              .setDescription("The NSFW audit encountered a critical error and could not complete. Check logs for details.")
+              .setColor(0xE74C3C)
+              .setTimestamp()
+          ]
+        });
+      } catch (notifyErr) {
+        logger.debug({ err: notifyErr }, "[audit:nsfw] Failed to notify user of audit failure");
+      }
     });
   } else {
-    runMembersAudit(interaction, guild, channel as TextChannel, resumeSession).catch((err) => {
+    runMembersAudit(interaction, guild, channel as TextChannel, resumeSession).catch(async (err) => {
       logger.error({ err, guildId: guild.id }, "[audit:members] Background audit failed");
+
+      // Notify user of catastrophic failure
+      try {
+        await interaction.editReply({
+          embeds: [
+            new EmbedBuilder()
+              .setTitle("Audit Failed")
+              .setDescription("The member audit encountered a critical error and could not complete. Check logs for details.")
+              .setColor(0xE74C3C)
+              .setTimestamp()
+          ]
+        });
+      } catch (notifyErr) {
+        logger.debug({ err: notifyErr }, "[audit:members] Failed to notify user of audit failure");
+      }
     });
   }
 }
@@ -476,8 +528,8 @@ async function runMembersAudit(
                   .setColor(0x3B82F6),
               ],
             });
-          } catch {
-            // Ignore errors updating progress
+          } catch (err) {
+            logger.debug({ err, guildId: guild.id, totalScanned }, "[audit] Progress update failed (non-fatal)");
           }
         }
       }
@@ -519,8 +571,8 @@ async function runMembersAudit(
             .setColor(0x57F287),
         ],
       });
-    } catch {
-      // Ignore - message may have been deleted
+    } catch (err) {
+      logger.debug({ err }, "[audit:members] Final message edit failed (may be deleted)");
     }
 
     logger.info(
@@ -541,8 +593,8 @@ async function runMembersAudit(
       await channel.send({
         content: `❌ Audit failed with error: ${err instanceof Error ? err.message : "Unknown error"}`,
       });
-    } catch {
-      // Channel might not be accessible
+    } catch (err) {
+      logger.debug({ err, channelId: channel.id }, "[audit] Channel send failed (may be inaccessible)");
     }
   }
 }
@@ -566,6 +618,12 @@ async function runNsfwAudit(
 
   const NSFW_THRESHOLD = 0.8; // 80% = hard evidence
   const PROGRESS_UPDATE_INTERVAL = 10; // Update every 10 members for real-time feedback
+
+  // Batch processing configuration for Vision API calls
+  // Before: Sequential with 100ms sleep per member = 100+ seconds for 1000 members
+  // After: 10 concurrent requests with 200ms between batches = ~15 seconds for 1000 members
+  const VISION_BATCH_SIZE = 10;
+  const BATCH_DELAY_MS = 200;
 
   // Load already-scanned user IDs if resuming
   const alreadyScanned = resumeSession ? getScannedUserIds(resumeSession.id) : new Set<string>();
@@ -635,8 +693,8 @@ async function runNsfwAudit(
       });
     }
 
-    // Process collected members
-    let processedInThisRun = 0;
+    // Filter members to scan (skip already-scanned for resume, bots, no avatar)
+    const membersToProcess: Array<{ member: GuildMember; avatarUrl: string }> = [];
     for (const member of membersToScan) {
       // Skip if already scanned in this session (for resume)
       if (alreadyScanned.has(member.id)) {
@@ -644,14 +702,10 @@ async function runNsfwAudit(
         continue;
       }
 
-      processedInThisRun++;
-      totalScanned++;
-
-      // Mark as scanned immediately (for resume support)
-      markUserScanned(sessionId, member.id);
-
       // Skip bots
       if (member.user.bot) {
+        totalScanned++;
+        markUserScanned(sessionId, member.id);
         continue;
       }
 
@@ -662,57 +716,81 @@ async function runNsfwAudit(
 
       if (!avatarUrl) {
         skippedNoAvatar++;
+        totalScanned++;
+        markUserScanned(sessionId, member.id);
         continue;
       }
 
-      // Call Google Vision API
-      apiCallCount++;
-      const visionResult = await detectNsfwVision(avatarUrl);
+      membersToProcess.push({ member, avatarUrl });
+    }
 
-      if (!visionResult) {
-        // API call failed or disabled, continue to next member
-        continue;
+    // Process members in batches with concurrent Vision API calls
+    // This replaces sequential processing with 100ms sleep per member
+    let processedInThisRun = 0;
+    for (let i = 0; i < membersToProcess.length; i += VISION_BATCH_SIZE) {
+      const batch = membersToProcess.slice(i, i + VISION_BATCH_SIZE);
+
+      // Process batch concurrently
+      const batchResults = await Promise.all(
+        batch.map(async ({ member, avatarUrl }) => {
+          apiCallCount++;
+          const visionResult = await detectNsfwVision(avatarUrl);
+          return { member, avatarUrl, visionResult };
+        })
+      );
+
+      // Process results sequentially (for flagging and sending embeds)
+      for (const { member, avatarUrl, visionResult } of batchResults) {
+        processedInThisRun++;
+        totalScanned++;
+        markUserScanned(sessionId, member.id);
+
+        if (!visionResult) {
+          continue;
+        }
+
+        // Check if adult score meets threshold
+        if (visionResult.adultScore >= NSFW_THRESHOLD) {
+          // Flag the user
+          upsertNsfwFlag({
+            guildId: guild.id,
+            userId: member.user.id,
+            avatarUrl,
+            nsfwScore: visionResult.adultScore,
+            reason: "hard_evidence",
+            flaggedBy: interaction.user.id,
+          });
+
+          flaggedCount++;
+
+          // Send flag embed to channel
+          const reverseSearchUrl = googleReverseImageUrl(avatarUrl);
+          const flagEmbed = new EmbedBuilder()
+            .setTitle(`🔞 NSFW Avatar Detected [${flaggedCount}]`)
+            .setColor(0xE74C3C) // Dark red
+            .setThumbnail(member.user.displayAvatarURL({ size: 64 }))
+            .addFields(
+              { name: "User", value: `${member} (\`${member.id}\`)`, inline: true },
+              { name: "Score", value: `${Math.round(visionResult.adultScore * 100)}%`, inline: true },
+              { name: "Classification", value: "Hard Evidence (Adult Content)" },
+              { name: "Avatar", value: `[Reverse Image Search](${reverseSearchUrl})` }
+            )
+            .setFooter({ text: `Progress: ${totalScanned.toLocaleString()}/${totalMembers.toLocaleString()}` });
+
+          await channel.send({ embeds: [flagEmbed] });
+
+          // Small delay between flagged notifications to avoid Discord rate limits
+          await sleep(300);
+        }
       }
 
-      // Check if adult score meets threshold
-      if (visionResult.adultScore >= NSFW_THRESHOLD) {
-        // Flag the user
-        upsertNsfwFlag({
-          guildId: guild.id,
-          userId: member.user.id,
-          avatarUrl,
-          nsfwScore: visionResult.adultScore,
-          reason: "hard_evidence",
-          flaggedBy: interaction.user.id,
-        });
-
-        flaggedCount++;
-
-        // Send flag embed to channel
-        const reverseSearchUrl = googleReverseImageUrl(avatarUrl);
-        const flagEmbed = new EmbedBuilder()
-          .setTitle(`🔞 NSFW Avatar Detected [${flaggedCount}]`)
-          .setColor(0xE74C3C) // Dark red
-          .setThumbnail(member.user.displayAvatarURL({ size: 64 }))
-          .addFields(
-            { name: "User", value: `${member} (\`${member.id}\`)`, inline: true },
-            { name: "Score", value: `${Math.round(visionResult.adultScore * 100)}%`, inline: true },
-            { name: "Classification", value: "Hard Evidence (Adult Content)" },
-            { name: "Avatar", value: `[Reverse Image Search](${reverseSearchUrl})` }
-          )
-          .setFooter({ text: `Progress: ${totalScanned.toLocaleString()}/${totalMembers.toLocaleString()}` });
-
-        await channel.send({ embeds: [flagEmbed] });
-
-        // Small delay to avoid rate limits
-        await sleep(300);
+      // Small delay between batches (instead of per-member delay)
+      if (i + VISION_BATCH_SIZE < membersToProcess.length) {
+        await sleep(BATCH_DELAY_MS);
       }
 
-      // Small delay between API calls to avoid rate limiting
-      await sleep(100);
-
-      // Update progress frequently for real-time feedback
-      if (processedInThisRun % PROGRESS_UPDATE_INTERVAL === 0) {
+      // Update progress after each batch
+      if (processedInThisRun % PROGRESS_UPDATE_INTERVAL === 0 || i + VISION_BATCH_SIZE >= membersToProcess.length) {
         // Save progress to database
         updateProgress(sessionId, totalScanned, flaggedCount, apiCallCount);
 
@@ -732,8 +810,8 @@ async function runNsfwAudit(
                 .setColor(0xE74C3C),
             ],
           });
-        } catch {
-          // Ignore errors updating progress
+        } catch (err) {
+          logger.debug({ err, guildId: guild.id, totalScanned }, "[audit:nsfw] Progress update failed (non-fatal)");
         }
       }
     }
@@ -775,8 +853,8 @@ async function runNsfwAudit(
             .setColor(0x57F287),
         ],
       });
-    } catch {
-      // Ignore - message may have been deleted
+    } catch (err) {
+      logger.debug({ err }, "[audit:nsfw] Completion message edit failed (may be deleted)");
     }
 
     logger.info(
@@ -800,8 +878,8 @@ async function runNsfwAudit(
       await channel.send({
         content: `❌ NSFW audit failed with error: ${err instanceof Error ? err.message : "Unknown error"}`,
       });
-    } catch {
-      // Channel might not be accessible
+    } catch (err) {
+      logger.debug({ err, channelId: channel.id }, "[audit:nsfw] Channel send failed (may be inaccessible)");
     }
   }
 }

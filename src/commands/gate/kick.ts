@@ -25,6 +25,7 @@ import {
   logger,
   type ApplicationRow,
 } from "./shared.js";
+import { MAX_REASON_LENGTH } from "../../lib/constants.js";
 
 export const kickData = new SlashCommandBuilder()
   .setName("kick")
@@ -63,6 +64,14 @@ export async function executeKick(ctx: CommandContext<ChatInputCommandInteractio
   const userOption = interaction.options.getUser("user", false);
   const uidRaw = interaction.options.getString("uid", false);
   const reason = interaction.options.getString("reason", true).trim();
+
+  // Security: Validate reason length to prevent database bloat and potential DoS
+  if (reason.length > MAX_REASON_LENGTH) {
+    await replyOrEdit(interaction, {
+      content: `Reason too long (max ${MAX_REASON_LENGTH} characters, you provided ${reason.length}).`,
+    });
+    return;
+  }
 
   // Count how many identifier options were provided
   const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;

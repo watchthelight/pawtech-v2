@@ -13,6 +13,33 @@
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const upsertStatusStmt = db.prepare(
+  `INSERT INTO bot_status (scope_key, activity_type, activity_text, custom_status, status, updated_at)
+   VALUES (?, ?, ?, ?, ?, ?)
+   ON CONFLICT(scope_key) DO UPDATE SET
+     activity_type = excluded.activity_type,
+     activity_text = excluded.activity_text,
+     custom_status = excluded.custom_status,
+     status = excluded.status,
+     updated_at = excluded.updated_at`
+);
+
+const getStatusStmt = db.prepare(
+  `SELECT scope_key, activity_type, activity_text, custom_status, status, updated_at
+   FROM bot_status
+   WHERE scope_key = ?
+   ORDER BY updated_at DESC
+   LIMIT 1`
+);
+
+const checkBotStatusTableStmt = db.prepare(
+  `SELECT name FROM sqlite_master WHERE type='table' AND name='bot_status'`
+);
+
 // Persisted bot presence state. scopeKey is either 'global' or a guild_id for per-guild status.
 // activityType maps to Discord.js ActivityType enum (0=Playing, 1=Streaming, 2=Listening, etc.)
 // customStatus is only used when activityType=4 (Custom), stores the "state" field.
@@ -39,16 +66,7 @@ export type SavedStatus = {
 // Re-throws SQLite errors since a failed status save is recoverable (bot still works, just won't persist).
 export function upsertStatus(status: SavedStatus): void {
   try {
-    db.prepare(
-      `INSERT INTO bot_status (scope_key, activity_type, activity_text, custom_status, status, updated_at)
-       VALUES (?, ?, ?, ?, ?, ?)
-       ON CONFLICT(scope_key) DO UPDATE SET
-         activity_type = excluded.activity_type,
-         activity_text = excluded.activity_text,
-         custom_status = excluded.custom_status,
-         status = excluded.status,
-         updated_at = excluded.updated_at`
-    ).run(
+    upsertStatusStmt.run(
       status.scopeKey,
       status.activityType,
       status.activityText,
@@ -89,15 +107,7 @@ export function getStatus(scopeKey: string): SavedStatus | null {
   try {
     // ORDER BY updated_at DESC is redundant with UNIQUE(scope_key) but kept for safety
     // in case the schema ever changes to allow history.
-    const row = db
-      .prepare(
-        `SELECT scope_key, activity_type, activity_text, custom_status, status, updated_at
-         FROM bot_status
-         WHERE scope_key = ?
-         ORDER BY updated_at DESC
-         LIMIT 1`
-      )
-      .get(scopeKey) as
+    const row = getStatusStmt.get(scopeKey) as
       | {
           scope_key: string;
           activity_type: number | null;
@@ -153,13 +163,12 @@ export function getStatus(scopeKey: string): SavedStatus | null {
 // Never throws - logs errors but continues, allowing the bot to run without status persistence.
 export function ensureBotStatusSchema(): void {
   try {
-    const tableExists = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='bot_status'`)
-      .get() as { name: string } | undefined;
+    const tableExists = checkBotStatusTableStmt.get() as { name: string } | undefined;
 
     if (!tableExists) {
       logger.info("[statusStore] creating bot_status table");
       // scope_key is PRIMARY KEY so it's automatically UNIQUE and indexed.
+      // Note: This is a one-time CREATE TABLE, not a frequently-called query, so inline prepare is acceptable
       db.prepare(
         `CREATE TABLE IF NOT EXISTS bot_status (
           scope_key TEXT NOT NULL PRIMARY KEY,

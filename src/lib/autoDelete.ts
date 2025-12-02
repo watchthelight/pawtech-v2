@@ -1,5 +1,5 @@
 /**
- * Pawtropolis Tech — src/utils/autoDelete.ts
+ * Pawtropolis Tech — src/lib/autoDelete.ts
  * WHAT: Auto-delete Discord messages after a delay.
  * WHY: Provides self-cleaning temporary messages (e.g., ping notifications).
  * HOW: Schedules message deletion using setTimeout, gracefully handles races and permission errors.

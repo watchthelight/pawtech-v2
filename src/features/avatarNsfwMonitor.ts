@@ -150,5 +150,17 @@ export async function handleAvatarChange(
     );
   } catch (err) {
     logger.error({ err, guildId, userId }, "[avatarNsfwMonitor] Failed to send alert");
+
+    // Fallback: Try to DM guild owner about misconfiguration
+    try {
+      const owner = await newMember.guild.fetchOwner();
+      await owner.send({
+        content: `Warning: NSFW avatar detected in **${newMember.guild.name}** but failed to send alert to logging channel. Please check channel permissions and configuration.\n\nUser: <@${userId}>`,
+      });
+      logger.info({ guildId, ownerId: owner.id }, "[avatarNsfwMonitor] Sent fallback DM to owner");
+    } catch (fallbackErr) {
+      logger.debug({ err: fallbackErr, guildId }, "[avatarNsfwMonitor] Fallback DM to owner also failed");
+      // At this point, just log - we've tried our best
+    }
   }
 }

@@ -18,6 +18,11 @@ import dotenv from "dotenv";
 import path from "node:path";
 import { z } from "zod";
 
+// Security: Regex patterns for validating environment variables used in shell commands.
+// These prevent command injection by restricting characters to safe alphanumeric patterns.
+const SAFE_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-/.]+$/;
+
 // Load .env from project root (current working directory)
 // This works reliably whether bundled or not, as long as you run from project root
 // override: true in production ensures .env values take precedence over stale shell environment
@@ -76,6 +81,10 @@ const raw = {
   // Linked Roles OAuth2 (for Server Developer badge)
   LINKED_ROLES_PORT: process.env.LINKED_ROLES_PORT?.trim(),
   LINKED_ROLES_REDIRECT_URI: process.env.LINKED_ROLES_REDIRECT_URI?.trim(),
+
+  // Remote server SSH configuration (for database sync/recovery)
+  REMOTE_ALIAS: process.env.REMOTE_ALIAS?.trim(),
+  REMOTE_PATH: process.env.REMOTE_PATH?.trim(),
 };
 
 /**
@@ -125,8 +134,19 @@ const schema = z.object({
   GATE_ADMIN_ROLE_IDS: z.string().optional(),
 
   // DB Recovery / PM2 process name for safe restarts
-  PM2_PROCESS_NAME: z.string().default("pawtropolis"),
-  DB_BACKUPS_DIR: z.string().default("data/backups"),
+  // Security: Validated with regex to prevent command injection when used in shell commands
+  PM2_PROCESS_NAME: z
+    .string()
+    .default("pawtropolis")
+    .refine((val) => SAFE_NAME_REGEX.test(val), {
+      message: "PM2_PROCESS_NAME contains invalid characters (only alphanumeric, underscore, hyphen allowed)",
+    }),
+  DB_BACKUPS_DIR: z
+    .string()
+    .default("data/backups")
+    .refine((val) => SAFE_PATH_REGEX.test(val), {
+      message: "DB_BACKUPS_DIR contains invalid characters",
+    }),
 
   // Operations Health & Monitoring (optional)
   HEALTH_ALERT_WEBHOOK: z.string().optional(),
@@ -142,6 +162,21 @@ const schema = z.object({
   // Linked Roles OAuth2 (for Server Developer badge)
   LINKED_ROLES_PORT: z.string().optional(),
   LINKED_ROLES_REDIRECT_URI: z.string().optional(),
+
+  // Remote server SSH configuration (optional - for database sync/recovery)
+  // Security: Validated with regex to prevent command injection when used in shell commands
+  REMOTE_ALIAS: z
+    .string()
+    .optional()
+    .refine((val) => !val || SAFE_NAME_REGEX.test(val), {
+      message: "REMOTE_ALIAS contains invalid characters (only alphanumeric, underscore, hyphen allowed)",
+    }),
+  REMOTE_PATH: z
+    .string()
+    .optional()
+    .refine((val) => !val || SAFE_PATH_REGEX.test(val), {
+      message: "REMOTE_PATH contains invalid characters",
+    }),
 });
 
 /**

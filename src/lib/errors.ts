@@ -297,20 +297,6 @@ export function shouldReportToSentry(err: ClassifiedError): boolean {
 }
 
 /**
- * Check if error is a Discord "interaction expired" error
- */
-export function isInteractionExpired(err: ClassifiedError): boolean {
-  return err.kind === "discord_api" && err.code === 10062;
-}
-
-/**
- * Check if error is a Discord "already acknowledged" error
- */
-export function isAlreadyAcknowledged(err: ClassifiedError): boolean {
-  return err.kind === "discord_api" && err.code === 40060;
-}
-
-/**
  * Check if error is a database constraint violation.
  *
  * These are usually logic errors (duplicate insert, FK violation) but can
@@ -324,16 +310,6 @@ export function isConstraintViolation(err: ClassifiedError): boolean {
       err.code === "SQLITE_CONSTRAINT_PRIMARYKEY" ||
       err.code === "SQLITE_CONSTRAINT_UNIQUE" ||
       err.code === "SQLITE_CONSTRAINT_FOREIGNKEY")
-  );
-}
-
-/**
- * Check if error is a database corruption (fatal)
- */
-export function isDatabaseCorrupt(err: ClassifiedError): boolean {
-  return (
-    err.kind === "db_error" &&
-    (err.code === "SQLITE_CORRUPT" || err.code === "SQLITE_NOTADB")
   );
 }
 

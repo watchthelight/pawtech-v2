@@ -25,7 +25,7 @@ import {
   Message,
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
-import { isOwner } from "../utils/owner.js";
+import { isOwner } from "../lib/owner.js";
 import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 import { logger } from "../lib/logger.js";
 

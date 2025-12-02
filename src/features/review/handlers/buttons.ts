@@ -25,7 +25,7 @@ import {
   BTN_MODMAIL_RE,
 } from "../../../lib/modalPatterns.js";
 import { nowUtc } from "../../../lib/time.js";
-import { autoDelete } from "../../../utils/autoDelete.js";
+import { autoDelete } from "../../../lib/autoDelete.js";
 import { findAppByShortCode } from "../../appLookup.js";
 import { SAFE_ALLOWED_MENTIONS } from "../../../lib/constants.js";
 

@@ -22,7 +22,7 @@ import { shortCode } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { hasStaffPermissions, isReviewer } from "../lib/config.js";
-import { isOwner } from "../utils/owner.js";
+import { isOwner } from "../lib/owner.js";
 
 /**
  * Max applications to show in a single embed.
@@ -81,7 +81,11 @@ function formatTimestamp(value: string | null | undefined): string {
   }
 }
 
-interface ApplicationRow {
+/**
+ * Database row type for the search query result.
+ * Different from ApplicationRow in review/types.ts - this includes joined review_card fields.
+ */
+interface SearchResultRow {
   id: string;
   status: string;
   submitted_at: string | null;
@@ -290,7 +294,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
     const applications = db
       .prepare(query)
-      .all(guildId, targetUserId, MAX_APPLICATIONS) as ApplicationRow[];
+      .all(guildId, targetUserId, MAX_APPLICATIONS) as SearchResultRow[];
 
     // Count total applications (in case there are more than MAX_APPLICATIONS)
     const countQuery = `

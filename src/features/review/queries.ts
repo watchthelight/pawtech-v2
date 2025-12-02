@@ -12,6 +12,36 @@ import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import type { ApplicationRow, ApplicationStatus } from "./types.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const loadApplicationStmt = db.prepare(
+  `SELECT id, guild_id, user_id, status
+   FROM application
+   WHERE id = ?`
+);
+
+const findPendingAppByUserIdStmt = db.prepare(
+  `SELECT id, guild_id, user_id, status
+   FROM application
+   WHERE guild_id = ? AND user_id = ? AND status IN ('submitted', 'needs_info')
+   ORDER BY created_at DESC
+   LIMIT 1`
+);
+
+const updateReviewActionMetaStmt = db.prepare(
+  `UPDATE review_action SET meta = json(?) WHERE id = ?`
+);
+
+const getRecentActionsForAppStmt = db.prepare(
+  `SELECT action, moderator_id, reason, created_at
+   FROM review_action
+   WHERE app_id = ?
+   ORDER BY created_at DESC
+   LIMIT ?`
+);
+
 /**
  * WHAT: Row structure for recent review actions.
  * WHY: Type-safe results from getRecentActionsForApp query.
@@ -33,15 +63,7 @@ export type RecentAction = {
  * @returns ApplicationRow or undefined if not found
  */
 export function loadApplication(appId: string): ApplicationRow | undefined {
-  return db
-    .prepare(
-      `
-    SELECT id, guild_id, user_id, status
-    FROM application
-    WHERE id = ?
-  `
-    )
-    .get(appId) as ApplicationRow | undefined;
+  return loadApplicationStmt.get(appId) as ApplicationRow | undefined;
 }
 
 /**
@@ -53,17 +75,7 @@ export function loadApplication(appId: string): ApplicationRow | undefined {
  * @returns ApplicationRow or null if not found
  */
 export function findPendingAppByUserId(guildId: string, userId: string): ApplicationRow | null {
-  return db
-    .prepare(
-      `
-    SELECT id, guild_id, user_id, status
-    FROM application
-    WHERE guild_id = ? AND user_id = ? AND status IN ('submitted', 'needs_info')
-    ORDER BY created_at DESC
-    LIMIT 1
-  `
-    )
-    .get(guildId, userId) as ApplicationRow | null;
+  return findPendingAppByUserIdStmt.get(guildId, userId) as ApplicationRow | null;
 }
 
 /**
@@ -74,7 +86,7 @@ export function findPendingAppByUserId(guildId: string, userId: string): Applica
  * @param meta - JSON-serializable object
  */
 export function updateReviewActionMeta(id: number, meta: unknown) {
-  db.prepare(`UPDATE review_action SET meta = json(?) WHERE id = ?`).run(JSON.stringify(meta), id);
+  updateReviewActionMetaStmt.run(JSON.stringify(meta), id);
 }
 
 /**
@@ -101,15 +113,7 @@ export function isClaimable(status: ApplicationStatus): boolean {
 export function getRecentActionsForApp(appId: string, limit = 4): RecentAction[] {
   const start = Date.now();
 
-  const stmt = db.prepare(`
-    SELECT action, moderator_id, reason, created_at
-    FROM review_action
-    WHERE app_id = ?
-    ORDER BY created_at DESC
-    LIMIT ?
-  `);
-
-  const rows = stmt.all(appId, limit) as RecentAction[];
+  const rows = getRecentActionsForAppStmt.all(appId, limit) as RecentAction[];
 
   const ms = Date.now() - start;
   // Info-level log for query observability. If this shows up taking >10ms consistently,

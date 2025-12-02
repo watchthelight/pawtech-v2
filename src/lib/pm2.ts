@@ -140,19 +140,3 @@ export async function getPM2Status(processNames: string[]): Promise<PM2ProcessSt
   }
 }
 
-/**
- * WHAT: Check if PM2 is available on the system.
- * WHY: Determine if PM2 health checks can be performed.
- *
- * @returns True if PM2 is installed and accessible
- */
-export async function isPM2Available(): Promise<boolean> {
-  // Quick check that pm2 binary exists and responds. Does NOT verify daemon is
-  // running - that's intentional since pm2 jlist will start it if needed.
-  try {
-    await execAsync("pm2 --version", { timeout: 2000 });
-    return true;
-  } catch {
-    return false;
-  }
-}

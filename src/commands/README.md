@@ -217,8 +217,8 @@ import {
 ```typescript
 import { replyOrEdit, ensureDeferred } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
-import { db } from "../lib/db.js";
-import { requireEnv } from "../util/ensureEnv.js";
+import { db } from "../db/db.js";
+import { env } from "../lib/env.js";
 ```
 
 ## 🧪 Testing

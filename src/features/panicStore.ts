@@ -13,6 +13,39 @@
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const loadPanicGuildsStmt = db.prepare(
+  `SELECT guild_id, panic_mode FROM guild_config WHERE panic_mode = 1`
+);
+
+const enablePanicStmt = db.prepare(
+  `INSERT INTO guild_config (guild_id, panic_mode, panic_enabled_at, panic_enabled_by, updated_at_s)
+   VALUES (?, 1, ?, ?, ?)
+   ON CONFLICT(guild_id) DO UPDATE SET
+     panic_mode = 1,
+     panic_enabled_at = excluded.panic_enabled_at,
+     panic_enabled_by = excluded.panic_enabled_by,
+     updated_at_s = excluded.updated_at_s`
+);
+
+const disablePanicStmt = db.prepare(
+  `INSERT INTO guild_config (guild_id, panic_mode, panic_enabled_at, panic_enabled_by, updated_at_s)
+   VALUES (?, 0, NULL, NULL, ?)
+   ON CONFLICT(guild_id) DO UPDATE SET
+     panic_mode = 0,
+     panic_enabled_at = NULL,
+     panic_enabled_by = NULL,
+     updated_at_s = excluded.updated_at_s`
+);
+
+const getPanicDetailsStmt = db.prepare(
+  `SELECT panic_mode, panic_enabled_at, panic_enabled_by
+   FROM guild_config WHERE guild_id = ?`
+);
+
 // In-memory cache for instant response. isPanicMode() is called on every
 // role assignment, so we can't afford DB round-trips. Cache is authoritative
 // for reads; DB is source of truth for persistence across restarts.
@@ -34,11 +67,7 @@ export function loadPanicState(): void {
   try {
     // Only load guilds that ARE in panic mode. Default state (no row or
     // panic_mode=0) means panic is off, so we don't need to cache those.
-    const rows = db
-      .prepare(
-        `SELECT guild_id, panic_mode FROM guild_config WHERE panic_mode = 1`
-      )
-      .all() as Array<{ guild_id: string; panic_mode: number }>;
+    const rows = loadPanicGuildsStmt.all() as Array<{ guild_id: string; panic_mode: number }>;
 
     for (const row of rows) {
       panicCache.set(row.guild_id, true);
@@ -88,30 +117,10 @@ export function setPanicMode(
 
     if (enabled) {
       // Upsert: enable panic mode
-      db.prepare(
-        `
-        INSERT INTO guild_config (guild_id, panic_mode, panic_enabled_at, panic_enabled_by, updated_at_s)
-        VALUES (?, 1, ?, ?, ?)
-        ON CONFLICT(guild_id) DO UPDATE SET
-          panic_mode = 1,
-          panic_enabled_at = excluded.panic_enabled_at,
-          panic_enabled_by = excluded.panic_enabled_by,
-          updated_at_s = excluded.updated_at_s
-        `
-      ).run(guildId, nowS, enabledBy ?? null, nowS);
+      enablePanicStmt.run(guildId, nowS, enabledBy ?? null, nowS);
     } else {
       // Upsert: disable panic mode
-      db.prepare(
-        `
-        INSERT INTO guild_config (guild_id, panic_mode, panic_enabled_at, panic_enabled_by, updated_at_s)
-        VALUES (?, 0, NULL, NULL, ?)
-        ON CONFLICT(guild_id) DO UPDATE SET
-          panic_mode = 0,
-          panic_enabled_at = NULL,
-          panic_enabled_by = NULL,
-          updated_at_s = excluded.updated_at_s
-        `
-      ).run(guildId, nowS);
+      disablePanicStmt.run(guildId, nowS);
     }
 
     logger.warn(
@@ -167,12 +176,7 @@ export function getPanicDetails(guildId: string): {
   enabledBy: string | null;
 } | null {
   try {
-    const row = db
-      .prepare(
-        `SELECT panic_mode, panic_enabled_at, panic_enabled_by
-         FROM guild_config WHERE guild_id = ?`
-      )
-      .get(guildId) as PanicRow | undefined;
+    const row = getPanicDetailsStmt.get(guildId) as PanicRow | undefined;
 
     if (!row) {
       // No config row = guild never configured = panic off

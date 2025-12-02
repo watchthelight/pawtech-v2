@@ -7,7 +7,6 @@
  *  - removeArtist: Remove artist and reorder positions
  *  - getNextArtist: Get next non-skipped artist in rotation
  *  - processAssignment: ATOMIC move artist to end + increment assignments (transaction)
- *  - moveToEnd: Legacy function - prefer processAssignment for assignment flow
  *  - syncWithRole: Sync queue with current Server Artist role holders
  *
  * CONCURRENCY:
@@ -27,14 +26,134 @@ import type {
   SyncResult,
 } from "./types.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const getQueueLengthStmt = db.prepare(
+  `SELECT COUNT(*) as count FROM artist_queue WHERE guild_id = ?`
+);
+
+const getMaxPositionStmt = db.prepare(
+  `SELECT MAX(position) as max_pos FROM artist_queue WHERE guild_id = ?`
+);
+
+const checkArtistExistsStmt = db.prepare(
+  `SELECT id FROM artist_queue WHERE guild_id = ? AND user_id = ?`
+);
+
+const insertArtistStmt = db.prepare(
+  `INSERT INTO artist_queue (guild_id, user_id, position) VALUES (?, ?, ?)`
+);
+
+const getArtistForRemovalStmt = db.prepare(
+  `SELECT position, assignments_count FROM artist_queue WHERE guild_id = ? AND user_id = ?`
+);
+
+const deleteArtistStmt = db.prepare(
+  `DELETE FROM artist_queue WHERE guild_id = ? AND user_id = ?`
+);
+
+const reorderPositionsAfterRemovalStmt = db.prepare(
+  `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
+);
+
+const getArtistStmt = db.prepare(
+  `SELECT * FROM artist_queue WHERE guild_id = ? AND user_id = ?`
+);
+
+const getAllArtistsStmt = db.prepare(
+  `SELECT * FROM artist_queue WHERE guild_id = ? ORDER BY position ASC`
+);
+
+const getNextArtistStmt = db.prepare(
+  `SELECT user_id, position, assignments_count, last_assigned_at
+   FROM artist_queue
+   WHERE guild_id = ? AND skipped = 0
+   ORDER BY position ASC
+   LIMIT 1`
+);
+
+const getArtistPositionStmt = db.prepare(
+  `SELECT position FROM artist_queue WHERE guild_id = ? AND user_id = ?`
+);
+
+const shiftPositionsUpStmt = db.prepare(
+  `UPDATE artist_queue SET position = position - 1
+   WHERE guild_id = ? AND position > ? AND position <= ?`
+);
+
+const shiftPositionsDownStmt = db.prepare(
+  `UPDATE artist_queue SET position = position + 1
+   WHERE guild_id = ? AND position >= ? AND position < ?`
+);
+
+const setPositionStmt = db.prepare(
+  `UPDATE artist_queue SET position = ? WHERE guild_id = ? AND user_id = ?`
+);
+
+const skipArtistStmt = db.prepare(
+  `UPDATE artist_queue SET skipped = 1, skip_reason = ? WHERE guild_id = ? AND user_id = ?`
+);
+
+const unskipArtistStmt = db.prepare(
+  `UPDATE artist_queue SET skipped = 0, skip_reason = NULL WHERE guild_id = ? AND user_id = ?`
+);
+
+const incrementAssignmentsStmt = db.prepare(
+  `UPDATE artist_queue
+   SET assignments_count = assignments_count + 1,
+       last_assigned_at = datetime('now')
+   WHERE guild_id = ? AND user_id = ?`
+);
+
+const getArtistStateStmt = db.prepare(
+  `SELECT position, assignments_count FROM artist_queue WHERE guild_id = ? AND user_id = ?`
+);
+
+const shiftPositionsAfterStmt = db.prepare(
+  `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
+);
+
+const updateAssignmentsStmt = db.prepare(
+  `UPDATE artist_queue
+   SET assignments_count = ?,
+       last_assigned_at = datetime('now')
+   WHERE guild_id = ? AND user_id = ?`
+);
+
+const logAssignmentStmt = db.prepare(
+  `INSERT INTO artist_assignment_log
+   (guild_id, artist_id, recipient_id, ticket_type, ticket_role_id, assigned_by, channel_id, override)
+   VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
+);
+
+const getAssignmentHistoryByArtistStmt = db.prepare(
+  `SELECT * FROM artist_assignment_log
+   WHERE guild_id = ? AND artist_id = ?
+   ORDER BY assigned_at DESC
+   LIMIT ?`
+);
+
+const getAssignmentHistoryAllStmt = db.prepare(
+  `SELECT * FROM artist_assignment_log
+   WHERE guild_id = ?
+   ORDER BY assigned_at DESC
+   LIMIT ?`
+);
+
+const getArtistStatsStmt = db.prepare(
+  `SELECT COUNT(*) as total, MAX(assigned_at) as last_at
+   FROM artist_assignment_log
+   WHERE guild_id = ? AND artist_id = ?`
+);
+
 /**
  * getQueueLength
  * WHAT: Get total number of artists in queue for a guild.
  */
 export function getQueueLength(guildId: string): number {
-  const row = db
-    .prepare(`SELECT COUNT(*) as count FROM artist_queue WHERE guild_id = ?`)
-    .get(guildId) as { count: number } | undefined;
+  const row = getQueueLengthStmt.get(guildId) as { count: number } | undefined;
   return row?.count ?? 0;
 }
 
@@ -43,9 +162,7 @@ export function getQueueLength(guildId: string): number {
  * WHAT: Get the highest position number in the queue.
  */
 function getMaxPosition(guildId: string): number {
-  const row = db
-    .prepare(`SELECT MAX(position) as max_pos FROM artist_queue WHERE guild_id = ?`)
-    .get(guildId) as { max_pos: number | null } | undefined;
+  const row = getMaxPositionStmt.get(guildId) as { max_pos: number | null } | undefined;
   return row?.max_pos ?? 0;
 }
 
@@ -57,9 +174,7 @@ function getMaxPosition(guildId: string): number {
  */
 export function addArtist(guildId: string, userId: string): number | null {
   // Check if already in queue
-  const existing = db
-    .prepare(`SELECT id FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
-    .get(guildId, userId);
+  const existing = checkArtistExistsStmt.get(guildId, userId);
 
   if (existing) {
     logger.debug({ guildId, userId }, "[artistQueue] User already in queue");
@@ -67,10 +182,7 @@ export function addArtist(guildId: string, userId: string): number | null {
   }
 
   const nextPosition = getMaxPosition(guildId) + 1;
-
-  db.prepare(
-    `INSERT INTO artist_queue (guild_id, user_id, position) VALUES (?, ?, ?)`
-  ).run(guildId, userId, nextPosition);
+  insertArtistStmt.run(guildId, userId, nextPosition);
 
   logger.info({ guildId, userId, position: nextPosition }, "[artistQueue] Artist added to queue");
   return nextPosition;
@@ -80,32 +192,33 @@ export function addArtist(guildId: string, userId: string): number | null {
  * removeArtist
  * WHAT: Remove an artist from the queue and reorder positions.
  * WHY: When someone loses the Server Artist role, remove them from rotation.
+ * SECURITY: Uses transaction to ensure DELETE and position reorder happen atomically.
  * @returns The artist's assignment count before removal, or null if not found
  */
 export function removeArtist(guildId: string, userId: string): number | null {
-  const artist = db
-    .prepare(`SELECT position, assignments_count FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
-    .get(guildId, userId) as { position: number; assignments_count: number } | undefined;
+  return db.transaction(() => {
+    const artist = getArtistForRemovalStmt.get(guildId, userId) as
+      | { position: number; assignments_count: number }
+      | undefined;
 
-  if (!artist) {
-    logger.debug({ guildId, userId }, "[artistQueue] User not in queue");
-    return null;
-  }
+    if (!artist) {
+      logger.debug({ guildId, userId }, "[artistQueue] User not in queue");
+      return null;
+    }
 
-  // Remove the artist
-  db.prepare(`DELETE FROM artist_queue WHERE guild_id = ? AND user_id = ?`).run(guildId, userId);
+    // Remove the artist
+    deleteArtistStmt.run(guildId, userId);
 
-  // Reorder positions to fill the gap
-  db.prepare(
-    `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
-  ).run(guildId, artist.position);
+    // Reorder positions to fill the gap
+    reorderPositionsAfterRemovalStmt.run(guildId, artist.position);
 
-  logger.info(
-    { guildId, userId, previousPosition: artist.position, assignments: artist.assignments_count },
-    "[artistQueue] Artist removed from queue"
-  );
+    logger.info(
+      { guildId, userId, previousPosition: artist.position, assignments: artist.assignments_count },
+      "[artistQueue] Artist removed from queue"
+    );
 
-  return artist.assignments_count;
+    return artist.assignments_count;
+  })();
 }
 
 /**
@@ -113,9 +226,7 @@ export function removeArtist(guildId: string, userId: string): number | null {
  * WHAT: Get a specific artist's queue entry.
  */
 export function getArtist(guildId: string, userId: string): ArtistQueueRow | null {
-  const row = db
-    .prepare(`SELECT * FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
-    .get(guildId, userId) as ArtistQueueRow | undefined;
+  const row = getArtistStmt.get(guildId, userId) as ArtistQueueRow | undefined;
   return row ?? null;
 }
 
@@ -124,9 +235,7 @@ export function getArtist(guildId: string, userId: string): ArtistQueueRow | nul
  * WHAT: Get all artists in queue ordered by position.
  */
 export function getAllArtists(guildId: string): ArtistQueueRow[] {
-  return db
-    .prepare(`SELECT * FROM artist_queue WHERE guild_id = ? ORDER BY position ASC`)
-    .all(guildId) as ArtistQueueRow[];
+  return getAllArtistsStmt.all(guildId) as ArtistQueueRow[];
 }
 
 /**
@@ -135,15 +244,7 @@ export function getAllArtists(guildId: string): ArtistQueueRow[] {
  * WHY: Used when assigning art rewards to get who's next.
  */
 export function getNextArtist(guildId: string): NextArtistResult | null {
-  const row = db
-    .prepare(
-      `SELECT user_id, position, assignments_count, last_assigned_at
-       FROM artist_queue
-       WHERE guild_id = ? AND skipped = 0
-       ORDER BY position ASC
-       LIMIT 1`
-    )
-    .get(guildId) as
+  const row = getNextArtistStmt.get(guildId) as
     | { user_id: string; position: number; assignments_count: number; last_assigned_at: string | null }
     | undefined;
 
@@ -160,61 +261,12 @@ export function getNextArtist(guildId: string): NextArtistResult | null {
 }
 
 /**
- * moveToEnd
- * WHAT: Move an artist to the end of the queue after assignment.
- * WHY: Rotate artists fairly - after handling a request, go to back of line.
- *
- * @deprecated Use processAssignment() instead when incrementing assignments.
- *             This function should only be used for manual queue reordering.
- *             Calling moveToEnd() + incrementAssignments() separately creates race conditions.
- */
-export function moveToEnd(guildId: string, userId: string): number {
-  const artist = db
-    .prepare(`SELECT position FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
-    .get(guildId, userId) as { position: number } | undefined;
-
-  if (!artist) {
-    logger.warn({ guildId, userId }, "[artistQueue] Cannot move - artist not in queue");
-    return -1;
-  }
-
-  const currentPosition = artist.position;
-  const maxPosition = getMaxPosition(guildId);
-
-  if (currentPosition === maxPosition) {
-    // Already at end
-    return currentPosition;
-  }
-
-  // Move everyone after this artist up by 1
-  db.prepare(
-    `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
-  ).run(guildId, currentPosition);
-
-  // Move this artist to the end
-  db.prepare(`UPDATE artist_queue SET position = ? WHERE guild_id = ? AND user_id = ?`).run(
-    maxPosition,
-    guildId,
-    userId
-  );
-
-  logger.info(
-    { guildId, userId, from: currentPosition, to: maxPosition },
-    "[artistQueue] Artist moved to end of queue"
-  );
-
-  return maxPosition;
-}
-
-/**
  * moveToPosition
  * WHAT: Move an artist to a specific position in the queue.
  * WHY: Manual reordering by admins.
  */
 export function moveToPosition(guildId: string, userId: string, newPosition: number): boolean {
-  const artist = db
-    .prepare(`SELECT position FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
-    .get(guildId, userId) as { position: number } | undefined;
+  const artist = getArtistPositionStmt.get(guildId, userId) as { position: number } | undefined;
 
   if (!artist) {
     return false;
@@ -232,24 +284,14 @@ export function moveToPosition(guildId: string, userId: string, newPosition: num
 
   if (currentPosition < targetPosition) {
     // Moving down: shift others up
-    db.prepare(
-      `UPDATE artist_queue SET position = position - 1
-       WHERE guild_id = ? AND position > ? AND position <= ?`
-    ).run(guildId, currentPosition, targetPosition);
+    shiftPositionsUpStmt.run(guildId, currentPosition, targetPosition);
   } else {
     // Moving up: shift others down
-    db.prepare(
-      `UPDATE artist_queue SET position = position + 1
-       WHERE guild_id = ? AND position >= ? AND position < ?`
-    ).run(guildId, targetPosition, currentPosition);
+    shiftPositionsDownStmt.run(guildId, targetPosition, currentPosition);
   }
 
   // Set new position
-  db.prepare(`UPDATE artist_queue SET position = ? WHERE guild_id = ? AND user_id = ?`).run(
-    targetPosition,
-    guildId,
-    userId
-  );
+  setPositionStmt.run(targetPosition, guildId, userId);
 
   logger.info(
     { guildId, userId, from: currentPosition, to: targetPosition },
@@ -265,9 +307,7 @@ export function moveToPosition(guildId: string, userId: string, newPosition: num
  * WHY: Artist may be on break or temporarily unavailable.
  */
 export function skipArtist(guildId: string, userId: string, reason?: string): boolean {
-  const result = db
-    .prepare(`UPDATE artist_queue SET skipped = 1, skip_reason = ? WHERE guild_id = ? AND user_id = ?`)
-    .run(reason ?? null, guildId, userId);
+  const result = skipArtistStmt.run(reason ?? null, guildId, userId);
 
   if (result.changes > 0) {
     logger.info({ guildId, userId, reason }, "[artistQueue] Artist skipped");
@@ -281,9 +321,7 @@ export function skipArtist(guildId: string, userId: string, reason?: string): bo
  * WHAT: Remove skip status from an artist.
  */
 export function unskipArtist(guildId: string, userId: string): boolean {
-  const result = db
-    .prepare(`UPDATE artist_queue SET skipped = 0, skip_reason = NULL WHERE guild_id = ? AND user_id = ?`)
-    .run(guildId, userId);
+  const result = unskipArtistStmt.run(guildId, userId);
 
   if (result.changes > 0) {
     logger.info({ guildId, userId }, "[artistQueue] Artist unskipped");
@@ -298,12 +336,7 @@ export function unskipArtist(guildId: string, userId: string): boolean {
  * WHY: Track how many assignments each artist has handled.
  */
 export function incrementAssignments(guildId: string, userId: string): void {
-  db.prepare(
-    `UPDATE artist_queue
-     SET assignments_count = assignments_count + 1,
-         last_assigned_at = datetime('now')
-     WHERE guild_id = ? AND user_id = ?`
-  ).run(guildId, userId);
+  incrementAssignmentsStmt.run(guildId, userId);
 }
 
 /**
@@ -322,9 +355,9 @@ export function processAssignment(
 ): { oldPosition: number; newPosition: number; assignmentsCount: number } | null {
   return db.transaction(() => {
     // 1. Get current artist state
-    const artist = db
-      .prepare(`SELECT position, assignments_count FROM artist_queue WHERE guild_id = ? AND user_id = ?`)
-      .get(guildId, userId) as { position: number; assignments_count: number } | undefined;
+    const artist = getArtistStateStmt.get(guildId, userId) as
+      | { position: number; assignments_count: number }
+      | undefined;
 
     if (!artist) {
       logger.warn({ guildId, userId }, "[artistQueue] Cannot process assignment - artist not in queue");
@@ -337,24 +370,15 @@ export function processAssignment(
     // 2. Move artist to end (only if not already there)
     if (currentPosition !== maxPosition) {
       // Move everyone after this artist up by 1
-      db.prepare(
-        `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
-      ).run(guildId, currentPosition);
+      shiftPositionsAfterStmt.run(guildId, currentPosition);
 
       // Move this artist to the end
-      db.prepare(
-        `UPDATE artist_queue SET position = ? WHERE guild_id = ? AND user_id = ?`
-      ).run(maxPosition, guildId, userId);
+      setPositionStmt.run(maxPosition, guildId, userId);
     }
 
     // 3. Increment assignments and update timestamp
     const newAssignmentsCount = artist.assignments_count + 1;
-    db.prepare(
-      `UPDATE artist_queue
-       SET assignments_count = ?,
-           last_assigned_at = datetime('now')
-       WHERE guild_id = ? AND user_id = ?`
-    ).run(newAssignmentsCount, guildId, userId);
+    updateAssignmentsStmt.run(newAssignmentsCount, guildId, userId);
 
     logger.info(
       {
@@ -380,22 +404,16 @@ export function processAssignment(
  * WHAT: Record an art reward assignment in the audit log.
  */
 export function logAssignment(options: AssignmentOptions): number {
-  const result = db
-    .prepare(
-      `INSERT INTO artist_assignment_log
-       (guild_id, artist_id, recipient_id, ticket_type, ticket_role_id, assigned_by, channel_id, override)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      options.guildId,
-      options.artistId,
-      options.recipientId,
-      options.ticketType,
-      options.ticketRoleId,
-      options.assignedBy,
-      options.channelId,
-      options.override ? 1 : 0
-    );
+  const result = logAssignmentStmt.run(
+    options.guildId,
+    options.artistId,
+    options.recipientId,
+    options.ticketType,
+    options.ticketRoleId,
+    options.assignedBy,
+    options.channelId,
+    options.override ? 1 : 0
+  );
 
   logger.info(
     {
@@ -422,24 +440,10 @@ export function getAssignmentHistory(
   limit = 10
 ): ArtistAssignmentRow[] {
   if (artistId) {
-    return db
-      .prepare(
-        `SELECT * FROM artist_assignment_log
-         WHERE guild_id = ? AND artist_id = ?
-         ORDER BY assigned_at DESC
-         LIMIT ?`
-      )
-      .all(guildId, artistId, limit) as ArtistAssignmentRow[];
+    return getAssignmentHistoryByArtistStmt.all(guildId, artistId, limit) as ArtistAssignmentRow[];
   }
 
-  return db
-    .prepare(
-      `SELECT * FROM artist_assignment_log
-       WHERE guild_id = ?
-       ORDER BY assigned_at DESC
-       LIMIT ?`
-    )
-    .all(guildId, limit) as ArtistAssignmentRow[];
+  return getAssignmentHistoryAllStmt.all(guildId, limit) as ArtistAssignmentRow[];
 }
 
 /**
@@ -450,13 +454,7 @@ export function getArtistStats(
   guildId: string,
   artistId: string
 ): { totalAssignments: number; lastAssignment: string | null } {
-  const row = db
-    .prepare(
-      `SELECT COUNT(*) as total, MAX(assigned_at) as last_at
-       FROM artist_assignment_log
-       WHERE guild_id = ? AND artist_id = ?`
-    )
-    .get(guildId, artistId) as { total: number; last_at: string | null };
+  const row = getArtistStatsStmt.get(guildId, artistId) as { total: number; last_at: string | null };
 
   return {
     totalAssignments: row.total,

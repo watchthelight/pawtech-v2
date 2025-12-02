@@ -46,6 +46,12 @@ let flushTimer: ReturnType<typeof setTimeout> | null = null;
 const FLUSH_INTERVAL_MS = 1000;
 
 /**
+ * Maximum buffer size to prevent OOM in edge cases (e.g., DB outage during traffic spike).
+ * At ~100 bytes per entry, 10,000 entries = ~1MB memory usage.
+ */
+const MAX_BUFFER_SIZE = 10000;
+
+/**
  * WHAT: Log a message to message_activity table (buffered)
  * WHY: Tracks all server messages for activity heatmap visualization
  * HOW: Buffers messages in memory, flushes every 1 second in a single transaction
@@ -64,6 +70,17 @@ export function logMessage(message: Message): void {
   if (!message.guildId) return;
   if (message.author.bot) return;
   if (message.webhookId) return;
+
+  // Buffer overflow protection: Drop oldest 10% of messages if buffer is full
+  // This prevents OOM during DB outages or extreme traffic spikes
+  if (messageBuffer.length >= MAX_BUFFER_SIZE) {
+    const dropCount = Math.floor(MAX_BUFFER_SIZE * 0.1);
+    logger.warn(
+      { bufferSize: messageBuffer.length, dropCount },
+      '[message_activity] Buffer full, dropping oldest messages'
+    );
+    messageBuffer.splice(0, dropCount);
+  }
 
   const created_at_s = Math.floor(message.createdTimestamp / 1000);
 

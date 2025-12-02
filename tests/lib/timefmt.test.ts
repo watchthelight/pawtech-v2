@@ -9,7 +9,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 import { describe, it, expect } from "vitest";
-import { toDiscordAbs, toDiscordRel, toIso, fmtAgeShort } from "../../src/lib/timefmt.js";
+import { toDiscordAbs, toDiscordRel, fmtAgeShort } from "../../src/lib/timefmt.js";
 
 describe("timefmt utilities", () => {
   /**
@@ -37,23 +37,6 @@ describe("timefmt utilities", () => {
       expect(toDiscordRel(1729468800)).toBe("<t:1729468800:R>");
       expect(toDiscordRel(0)).toBe("<t:0:R>");
       expect(toDiscordRel(1234567890)).toBe("<t:1234567890:R>");
-    });
-  });
-
-  /**
-   * ISO 8601 format for logs, APIs, and anywhere Discord timestamps don't work.
-   * Output is always UTC with milliseconds (even though input is seconds).
-   */
-  describe("toIso", () => {
-    it("formats epoch seconds as ISO 8601 string", () => {
-      // 1729468800 = 2024-10-21T00:00:00.000Z
-      expect(toIso(1729468800)).toBe("2024-10-21T00:00:00.000Z");
-
-      // 0 = 1970-01-01T00:00:00.000Z (Unix epoch)
-      expect(toIso(0)).toBe("1970-01-01T00:00:00.000Z");
-
-      // 1234567890 = 2009-02-13T23:31:30.000Z (the famous timestamp)
-      expect(toIso(1234567890)).toBe("2009-02-13T23:31:30.000Z");
     });
   });
 

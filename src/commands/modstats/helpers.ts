@@ -51,8 +51,9 @@ export function formatDuration(seconds: number | null | undefined): string {
 /**
  * WHAT: Calculate average claim→decision time for a moderator.
  * WHY: Key performance metric for review speed and moderator efficiency.
- * HOW: Joins claim actions with decision actions on same app_id + actor_id,
- *      then computes AVG(decision.created_at_s - claim.created_at_s).
+ * HOW: Uses CTE with self-join to compute average in a single query.
+ *      Before: N+1 queries (1 + N decisions = 50-750 queries per moderator)
+ *      After: 1 query per moderator
  *
  * @param guildId - Guild ID
  * @param actorId - Moderator user ID
@@ -64,142 +65,81 @@ export function getAvgClaimToDecision(
   actorId: string,
   windowStartS: number
 ): number | null {
-  // For each decision by this moderator in the window:
-  // 1. Find the most recent claim by same moderator for that app_id before the decision
-  // 2. Compute delta (decision.created_at_s - claim.created_at_s)
-  // 3. Average all deltas
-
-  const decisions = db
+  // Single query using CTEs to join decisions with their most recent prior claim
+  // This replaces the N+1 pattern where we queried for each decision's claim separately
+  const result = db
     .prepare(
       `
-      SELECT app_id, created_at_s
-      FROM action_log
-      WHERE guild_id = ?
-        AND actor_id = ?
-        AND action IN ('approve', 'reject', 'perm_reject', 'kick', 'modmail_open')
-        AND created_at_s >= ?
-        AND app_id IS NOT NULL
-      ORDER BY created_at_s ASC
+      WITH decisions AS (
+        SELECT app_id, created_at_s as decision_time
+        FROM action_log
+        WHERE guild_id = ? AND actor_id = ?
+          AND action IN ('approve', 'reject', 'perm_reject', 'kick', 'modmail_open')
+          AND created_at_s >= ?
+          AND app_id IS NOT NULL
+      ),
+      claims AS (
+        SELECT app_id, MAX(created_at_s) as claim_time
+        FROM action_log
+        WHERE guild_id = ? AND actor_id = ? AND action = 'claim'
+        GROUP BY app_id
+      )
+      SELECT AVG(d.decision_time - c.claim_time) as avg_time
+      FROM decisions d
+      INNER JOIN claims c ON d.app_id = c.app_id
+      WHERE c.claim_time < d.decision_time
     `
     )
-    .all(guildId, actorId, windowStartS) as Array<{
-    app_id: string;
-    created_at_s: number;
-  }>;
+    .get(guildId, actorId, windowStartS, guildId, actorId) as { avg_time: number | null };
 
-  if (decisions.length === 0) {
-    return null;
-  }
-
-  const deltas: number[] = [];
-
-  for (const decision of decisions) {
-    // Find most recent claim by same moderator for this app before decision
-    const claim = db
-      .prepare(
-        `
-        SELECT created_at_s
-        FROM action_log
-        WHERE guild_id = ?
-          AND app_id = ?
-          AND actor_id = ?
-          AND action = 'claim'
-          AND created_at_s < ?
-        ORDER BY created_at_s DESC
-        LIMIT 1
-      `
-      )
-      .get(guildId, decision.app_id, actorId, decision.created_at_s) as
-      | { created_at_s: number }
-      | undefined;
-
-    if (claim) {
-      const delta = decision.created_at_s - claim.created_at_s;
-      // Only count positive deltas (sanity check: decision should come after claim)
-      if (delta > 0) {
-        deltas.push(delta);
-      }
-    }
-    // Note: If no claim found, this decision is skipped (e.g., unclaimed app decisions)
-  }
-
-  if (deltas.length === 0) {
+  if (result?.avg_time === null || result?.avg_time === undefined) {
     return null;
   }
 
   // Return average time in seconds (floor to avoid fractional seconds)
-  return Math.floor(deltas.reduce((sum, d) => sum + d, 0) / deltas.length);
+  return Math.floor(result.avg_time);
 }
 
 /**
  * WHAT: Calculate server average submit→first claim time.
  * WHY: Context metric for understanding review queue responsiveness.
- * HOW: For each app_submitted action, find earliest claim (by ANY moderator),
- *      then compute AVG(first_claim.created_at_s - submit.created_at_s).
+ * HOW: Uses CTE with self-join to compute average in a single query.
+ *      Before: N+1 queries (1 + N submissions = 100+ queries)
+ *      After: 1 query total
  *
  * @param guildId - Guild ID
  * @param windowStartS - Start of time window (unix seconds)
  * @returns Average seconds from submit to first claim, or null if no data
  */
 export function getAvgSubmitToFirstClaim(guildId: string, windowStartS: number): number | null {
-  // For each app_submitted in window:
-  // 1. Find earliest claim for that app_id
-  // 2. Compute delta (claim.created_at_s - submit.created_at_s)
-  // 3. Average all deltas
-
-  const submissions = db
+  // Single query using CTEs to join submissions with their first claim
+  // This replaces the N+1 pattern where we queried for each submission's claim separately
+  const result = db
     .prepare(
       `
-      SELECT app_id, created_at_s
-      FROM action_log
-      WHERE guild_id = ?
-        AND action = 'app_submitted'
-        AND created_at_s >= ?
-        AND app_id IS NOT NULL
-      ORDER BY created_at_s ASC
+      WITH submissions AS (
+        SELECT app_id, created_at_s as submit_time
+        FROM action_log
+        WHERE guild_id = ? AND action = 'app_submitted' AND created_at_s >= ?
+          AND app_id IS NOT NULL
+      ),
+      first_claims AS (
+        SELECT app_id, MIN(created_at_s) as claim_time
+        FROM action_log
+        WHERE guild_id = ? AND action = 'claim'
+        GROUP BY app_id
+      )
+      SELECT AVG(c.claim_time - s.submit_time) as avg_time
+      FROM submissions s
+      INNER JOIN first_claims c ON s.app_id = c.app_id
+      WHERE c.claim_time > s.submit_time
     `
     )
-    .all(guildId, windowStartS) as Array<{
-    app_id: string;
-    created_at_s: number;
-  }>;
+    .get(guildId, windowStartS, guildId) as { avg_time: number | null };
 
-  if (submissions.length === 0) {
+  if (result?.avg_time === null || result?.avg_time === undefined) {
     return null;
   }
 
-  const deltas: number[] = [];
-
-  for (const submission of submissions) {
-    // Find earliest claim for this app
-    const claim = db
-      .prepare(
-        `
-        SELECT created_at_s
-        FROM action_log
-        WHERE guild_id = ?
-          AND app_id = ?
-          AND action = 'claim'
-          AND created_at_s >= ?
-        ORDER BY created_at_s ASC
-        LIMIT 1
-      `
-      )
-      .get(guildId, submission.app_id, submission.created_at_s) as
-      | { created_at_s: number }
-      | undefined;
-
-    if (claim) {
-      const delta = claim.created_at_s - submission.created_at_s;
-      if (delta > 0) {
-        deltas.push(delta);
-      }
-    }
-  }
-
-  if (deltas.length === 0) {
-    return null;
-  }
-
-  return Math.floor(deltas.reduce((sum, d) => sum + d, 0) / deltas.length);
+  return Math.floor(result.avg_time);
 }

@@ -13,6 +13,7 @@ import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } f
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { HEALTH_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { getSchedulerHealth, type SchedulerHealth } from "../lib/schedulerHealth.js";
+import { logger } from "../lib/logger.js";
 
 /*
  * Health Check Command
@@ -149,7 +150,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await interaction.reply({
         content: '⚠️ Health check timed out after 5 seconds.',
         ephemeral: true,
-      }).catch(() => {});
+      }).catch((err) => {
+        logger.debug({ err }, "[health] Timeout response failed (interaction may have expired)");
+      });
     } else {
       throw error;
     }

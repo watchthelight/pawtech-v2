@@ -7,6 +7,8 @@
  */
 
 import { logger } from "../lib/logger.js";
+import { classifyError, shouldReportToSentry, errorContext } from "../lib/errors.js";
+import { captureException } from "../lib/sentry.js";
 
 type SafeSearchLikelihood = "UNKNOWN" | "VERY_UNLIKELY" | "UNLIKELY" | "POSSIBLE" | "LIKELY" | "VERY_LIKELY";
 
@@ -113,9 +115,9 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
     }
 
     // Direct REST API call - simpler than SDK for API key auth.
-    // Warning: API key is in URL which appears in logs. In production,
-    // consider masking or using request headers if supported.
-    const endpoint = `https://vision.googleapis.com/v1/images:annotate?key=${apiKey}`;
+    // Security: API key passed via X-Goog-Api-Key header instead of URL query param
+    // to prevent accidental exposure in logs, browser history, or referrer headers.
+    const endpoint = "https://vision.googleapis.com/v1/images:annotate";
 
     // We request both SAFE_SEARCH_DETECTION and LABEL_DETECTION.
     // This is a pricing optimization: SafeSearch is FREE when bundled with
@@ -145,10 +147,11 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
     const response = await fetch(endpoint, {
       method: "POST",
       headers: {
-        "Content-Type": "application/json"
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": apiKey,
       },
       body: JSON.stringify(requestBody),
-      signal: AbortSignal.timeout(15000) // 15s timeout
+      signal: AbortSignal.timeout(15000), // 15s timeout
     });
 
     if (!response.ok) {
@@ -193,7 +196,23 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
     return result;
 
   } catch (err) {
-    logger.warn({ err, imageUrl }, "[googleVision] Detection failed");
+    const classified = classifyError(err);
+
+    logger.warn({
+      err,
+      imageUrl: imageUrl.substring(0, 100), // Truncate for logs
+      errorKind: classified.kind,
+      ...errorContext(classified)
+    }, "[googleVision] Detection failed");
+
+    // Only report to Sentry if not a transient network error
+    if (shouldReportToSentry(classified)) {
+      captureException(err instanceof Error ? err : new Error(String(err)), {
+        feature: "googleVision",
+        imageUrl: imageUrl.substring(0, 100),
+      });
+    }
+
     return null;
   }
 }

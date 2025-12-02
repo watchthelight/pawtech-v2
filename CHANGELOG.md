@@ -9,6 +9,105 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.5.0] - 2025-12-02
+
+### Database
+
+- **Prepared Statement Caching** (Audit 005) - Converted inline `db.prepare()` calls to module-level cached constants across 10 store files for improved query performance:
+  - `src/store/flagsStore.ts` - 6 cached statements
+  - `src/store/nsfwFlagsStore.ts` - 4 cached statements
+  - `src/store/auditSessionStore.ts` - 8 cached statements
+  - `src/config/loggingStore.ts` - 2 cached statements
+  - `src/config/flaggerStore.ts` - 3 cached statements
+  - `src/features/panicStore.ts` - 4 cached statements
+  - `src/features/statusStore.ts` - 3 cached statements
+  - `src/features/artJobs/store.ts` - 13 cached statements
+  - `src/features/review/queries.ts` - 4 cached statements
+  - `src/features/artistRotation/queue.ts` - 20 cached statements
+- **Transaction Wrapping** (Audit 005) - Added `db.transaction()` wrapper to `removeArtist()` in `artistRotation/queue.ts` to ensure atomic DELETE + position reorder operations
+- **Validation Helpers** (Audit 005) - New `src/lib/validation.ts` with:
+  - `validateSnowflake(id, fieldName)` - Throws `ValidationError` if not a valid 17-20 digit Discord snowflake
+  - `validateNonEmpty(value, fieldName)` - Throws `ValidationError` if empty or whitespace-only
+  - `isValidSnowflake(id)` - Non-throwing boolean check
+  - `isNonEmpty(value)` - Non-throwing boolean check
+  - `ValidationError` class for distinguishing validation errors
+
+### Security
+
+- **SQL Injection Prevention** (Audit 002) - Added allowlist validation in `artJobs/store.ts` for dynamic column names in `updateJobStatus()`. Invalid field names now throw an error instead of being interpolated into SQL.
+- **API Key Protection** (Audit 002) - Moved Google Vision API key from URL query parameter to `X-Goog-Api-Key` header in `googleVision.ts` to prevent accidental exposure in logs.
+- **Database Recovery Authorization** (Audit 002) - Added admin/leadership permission check for `/database recover` command. Staff-level access is no longer sufficient for this destructive operation.
+- **Command Injection Prevention** (Audit 002) - Added regex validation for `PM2_PROCESS_NAME`, `REMOTE_ALIAS`, and `REMOTE_PATH` environment variables in `env.ts` to prevent shell command injection.
+- **Rate Limiting** (Audit 002) - Created `src/lib/rateLimiter.ts` module and applied rate limits to expensive operations:
+  - `/audit nsfw` - 1 hour cooldown per guild
+  - `/audit members` - 1 hour cooldown per guild
+  - `/database check` - 5 minute cooldown per user
+- **Input Validation** (Audit 002) - Added `MAX_REASON_LENGTH` (512 chars) validation to `/kick` and `/reject` commands to prevent database bloat.
+- **Path Traversal Protection** (Audit 002) - Added `safeJoinPath()` function and `SAFE_FILENAME_REGEX` validation in `dbRecovery.ts` to prevent directory traversal attacks when handling backup filenames.
+
+### Refactored
+- **Architecture Cleanup** (Audit 001) - Consolidated scattered utility modules:
+  - Merged `src/utils/` into `src/lib/`: `autoDelete.ts`, `dt.ts`, `owner.ts`, `typeGuards.ts`
+  - Deleted duplicate `src/util/ensureEnv.ts` (functionality exists in `lib/env.ts`)
+  - Moved `requireAdminOrLeadership` from `utils/requireAdminOrLeadership.ts` to `lib/config.ts`
+  - Renamed `ApplicationRow` to `SearchResultRow` in `src/commands/search.ts` to avoid type collision with `review/types.ts`
+  - Updated all import paths across ~15 files
+
+### Changed
+- **Error Handling Improvements** (Audit 006) - Fixed empty catch blocks and improved error handling:
+  - `src/commands/audit.ts` - Added debug logging to 6 empty catch blocks
+  - `src/commands/health.ts` - Added debug logging to timeout catch block
+  - `src/commands/listopen.ts` - Added debug logging to pagination catch block
+  - `src/commands/audit.ts` - Added user notification when background audits fail catastrophically
+  - `src/features/googleVision.ts` - Added error classification and Sentry reporting for non-transient errors
+  - `src/features/avatarNsfwMonitor.ts` - Added fallback DM to guild owner when alert channel fails
+  - `src/index.ts` - Added user notification when modmail message routing fails
+
+### Performance
+- **N+1 Query Fix: Modstats Leaderboard** (Audit 003) - Batch fetch members instead of sequential API calls
+  - Before: 15 sequential Discord API calls (50-200ms each) = 750-3000ms
+  - After: 1 batch API call = 100-300ms
+  - Location: `src/commands/modstats/leaderboard.ts`
+- **N+1 Query Fix: Claim-to-Decision Time** (Audit 003) - Rewritten with SQL CTE and self-join
+  - Before: N+1 queries (1 + N decisions = 50-750 queries per moderator)
+  - After: 1 query per moderator
+  - Location: `src/commands/modstats/helpers.ts` (`getAvgClaimToDecision`)
+- **N+1 Query Fix: Submit-to-First-Claim Time** (Audit 003) - Rewritten with SQL CTE and self-join
+  - Before: N+1 queries (1 + N submissions = 100+ queries)
+  - After: 1 query total
+  - Location: `src/commands/modstats/helpers.ts` (`getAvgSubmitToFirstClaim`)
+- **NSFW Audit Batch Processing** (Audit 003) - Replaced sequential API calls with concurrent batching
+  - Before: Sequential with 100ms sleep per member = 100+ seconds for 1000 members
+  - After: 10 concurrent requests with 200ms between batches = ~15 seconds for 1000 members
+  - Location: `src/commands/audit.ts` (`runNsfwAudit`)
+- **New Performance Indexes** (Audit 003) - Added 5 composite indexes for common query patterns
+  - `idx_action_log_app_action_time` - For claim-to-decision queries
+  - `idx_action_log_actor_action_time` - For modstats actor queries
+  - `idx_action_log_guild_app` - For guild+app_id queries
+  - `idx_nsfw_flags_user` - For NSFW flag lookups
+  - `idx_modmail_guild_status_user` - For modmail ticket queries
+  - Location: `migrations/034_add_performance_indexes.ts`
+- **Buffer Overflow Protection** (Audit 003) - Added max buffer size with oldest-message eviction
+  - Prevents OOM during DB outages or traffic spikes
+  - Max 10,000 entries (~1MB), drops oldest 10% when full
+  - Location: `src/features/messageActivityLogger.ts`
+
+### Cleanup
+- **Dead Code Removal** (Audit 004) - Removed unused functions, constants, and prepared database table drop:
+  - **Database:** Added migration `034_drop_unused_tables.ts` to drop empty tables: `ping_log`, `dm_bridge`, `suggestion`, `suggestion_vote`
+  - **Artist Rotation:** Removed deprecated `IGNORED_ARTIST_USER_IDS` constant and `moveToEnd()` function (use `processAssignment()` instead)
+  - **Command Sync:** Removed `syncGuildCommandsInProcess()` from `commandSync.ts` (use `scripts/deploy-commands.ts`)
+  - **Error Helpers:** Removed unused `isInteractionExpired()`, `isAlreadyAcknowledged()`, `isDatabaseCorrupt()` from `errors.ts`
+  - **Time Formatters:** Removed unused `formatAbsolute()`, `formatAbsoluteUtc()`, `toIso()` from `timefmt.ts`
+  - **Percentiles:** Removed unused `computePercentile()` singular (plural version kept) from `percentiles.ts`
+  - **PM2:** Removed unused `isPM2Available()` from `pm2.ts`
+  - **Audit Session Store:** Removed unused `isUserScanned()`, `getScannedCount()` from `auditSessionStore.ts`
+  - **NSFW Flags Store:** Removed unused `isNsfwFlagged()`, `getNsfwFlagCount()`, `getPendingNsfwFlags()` from `nsfwFlagsStore.ts`
+  - **Constants:** Removed 9 unused constants from `constants.ts`: `DB_RECOVERY_OPERATION_DELAY_MS`, `SLOW_EVENT_THRESHOLD_MS`, `MS_PER_SECOND`, `SECONDS_PER_MINUTE`, `SECONDS_PER_HOUR`, `BANNER_SYNC_MIN_INTERVAL_MS`, `OAUTH_RATE_LIMIT_MAX_OAUTH_REQUESTS`, `OAUTH_STATE_TOKEN_EXPIRY_MS`, `RATE_LIMIT_CLEANUP_INTERVAL_MS`
+  - **Tests:** Removed corresponding tests for deleted functions in `timefmt.test.ts` and `errors.test.ts`
+
+---
+
 ## [4.4.4] - 2025-12-03
 
 ### Changed
@@ -580,7 +679,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.2.0...HEAD
+[Unreleased]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.5.0...HEAD
+[4.5.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.4...v4.5.0
+[4.4.4]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.3...v4.4.4
+[4.4.3]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.2...v4.4.3
+[4.4.2]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.1...v4.4.2
+[4.4.1]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.0...v4.4.1
+[4.4.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.3.0...v4.4.0
+[4.3.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.2.0...v4.3.0
 [4.2.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.1.0...v4.2.0
 [4.1.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.0.3...v4.1.0
 [4.0.3]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.0.2...v4.0.3

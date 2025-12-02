@@ -27,6 +27,7 @@ import {
   logger,
   type ApplicationRow,
 } from "./shared.js";
+import { MAX_REASON_LENGTH } from "../../lib/constants.js";
 
 export const rejectData = new SlashCommandBuilder()
   .setName("reject")
@@ -89,7 +90,16 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     return;
   }
 
-  const reason = reasonRaw.trim().slice(0, 500);
+  const reason = reasonRaw.trim();
+
+  // Security: Validate reason length to prevent database bloat and potential DoS
+  if (reason.length > MAX_REASON_LENGTH) {
+    await replyOrEdit(interaction, {
+      content: `Reason too long (max ${MAX_REASON_LENGTH} characters, you provided ${reason.length}).`,
+    });
+    return;
+  }
+
   if (reason.length === 0) {
     await replyOrEdit(interaction, { content: "Reason is required." });
     return;

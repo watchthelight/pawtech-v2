@@ -16,7 +16,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
-import { isOwner } from "../utils/owner.js";
+import { isOwner } from "../lib/owner.js";
 import { logger } from "../lib/logger.js";
 import { getConfig } from "../lib/config.js";
 

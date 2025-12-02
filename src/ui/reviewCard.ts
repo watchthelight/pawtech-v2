@@ -13,7 +13,7 @@ import {
 } from "discord.js";
 import { shortCode } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
-import { ts } from "../utils/dt.js";
+import { ts } from "../lib/dt.js";
 import type {
   ApplicationStatus,
   ReviewAnswer,

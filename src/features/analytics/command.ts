@@ -25,7 +25,7 @@ import { PassThrough } from "stream";
 import { captureException } from "../../lib/sentry.js";
 import { logger } from "../../lib/logger.js";
 import { nowUtc, tsToIso } from "../../lib/time.js";
-import { isOwner } from "../../utils/owner.js";
+import { isOwner } from "../../lib/owner.js";
 import { hasStaffPermissions } from "../../lib/config.js";
 import {
   getActionCountsByMod,

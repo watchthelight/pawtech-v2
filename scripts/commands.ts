@@ -2,7 +2,7 @@
 import "dotenv/config";
 import { REST, Routes, Client, GatewayIntentBits, ApplicationCommandOptionType, type APIApplicationCommandOption } from "discord.js";
 import { buildCommands } from "../src/commands/buildCommands.js";
-import { requireEnv } from "../src/util/ensureEnv.js";
+import { env } from "../src/lib/env.js";
 
 const OPTION = ApplicationCommandOptionType;
 type CmdOption = APIApplicationCommandOption;
@@ -179,9 +179,9 @@ export async function syncAllGuilds(appId: string, token: string) {
 const isMainModule =
   process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"));
 if (isMainModule) {
-  // Fail fast if required env vars are missing
-  const token = requireEnv("DISCORD_TOKEN");
-  const appId = process.env.APP_ID || requireEnv("CLIENT_ID");
+  // env from lib/env.js validates required vars at import time (fail-fast)
+  const token = env.DISCORD_TOKEN;
+  const appId = process.env.APP_ID || env.CLIENT_ID;
 
   if (process.argv.includes("--purge-global")) await purgeGlobal(appId, token);
   if (process.argv.includes("--all")) await syncAllGuilds(appId, token);

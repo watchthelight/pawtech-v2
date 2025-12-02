@@ -16,8 +16,8 @@ import { findCandidateById, validateCandidate, restoreCandidate } from "./dbReco
 import { buildValidationEmbed, buildRestoreSummaryEmbed } from "../ui/dbRecoveryCard.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { hasManageGuild } from "../lib/config.js";
-import { isOwner } from "../utils/owner.js";
-import { isGuildMember } from "../utils/typeGuards.js";
+import { isOwner } from "../lib/owner.js";
+import { isGuildMember } from "../lib/typeGuards.js";
 
 /**
  * Handle database recovery button interactions

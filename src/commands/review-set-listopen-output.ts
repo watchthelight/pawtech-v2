@@ -17,7 +17,7 @@ import { logger } from "../lib/logger.js";
 import { logActionPretty } from "../logging/pretty.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { hasManageGuild } from "../lib/config.js";
-import { isOwner } from "../utils/owner.js";
+import { isOwner } from "../lib/owner.js";
 
 /**
  * Command registration for /review-set-listopen-output.

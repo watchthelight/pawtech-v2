@@ -1,5 +1,5 @@
 /**
- * Pawtropolis Tech — src/utils/typeGuards.ts
+ * Pawtropolis Tech — src/lib/typeGuards.ts
  * WHAT: Type guards for Discord.js member types.
  * WHY: Discord provides GuildMember (cached) or APIInteractionGuildMember (uncached).
  *      These guards safely narrow the type without unsafe `as any` casts.

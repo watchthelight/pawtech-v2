@@ -14,7 +14,8 @@ import {
   EmbedBuilder,
   Colors,
 } from "discord.js";
-import { requireStaff } from "../lib/config.js";
+import { requireStaff, requireAdminOrLeadership } from "../lib/config.js";
+import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 import {
   wrapCommand,
   type CommandContext,
@@ -151,6 +152,17 @@ export const data = new SlashCommandBuilder()
 
 async function executeCheck(ctx: CommandContext<ChatInputCommandInteraction>) {
   const { interaction } = ctx;
+
+  // Security: Rate limit database checks per user (expensive SSH operations)
+  const cooldownResult = checkCooldown("database:check", interaction.user.id, COOLDOWNS.DATABASE_CHECK_MS);
+  if (!cooldownResult.allowed) {
+    const remaining = formatCooldown(cooldownResult.remainingMs!);
+    await interaction.reply({
+      content: `You're on cooldown for database checks. Please wait ${remaining}.`,
+      ephemeral: true,
+    });
+    return;
+  }
 
   // Defer reply without ephemeral flag so everyone can see it
   if (!interaction.deferred && !interaction.replied) {
@@ -576,6 +588,25 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   if (subcommand === "check") {
     await executeCheck(ctx);
   } else if (subcommand === "recover") {
+    // Security: Database recovery is a destructive operation requiring admin permissions
+    // beyond the standard staff check. This prevents accidental or unauthorized recovery.
+    const isAdmin = await requireAdminOrLeadership(interaction);
+    if (!isAdmin) {
+      await interaction.reply({
+        content: "Database recovery requires admin or leadership permissions.",
+        ephemeral: true,
+      });
+      logger.warn(
+        {
+          evt: "db_recover_denied",
+          guildId: interaction.guildId,
+          userId: interaction.user.id,
+          reason: "insufficient_permissions",
+        },
+        "[database] Recovery denied: user lacks admin/leadership permissions"
+      );
+      return;
+    }
     await executeRecover(ctx);
   }
 }

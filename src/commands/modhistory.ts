@@ -21,9 +21,9 @@ import {
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
-import { isOwner } from "../utils/owner.js";
+import { isOwner } from "../lib/owner.js";
 import { hasStaffPermissions, getConfig } from "../lib/config.js";
-import { isGuildMember } from "../utils/typeGuards.js";
+import { isGuildMember } from "../lib/typeGuards.js";
 import { db } from "../db/db.js";
 import { computePercentiles } from "../lib/percentiles.js";
 import { detectModeratorAnomalies } from "../lib/anomaly.js";

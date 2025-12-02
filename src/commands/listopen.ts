@@ -27,7 +27,7 @@ import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { randomBytes } from "node:crypto";
 import { hasStaffPermissions, isReviewer } from "../lib/config.js";
-import { isOwner } from "../utils/owner.js";
+import { isOwner } from "../lib/owner.js";
 import { LRUCache } from "../lib/lruCache.js";
 
 /*
@@ -755,6 +755,8 @@ export async function handleListOpenPageSelect(interaction: any): Promise<void> 
     await interaction.followUp({
       content: "❌ Failed to load page. Please try again.",
       ephemeral: true,
-    }).catch(() => {});
+    }).catch((err: unknown) => {
+      logger.debug({ err }, "[listopen] Pagination response failed");
+    });
   }
 }

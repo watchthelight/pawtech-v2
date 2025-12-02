@@ -71,12 +71,11 @@ process.on("uncaughtException", (error, origin) => {
   setTimeout(() => process.exit(1), UNCAUGHT_EXCEPTION_EXIT_DELAY_MS);
 });
 
-import { isOwner } from "./utils/owner.js";
+import { isOwner } from "./lib/owner.js";
 import { TRACE_INTERACTIONS, OWNER_IDS } from "./config.js";
 import type { ModalSubmitInteraction } from "discord.js";
 import { wrapEvent } from "./lib/eventWrap.js";
 import { env } from "./lib/env.js";
-import { requireEnv } from "./util/ensureEnv.js";
 import * as health from "./commands/health.js";
 import * as gate from "./commands/gate.js";
 import * as update from "./commands/update.js";
@@ -1609,6 +1608,15 @@ client.on("messageCreate", wrapEvent("messageCreate", async (message) => {
   } catch (err) {
     logger.error({ err, traceId, messageId: message.id }, "[modmail] message routing failed");
     captureException(err, { area: "modmail:messageCreate", traceId });
+
+    // Notify user their message wasn't delivered
+    try {
+      await message.reply({
+        content: "Sorry, there was an issue delivering your message. Please try again or contact staff through another channel.",
+      });
+    } catch (replyErr) {
+      logger.debug({ err: replyErr }, "[modmail] Failed to notify user of routing failure");
+    }
   }
 }));
 
@@ -1631,8 +1639,9 @@ async function main() {
   requireHealthyDatabase();
 
   // Step 2: Fail fast if critical env vars are missing
-  const DISCORD_TOKEN = requireEnv("DISCORD_TOKEN");
-  requireEnv("CLIENT_ID");
+  // env from lib/env.js validates required vars at import time (fail-fast)
+  const DISCORD_TOKEN = env.DISCORD_TOKEN;
+  // CLIENT_ID is validated by env.ts schema (required, min length 1)
   if (!env.GUILD_ID) {
     logger.warn("[startup] GUILD_ID not set - commands will register globally");
   }

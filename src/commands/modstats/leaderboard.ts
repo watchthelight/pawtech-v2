@@ -118,6 +118,17 @@ export async function handleLeaderboard(interaction: ChatInputCommandInteraction
   // Display image-based leaderboard (limit to top 15 for readability)
   const displayRows = rows.slice(0, 15);
 
+  // Batch fetch all members at once to avoid N+1 API calls
+  // Before: 15 sequential API calls (50-200ms each) = 750-3000ms
+  // After: 1 batch API call = 100-300ms
+  const memberIds = displayRows.map(r => r.actor_id);
+  let members: Awaited<ReturnType<typeof interaction.guild.members.fetch>> | undefined;
+  try {
+    members = await interaction.guild?.members.fetch({ user: memberIds });
+  } catch {
+    // If batch fetch fails, continue with empty map - names will show as "Unknown"
+  }
+
   // Build ModStats array for image generation
   const modStatsData: ModStats[] = [];
 
@@ -126,19 +137,17 @@ export async function handleLeaderboard(interaction: ChatInputCommandInteraction
     const avgTime = getAvgClaimToDecision(interaction.guildId, row.actor_id, windowStartS);
     const rejects = row.rejections + row.perm_reject + row.kicks;
 
-    // Fetch display name and role color
+    // Get display name and role color from batch-fetched members
     let displayName = "Unknown";
     let roleColor: string | undefined;
-    try {
-      const member = await interaction.guild?.members.fetch(row.actor_id);
-      displayName = member?.displayName || "Unknown";
+    const member = members?.get(row.actor_id);
+    if (member) {
+      displayName = member.displayName || "Unknown";
       // Get display color (highest colored role)
-      const hexColor = member?.displayHexColor;
+      const hexColor = member.displayHexColor;
       if (hexColor && hexColor !== "#000000") {
         roleColor = hexColor;
       }
-    } catch {
-      // User may have left the server
     }
 
     modStatsData.push({

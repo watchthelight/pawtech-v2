@@ -6,7 +6,6 @@
  *  - createSession(guildId, type, scope, ...) → session ID
  *  - getActiveSession(guildId, type) → session or null
  *  - markUserScanned(sessionId, userId) → void
- *  - isUserScanned(sessionId, userId) → boolean
  *  - getScannedUserIds(sessionId) → Set<string>
  *  - updateProgress(sessionId, scanned, flagged, apiCalls) → void
  *  - completeSession(sessionId) → void
@@ -16,6 +15,48 @@
 
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
+
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const createSessionStmt = db.prepare(
+  `INSERT INTO audit_sessions (guild_id, audit_type, scope, started_by, total_to_scan, channel_id)
+   VALUES (?, ?, ?, ?, ?, ?)`
+);
+
+const getActiveSessionStmt = db.prepare(
+  `SELECT * FROM audit_sessions
+   WHERE guild_id = ? AND audit_type = ? AND status = 'in_progress'
+   ORDER BY started_at DESC
+   LIMIT 1`
+);
+
+const markUserScannedStmt = db.prepare(
+  `INSERT OR IGNORE INTO audit_scanned_users (session_id, user_id) VALUES (?, ?)`
+);
+
+const getScannedUserIdsStmt = db.prepare(
+  `SELECT user_id FROM audit_scanned_users WHERE session_id = ?`
+);
+
+const updateProgressStmt = db.prepare(
+  `UPDATE audit_sessions
+   SET scanned_count = ?, flagged_count = ?, api_calls = ?
+   WHERE id = ?`
+);
+
+const completeSessionStmt = db.prepare(
+  `UPDATE audit_sessions
+   SET status = 'completed', completed_at = datetime('now')
+   WHERE id = ?`
+);
+
+const cancelSessionStmt = db.prepare(
+  `UPDATE audit_sessions
+   SET status = 'cancelled', completed_at = datetime('now')
+   WHERE id = ?`
+);
 
 export interface AuditSession {
   id: number;
@@ -47,11 +88,7 @@ export function createSession(params: {
   const { guildId, auditType, scope, startedBy, totalToScan, channelId } = params;
 
   try {
-    const result = db.prepare(
-      `INSERT INTO audit_sessions (guild_id, audit_type, scope, started_by, total_to_scan, channel_id)
-       VALUES (?, ?, ?, ?, ?, ?)`
-    ).run(guildId, auditType, scope, startedBy, totalToScan, channelId);
-
+    const result = createSessionStmt.run(guildId, auditType, scope, startedBy, totalToScan, channelId);
     const sessionId = result.lastInsertRowid as number;
 
     logger.info(
@@ -74,13 +111,7 @@ export function getActiveSession(
   auditType: "members" | "nsfw"
 ): AuditSession | null {
   try {
-    const row = db.prepare(
-      `SELECT * FROM audit_sessions
-       WHERE guild_id = ? AND audit_type = ? AND status = 'in_progress'
-       ORDER BY started_at DESC
-       LIMIT 1`
-    ).get(guildId, auditType) as AuditSession | undefined;
-
+    const row = getActiveSessionStmt.get(guildId, auditType) as AuditSession | undefined;
     return row ?? null;
   } catch (err) {
     logger.error({ err, guildId, auditType }, "[auditSessionStore] Failed to get active session");
@@ -93,26 +124,9 @@ export function getActiveSession(
  */
 export function markUserScanned(sessionId: number, userId: string): void {
   try {
-    db.prepare(
-      `INSERT OR IGNORE INTO audit_scanned_users (session_id, user_id) VALUES (?, ?)`
-    ).run(sessionId, userId);
+    markUserScannedStmt.run(sessionId, userId);
   } catch (err) {
     logger.error({ err, sessionId, userId }, "[auditSessionStore] Failed to mark user scanned");
-  }
-}
-
-/**
- * Check if a user has been scanned in the current session
- */
-export function isUserScanned(sessionId: number, userId: string): boolean {
-  try {
-    const row = db.prepare(
-      `SELECT 1 FROM audit_scanned_users WHERE session_id = ? AND user_id = ?`
-    ).get(sessionId, userId);
-    return row !== undefined;
-  } catch (err) {
-    logger.error({ err, sessionId, userId }, "[auditSessionStore] Failed to check if user scanned");
-    return false;
   }
 }
 
@@ -121,10 +135,7 @@ export function isUserScanned(sessionId: number, userId: string): boolean {
  */
 export function getScannedUserIds(sessionId: number): Set<string> {
   try {
-    const rows = db.prepare(
-      `SELECT user_id FROM audit_scanned_users WHERE session_id = ?`
-    ).all(sessionId) as Array<{ user_id: string }>;
-
+    const rows = getScannedUserIdsStmt.all(sessionId) as Array<{ user_id: string }>;
     return new Set(rows.map((r) => r.user_id));
   } catch (err) {
     logger.error({ err, sessionId }, "[auditSessionStore] Failed to get scanned user IDs");
@@ -142,11 +153,7 @@ export function updateProgress(
   apiCalls: number
 ): void {
   try {
-    db.prepare(
-      `UPDATE audit_sessions
-       SET scanned_count = ?, flagged_count = ?, api_calls = ?
-       WHERE id = ?`
-    ).run(scannedCount, flaggedCount, apiCalls, sessionId);
+    updateProgressStmt.run(scannedCount, flaggedCount, apiCalls, sessionId);
   } catch (err) {
     logger.error({ err, sessionId }, "[auditSessionStore] Failed to update progress");
   }
@@ -157,12 +164,7 @@ export function updateProgress(
  */
 export function completeSession(sessionId: number): void {
   try {
-    db.prepare(
-      `UPDATE audit_sessions
-       SET status = 'completed', completed_at = datetime('now')
-       WHERE id = ?`
-    ).run(sessionId);
-
+    completeSessionStmt.run(sessionId);
     logger.info({ sessionId }, "[auditSessionStore] Completed audit session");
   } catch (err) {
     logger.error({ err, sessionId }, "[auditSessionStore] Failed to complete session");
@@ -174,29 +176,9 @@ export function completeSession(sessionId: number): void {
  */
 export function cancelSession(sessionId: number): void {
   try {
-    db.prepare(
-      `UPDATE audit_sessions
-       SET status = 'cancelled', completed_at = datetime('now')
-       WHERE id = ?`
-    ).run(sessionId);
-
+    cancelSessionStmt.run(sessionId);
     logger.info({ sessionId }, "[auditSessionStore] Cancelled audit session");
   } catch (err) {
     logger.error({ err, sessionId }, "[auditSessionStore] Failed to cancel session");
-  }
-}
-
-/**
- * Get count of scanned users for a session
- */
-export function getScannedCount(sessionId: number): number {
-  try {
-    const row = db.prepare(
-      `SELECT COUNT(*) as count FROM audit_scanned_users WHERE session_id = ?`
-    ).get(sessionId) as { count: number } | undefined;
-    return row?.count ?? 0;
-  } catch (err) {
-    logger.error({ err, sessionId }, "[auditSessionStore] Failed to get scanned count");
-    return 0;
   }
 }

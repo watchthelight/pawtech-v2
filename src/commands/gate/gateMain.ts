@@ -43,7 +43,7 @@ import { secureCompare } from "../../lib/secureCompare.js";
 import { logger } from "../../lib/logger.js";
 import { env } from "../../lib/env.js";
 import type { GuildMember } from "discord.js";
-import { isGuildMember } from "../../utils/typeGuards.js";
+import { isGuildMember } from "../../lib/typeGuards.js";
 
 export const data = new SlashCommandBuilder()
   .setName("gate")

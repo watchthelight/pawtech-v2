@@ -59,9 +59,6 @@ export function getIgnoredArtistUsers(guildId: string): Set<string> {
   return FALLBACK_IGNORED_ARTIST_USER_IDS;
 }
 
-/** @deprecated Use getIgnoredArtistUsers(guildId) instead */
-export const IGNORED_ARTIST_USER_IDS = FALLBACK_IGNORED_ARTIST_USER_IDS;
-
 /** Community Ambassador role - can use /redeemreward command */
 export const AMBASSADOR_ROLE_ID = "896070888762535967";
 

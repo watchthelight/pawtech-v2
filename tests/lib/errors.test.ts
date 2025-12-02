@@ -15,10 +15,7 @@ import {
   classifyError,
   isRecoverable,
   shouldReportToSentry,
-  isInteractionExpired,
-  isAlreadyAcknowledged,
   isConstraintViolation,
-  isDatabaseCorrupt,
   errorContext,
   userFriendlyMessage,
   type ClassifiedError,
@@ -383,35 +380,6 @@ describe("shouldReportToSentry", () => {
 
 // ===== Error Predicate Tests =====
 
-describe("isInteractionExpired", () => {
-  it("returns true for 10062 errors", () => {
-    const err = classifyError(createDiscordAPIError(10062, "Unknown interaction"));
-    expect(isInteractionExpired(err)).toBe(true);
-  });
-
-  it("returns false for other errors", () => {
-    const err = classifyError(createDiscordAPIError(50013, "Missing Permissions"));
-    expect(isInteractionExpired(err)).toBe(false);
-  });
-
-  it("returns false for non-Discord errors", () => {
-    const err = classifyError(new Error("something else"));
-    expect(isInteractionExpired(err)).toBe(false);
-  });
-});
-
-describe("isAlreadyAcknowledged", () => {
-  it("returns true for 40060 errors", () => {
-    const err = classifyError(createDiscordAPIError(40060, "Interaction has already been acknowledged"));
-    expect(isAlreadyAcknowledged(err)).toBe(true);
-  });
-
-  it("returns false for other errors", () => {
-    const err = classifyError(createDiscordAPIError(10062, "Unknown interaction"));
-    expect(isAlreadyAcknowledged(err)).toBe(false);
-  });
-});
-
 describe("isConstraintViolation", () => {
   it("returns true for SQLITE_CONSTRAINT", () => {
     const err = classifyError(createSqliteError("SQLITE_CONSTRAINT", "constraint failed"));
@@ -441,23 +409,6 @@ describe("isConstraintViolation", () => {
   it("returns false for non-database errors", () => {
     const err = classifyError(new Error("not a db error"));
     expect(isConstraintViolation(err)).toBe(false);
-  });
-});
-
-describe("isDatabaseCorrupt", () => {
-  it("returns true for SQLITE_CORRUPT", () => {
-    const err = classifyError(createSqliteError("SQLITE_CORRUPT", "database disk image is malformed"));
-    expect(isDatabaseCorrupt(err)).toBe(true);
-  });
-
-  it("returns true for SQLITE_NOTADB", () => {
-    const err = classifyError(createSqliteError("SQLITE_NOTADB", "file is not a database"));
-    expect(isDatabaseCorrupt(err)).toBe(true);
-  });
-
-  it("returns false for other database errors", () => {
-    const err = classifyError(createSqliteError("SQLITE_ERROR", "syntax error"));
-    expect(isDatabaseCorrupt(err)).toBe(false);
   });
 });
 

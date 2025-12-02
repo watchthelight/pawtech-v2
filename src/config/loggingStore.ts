@@ -15,6 +15,22 @@ import { logger } from "../lib/logger.js";
 import { LRUCache } from "../lib/lruCache.js";
 
 // ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const getLoggingChannelStmt = db.prepare(
+  `SELECT logging_channel_id FROM guild_config WHERE guild_id = ?`
+);
+
+const upsertLoggingChannelStmt = db.prepare(
+  `INSERT INTO guild_config (guild_id, logging_channel_id, updated_at_s)
+   VALUES (?, ?, ?)
+   ON CONFLICT(guild_id) DO UPDATE SET
+     logging_channel_id = excluded.logging_channel_id,
+     updated_at_s = excluded.updated_at_s`
+);
+
+// ============================================================================
 // Cache Layer
 // ============================================================================
 // LRU cache with TTL and bounded size to prevent unbounded memory growth.
@@ -90,9 +106,7 @@ export function getLoggingChannelId(guildId: string): string | null {
   try {
     // First, check for guild-specific override in guild_config table
     // This allows individual guilds to set their own logging channel via /config set logging
-    const row = db
-      .prepare(`SELECT logging_channel_id FROM guild_config WHERE guild_id = ?`)
-      .get(guildId) as { logging_channel_id: string | null } | undefined;
+    const row = getLoggingChannelStmt.get(guildId) as { logging_channel_id: string | null } | undefined;
 
     if (row?.logging_channel_id) {
       result = row.logging_channel_id;
@@ -133,15 +147,7 @@ export function setLoggingChannelId(guildId: string, channelId: string): void {
     // UPSERT pattern: insert new row or update existing guild_config entry
     // ON CONFLICT ensures idempotent updates (safe to call multiple times)
     // This is called by /config set logging command (ManageGuild permission required)
-    db.prepare(
-      `
-      INSERT INTO guild_config (guild_id, logging_channel_id, updated_at_s)
-      VALUES (?, ?, ?)
-      ON CONFLICT(guild_id) DO UPDATE SET
-        logging_channel_id = excluded.logging_channel_id,
-        updated_at_s = excluded.updated_at_s
-    `
-    ).run(guildId, channelId, nowS);
+    upsertLoggingChannelStmt.run(guildId, channelId, nowS);
 
     // Invalidate cache AFTER successful write to prevent serving stale data
     // This ensures any subsequent reads get the fresh value from DB

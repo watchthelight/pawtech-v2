@@ -15,6 +15,44 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { FLAG_REASON_MAX_LENGTH } from "../lib/constants.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const getExistingFlagStmt = db.prepare(
+  `SELECT guild_id, user_id, joined_at, flagged_at, flagged_reason, manual_flag, flagged_by
+   FROM user_activity
+   WHERE guild_id = ? AND user_id = ? AND flagged_at IS NOT NULL`
+);
+
+const getFlaggedUserIdsStmt = db.prepare(
+  `SELECT user_id FROM user_activity WHERE guild_id = ? AND flagged_at IS NOT NULL`
+);
+
+const checkExistingRowStmt = db.prepare(
+  `SELECT * FROM user_activity WHERE guild_id = ? AND user_id = ?`
+);
+
+const updateManualFlagStmt = db.prepare(
+  `UPDATE user_activity
+   SET flagged_at = ?,
+       flagged_reason = ?,
+       manual_flag = 1,
+       flagged_by = ?
+   WHERE guild_id = ? AND user_id = ?`
+);
+
+const insertManualFlagStmt = db.prepare(
+  `INSERT INTO user_activity (guild_id, user_id, joined_at, flagged_at, flagged_reason, manual_flag, flagged_by)
+   VALUES (?, ?, ?, ?, ?, 1, ?)`
+);
+
+const getResultRowStmt = db.prepare(
+  `SELECT guild_id, user_id, joined_at, flagged_at, flagged_reason, manual_flag, flagged_by
+   FROM user_activity
+   WHERE guild_id = ? AND user_id = ?`
+);
+
 export interface FlagRow {
   guild_id: string;
   user_id: string;
@@ -40,14 +78,7 @@ export interface FlagRow {
  */
 export function getExistingFlag(guildId: string, userId: string): FlagRow | null {
   try {
-    const row = db
-      .prepare(
-        `SELECT guild_id, user_id, joined_at, flagged_at, flagged_reason, manual_flag, flagged_by
-         FROM user_activity
-         WHERE guild_id = ? AND user_id = ? AND flagged_at IS NOT NULL`
-      )
-      .get(guildId, userId) as FlagRow | undefined;
-
+    const row = getExistingFlagStmt.get(guildId, userId) as FlagRow | undefined;
     return row || null;
   } catch (err) {
     logger.error({ err, guildId, userId }, "[flagsStore] Failed to get existing flag");
@@ -80,12 +111,7 @@ export function isAlreadyFlagged(guildId: string, userId: string): boolean {
  */
 export function getFlaggedUserIds(guildId: string): string[] {
   try {
-    const rows = db
-      .prepare(
-        `SELECT user_id FROM user_activity WHERE guild_id = ? AND flagged_at IS NOT NULL`
-      )
-      .all(guildId) as Array<{ user_id: string }>;
-
+    const rows = getFlaggedUserIdsStmt.all(guildId) as Array<{ user_id: string }>;
     return rows.map((row) => row.user_id);
   } catch (err) {
     logger.error({ err, guildId }, "[flagsStore] Failed to get flagged user IDs");
@@ -129,43 +155,21 @@ export function upsertManualFlag(params: {
 
   try {
     // Check if row exists
-    const existing = db
-      .prepare(`SELECT * FROM user_activity WHERE guild_id = ? AND user_id = ?`)
-      .get(guildId, userId) as FlagRow | undefined;
+    const existing = checkExistingRowStmt.get(guildId, userId) as FlagRow | undefined;
 
     if (existing) {
       // UPDATE existing row with manual flag data
-      db.prepare(
-        `UPDATE user_activity
-         SET flagged_at = ?,
-             flagged_reason = ?,
-             manual_flag = 1,
-             flagged_by = ?
-         WHERE guild_id = ? AND user_id = ?`
-      ).run(now, sanitizedReason, flaggedBy, guildId, userId);
-
+      updateManualFlagStmt.run(now, sanitizedReason, flaggedBy, guildId, userId);
       logger.info({ guildId, userId, flaggedBy }, "[flagsStore] Updated existing row with manual flag");
     } else {
       // INSERT new row with manual flag
       const finalJoinedAt = joinedAt ?? now;
-
-      db.prepare(
-        `INSERT INTO user_activity (guild_id, user_id, joined_at, flagged_at, flagged_reason, manual_flag, flagged_by)
-         VALUES (?, ?, ?, ?, ?, 1, ?)`
-      ).run(guildId, userId, finalJoinedAt, now, sanitizedReason, flaggedBy);
-
+      insertManualFlagStmt.run(guildId, userId, finalJoinedAt, now, sanitizedReason, flaggedBy);
       logger.info({ guildId, userId, flaggedBy }, "[flagsStore] Inserted new manual flag row");
     }
 
     // Return updated/inserted row
-    const result = db
-      .prepare(
-        `SELECT guild_id, user_id, joined_at, flagged_at, flagged_reason, manual_flag, flagged_by
-         FROM user_activity
-         WHERE guild_id = ? AND user_id = ?`
-      )
-      .get(guildId, userId) as FlagRow;
-
+    const result = getResultRowStmt.get(guildId, userId) as FlagRow;
     return result;
   } catch (err) {
     logger.error({ err, guildId, userId, flaggedBy }, "[flagsStore] Failed to upsert manual flag");

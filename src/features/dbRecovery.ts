@@ -26,6 +26,55 @@ import { logger } from "../lib/logger.js";
 const execAsync = promisify(exec);
 
 // ============================================================================
+// Security: Path Traversal Protection
+// ============================================================================
+
+/**
+ * Regex for validating safe backup filenames.
+ * Only allows alphanumeric, underscore, hyphen, and dot characters.
+ * Must end with .db extension.
+ */
+const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-.]+\.db$/;
+
+/**
+ * Safely join a base directory with a filename, preventing path traversal attacks.
+ * Validates that the resolved path is actually within the base directory.
+ *
+ * @param baseDir - The base directory (must be absolute)
+ * @param filename - The filename to join
+ * @returns The resolved absolute path
+ * @throws Error if path traversal is detected or filename is invalid
+ */
+function safeJoinPath(baseDir: string, filename: string): string {
+  // First, validate filename format
+  if (!SAFE_FILENAME_REGEX.test(filename)) {
+    logger.error(
+      { filename, baseDir },
+      "[dbRecovery] Invalid backup filename rejected - potential path traversal"
+    );
+    throw new Error("Invalid backup filename");
+  }
+
+  // Join and resolve the path
+  const filePath = path.join(baseDir, filename);
+  const resolvedPath = path.resolve(filePath);
+  const resolvedBase = path.resolve(baseDir);
+
+  // Verify the resolved path is within the base directory
+  // Using startsWith with path.sep ensures we don't match partial directory names
+  // e.g., /backups wouldn't match /backups-other/file.db
+  if (!resolvedPath.startsWith(resolvedBase + path.sep) && resolvedPath !== resolvedBase) {
+    logger.error(
+      { filename, resolvedPath, resolvedBase },
+      "[dbRecovery] Path traversal attempt detected"
+    );
+    throw new Error("Path traversal attempt detected");
+  }
+
+  return resolvedPath;
+}
+
+// ============================================================================
 // Types
 // ============================================================================
 
@@ -97,7 +146,13 @@ export async function listCandidates(): Promise<BackupCandidate[]> {
     const candidates: BackupCandidate[] = [];
 
     for (const filename of dbFiles) {
-      const filePath = path.join(backupsDir, filename);
+      // Security: Validate filename even though it comes from fs.readdir (defense in depth)
+      // Skip files with suspicious names rather than throw
+      if (!SAFE_FILENAME_REGEX.test(filename)) {
+        logger.warn({ filename }, "[dbRecovery] Skipping file with invalid filename");
+        continue;
+      }
+      const filePath = safeJoinPath(backupsDir, filename);
       try {
         const stats = await fs.stat(filePath);
 

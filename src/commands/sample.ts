@@ -28,7 +28,7 @@ import {
   SAMPLE_HISTORY,
 } from "../constants/sampleData.js";
 import { canRunAllCommands, hasManageGuild, isReviewer } from "../lib/config.js";
-import { isGuildMember } from "../utils/typeGuards.js";
+import { isGuildMember } from "../lib/typeGuards.js";
 
 export const data = new SlashCommandBuilder()
   .setName("sample")

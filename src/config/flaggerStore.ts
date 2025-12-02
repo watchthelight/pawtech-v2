@@ -16,6 +16,30 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { LRUCache } from "../lib/lruCache.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const getFlaggerConfigStmt = db.prepare(
+  `SELECT flags_channel_id, silent_first_msg_days FROM guild_config WHERE guild_id = ?`
+);
+
+const upsertFlagsChannelStmt = db.prepare(
+  `INSERT INTO guild_config (guild_id, flags_channel_id, updated_at_s)
+   VALUES (?, ?, ?)
+   ON CONFLICT(guild_id) DO UPDATE SET
+     flags_channel_id = excluded.flags_channel_id,
+     updated_at_s = excluded.updated_at_s`
+);
+
+const upsertSilentDaysStmt = db.prepare(
+  `INSERT INTO guild_config (guild_id, silent_first_msg_days, updated_at_s)
+   VALUES (?, ?, ?)
+   ON CONFLICT(guild_id) DO UPDATE SET
+     silent_first_msg_days = excluded.silent_first_msg_days,
+     updated_at_s = excluded.updated_at_s`
+);
+
 export interface FlaggerConfig {
   channelId: string | null;
   silentDays: number;
@@ -96,11 +120,7 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
   try {
     // First, check for guild-specific override in guild_config table
     // This allows individual guilds to set their own flags channel via /config set flags.channel
-    const row = db
-      .prepare(
-        `SELECT flags_channel_id, silent_first_msg_days FROM guild_config WHERE guild_id = ?`
-      )
-      .get(guildId) as
+    const row = getFlaggerConfigStmt.get(guildId) as
       | { flags_channel_id: string | null; silent_first_msg_days: number | null }
       | undefined;
 
@@ -165,15 +185,7 @@ export function setFlagsChannelId(guildId: string, channelId: string): void {
     // UPSERT pattern: insert new row or update existing guild_config entry
     // ON CONFLICT ensures idempotent updates (safe to call multiple times)
     // This is called by /config set flags.channel command (ManageGuild permission required)
-    db.prepare(
-      `
-      INSERT INTO guild_config (guild_id, flags_channel_id, updated_at_s)
-      VALUES (?, ?, ?)
-      ON CONFLICT(guild_id) DO UPDATE SET
-        flags_channel_id = excluded.flags_channel_id,
-        updated_at_s = excluded.updated_at_s
-    `
-    ).run(guildId, channelId, nowS);
+    upsertFlagsChannelStmt.run(guildId, channelId, nowS);
 
     // Invalidate cache AFTER successful write to prevent serving stale data
     // This ensures any subsequent reads get the fresh value from DB
@@ -219,15 +231,7 @@ export function setSilentFirstMsgDays(guildId: string, days: number): void {
 
   try {
     // UPSERT pattern: insert new row or update existing guild_config entry
-    db.prepare(
-      `
-      INSERT INTO guild_config (guild_id, silent_first_msg_days, updated_at_s)
-      VALUES (?, ?, ?)
-      ON CONFLICT(guild_id) DO UPDATE SET
-        silent_first_msg_days = excluded.silent_first_msg_days,
-        updated_at_s = excluded.updated_at_s
-    `
-    ).run(guildId, days, nowS);
+    upsertSilentDaysStmt.run(guildId, days, nowS);
 
     // Invalidate cache AFTER successful write to prevent serving stale data
     invalidateCache(guildId);

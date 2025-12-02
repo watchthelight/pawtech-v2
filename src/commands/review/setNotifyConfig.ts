@@ -18,7 +18,7 @@ import type { CommandContext } from "../../lib/cmdWrap.js";
 import { setNotifyConfig, getNotifyConfig, type NotifyConfig } from "../../features/notifyConfig.js";
 import { logActionPretty } from "../../logging/pretty.js";
 import { logger } from "../../lib/logger.js";
-import { requireAdminOrLeadership } from "../../utils/requireAdminOrLeadership.js";
+import { requireAdminOrLeadership } from "../../lib/config.js";
 import { db } from "../../db/db.js";
 
 /**

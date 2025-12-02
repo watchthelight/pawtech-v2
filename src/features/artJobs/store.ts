@@ -17,14 +17,82 @@ import type {
   JobStatus,
 } from "./types.js";
 
+// ============================================================================
+// Prepared Statements (cached at module load for performance)
+// ============================================================================
+
+const getMaxJobNumberStmt = db.prepare(
+  `SELECT MAX(job_number) as max_num FROM art_job WHERE guild_id = ?`
+);
+
+const getMaxArtistJobNumberStmt = db.prepare(
+  `SELECT MAX(artist_job_number) as max_num FROM art_job WHERE guild_id = ? AND artist_id = ?`
+);
+
+const insertJobStmt = db.prepare(
+  `INSERT INTO art_job (guild_id, job_number, artist_id, artist_job_number, recipient_id, ticket_type, assignment_log_id)
+   VALUES (?, ?, ?, ?, ?, ?, ?)`
+);
+
+const getJobByIdStmt = db.prepare(`SELECT * FROM art_job WHERE id = ?`);
+
+const getJobByNumberStmt = db.prepare(
+  `SELECT * FROM art_job WHERE guild_id = ? AND job_number = ?`
+);
+
+const getJobByArtistNumberStmt = db.prepare(
+  `SELECT * FROM art_job WHERE guild_id = ? AND artist_id = ? AND artist_job_number = ?`
+);
+
+const getJobByRecipientStmt = db.prepare(
+  `SELECT * FROM art_job
+   WHERE guild_id = ? AND artist_id = ? AND recipient_id = ? AND ticket_type = ? AND status != 'done'
+   ORDER BY assigned_at DESC LIMIT 1`
+);
+
+const getActiveJobsForArtistStmt = db.prepare(
+  `SELECT * FROM art_job
+   WHERE guild_id = ? AND artist_id = ? AND status != 'done'
+   ORDER BY artist_job_number ASC`
+);
+
+const getAllActiveJobsStmt = db.prepare(
+  `SELECT * FROM art_job
+   WHERE guild_id = ? AND status != 'done'
+   ORDER BY job_number ASC`
+);
+
+const getActiveJobsForRecipientStmt = db.prepare(
+  `SELECT * FROM art_job
+   WHERE guild_id = ? AND recipient_id = ? AND status != 'done'
+   ORDER BY assigned_at DESC`
+);
+
+const getAllTimeLeaderboardStmt = db.prepare(
+  `SELECT artist_id as artistId, COUNT(*) as completedCount
+   FROM art_job
+   WHERE guild_id = ? AND status = 'done'
+   GROUP BY artist_id
+   ORDER BY completedCount DESC
+   LIMIT ?`
+);
+
+const getMonthlyCompletedStmt = db.prepare(
+  `SELECT COUNT(*) as count FROM art_job
+   WHERE guild_id = ? AND artist_id = ? AND status = 'done' AND completed_at >= ?`
+);
+
+const getAllTimeCompletedStmt = db.prepare(
+  `SELECT COUNT(*) as count FROM art_job
+   WHERE guild_id = ? AND artist_id = ? AND status = 'done'`
+);
+
 /**
  * getNextJobNumber
  * WHAT: Get the next global job number for a guild.
  */
 function getNextJobNumber(guildId: string): number {
-  const row = db
-    .prepare(`SELECT MAX(job_number) as max_num FROM art_job WHERE guild_id = ?`)
-    .get(guildId) as { max_num: number | null } | undefined;
+  const row = getMaxJobNumberStmt.get(guildId) as { max_num: number | null } | undefined;
   return (row?.max_num ?? 0) + 1;
 }
 
@@ -33,9 +101,7 @@ function getNextJobNumber(guildId: string): number {
  * WHAT: Get the next per-artist job number.
  */
 function getNextArtistJobNumber(guildId: string, artistId: string): number {
-  const row = db
-    .prepare(`SELECT MAX(artist_job_number) as max_num FROM art_job WHERE guild_id = ? AND artist_id = ?`)
-    .get(guildId, artistId) as { max_num: number | null } | undefined;
+  const row = getMaxArtistJobNumberStmt.get(guildId, artistId) as { max_num: number | null } | undefined;
   return (row?.max_num ?? 0) + 1;
 }
 
@@ -48,20 +114,15 @@ export function createJob(options: CreateJobOptions): CreateJobResult {
   const jobNumber = getNextJobNumber(options.guildId);
   const artistJobNumber = getNextArtistJobNumber(options.guildId, options.artistId);
 
-  const result = db
-    .prepare(
-      `INSERT INTO art_job (guild_id, job_number, artist_id, artist_job_number, recipient_id, ticket_type, assignment_log_id)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
-    )
-    .run(
-      options.guildId,
-      jobNumber,
-      options.artistId,
-      artistJobNumber,
-      options.recipientId,
-      options.ticketType,
-      options.assignmentLogId ?? null
-    );
+  const result = insertJobStmt.run(
+    options.guildId,
+    jobNumber,
+    options.artistId,
+    artistJobNumber,
+    options.recipientId,
+    options.ticketType,
+    options.assignmentLogId ?? null
+  );
 
   logger.info(
     {
@@ -87,7 +148,7 @@ export function createJob(options: CreateJobOptions): CreateJobResult {
  * WHAT: Get a job by its database ID.
  */
 export function getJobById(jobId: number): ArtJobRow | null {
-  const row = db.prepare(`SELECT * FROM art_job WHERE id = ?`).get(jobId) as ArtJobRow | undefined;
+  const row = getJobByIdStmt.get(jobId) as ArtJobRow | undefined;
   return row ?? null;
 }
 
@@ -96,9 +157,7 @@ export function getJobById(jobId: number): ArtJobRow | null {
  * WHAT: Get a job by global job number.
  */
 export function getJobByNumber(guildId: string, jobNumber: number): ArtJobRow | null {
-  const row = db
-    .prepare(`SELECT * FROM art_job WHERE guild_id = ? AND job_number = ?`)
-    .get(guildId, jobNumber) as ArtJobRow | undefined;
+  const row = getJobByNumberStmt.get(guildId, jobNumber) as ArtJobRow | undefined;
   return row ?? null;
 }
 
@@ -107,9 +166,7 @@ export function getJobByNumber(guildId: string, jobNumber: number): ArtJobRow | 
  * WHAT: Get a job by artist's personal job number.
  */
 export function getJobByArtistNumber(guildId: string, artistId: string, artistJobNumber: number): ArtJobRow | null {
-  const row = db
-    .prepare(`SELECT * FROM art_job WHERE guild_id = ? AND artist_id = ? AND artist_job_number = ?`)
-    .get(guildId, artistId, artistJobNumber) as ArtJobRow | undefined;
+  const row = getJobByArtistNumberStmt.get(guildId, artistId, artistJobNumber) as ArtJobRow | undefined;
   return row ?? null;
 }
 
@@ -124,13 +181,7 @@ export function getJobByRecipient(
   recipientId: string,
   ticketType: string
 ): ArtJobRow | null {
-  const row = db
-    .prepare(
-      `SELECT * FROM art_job
-       WHERE guild_id = ? AND artist_id = ? AND recipient_id = ? AND ticket_type = ? AND status != 'done'
-       ORDER BY assigned_at DESC LIMIT 1`
-    )
-    .get(guildId, artistId, recipientId, ticketType) as ArtJobRow | undefined;
+  const row = getJobByRecipientStmt.get(guildId, artistId, recipientId, ticketType) as ArtJobRow | undefined;
   return row ?? null;
 }
 
@@ -139,13 +190,7 @@ export function getJobByRecipient(
  * WHAT: Get all non-done jobs for an artist.
  */
 export function getActiveJobsForArtist(guildId: string, artistId: string): ArtJobRow[] {
-  return db
-    .prepare(
-      `SELECT * FROM art_job
-       WHERE guild_id = ? AND artist_id = ? AND status != 'done'
-       ORDER BY artist_job_number ASC`
-    )
-    .all(guildId, artistId) as ArtJobRow[];
+  return getActiveJobsForArtistStmt.all(guildId, artistId) as ArtJobRow[];
 }
 
 /**
@@ -153,13 +198,7 @@ export function getActiveJobsForArtist(guildId: string, artistId: string): ArtJo
  * WHAT: Get all active jobs for a guild (staff view).
  */
 export function getAllActiveJobs(guildId: string): ArtJobRow[] {
-  return db
-    .prepare(
-      `SELECT * FROM art_job
-       WHERE guild_id = ? AND status != 'done'
-       ORDER BY job_number ASC`
-    )
-    .all(guildId) as ArtJobRow[];
+  return getAllActiveJobsStmt.all(guildId) as ArtJobRow[];
 }
 
 /**
@@ -168,20 +207,29 @@ export function getAllActiveJobs(guildId: string): ArtJobRow[] {
  * WHY: Let art reward recipients check progress of their commissioned art.
  */
 export function getActiveJobsForRecipient(guildId: string, recipientId: string): ArtJobRow[] {
-  return db
-    .prepare(
-      `SELECT * FROM art_job
-       WHERE guild_id = ? AND recipient_id = ? AND status != 'done'
-       ORDER BY assigned_at DESC`
-    )
-    .all(guildId, recipientId) as ArtJobRow[];
+  return getActiveJobsForRecipientStmt.all(guildId, recipientId) as ArtJobRow[];
 }
+
+// Allowlist of valid update fields for updateJobStatus to prevent SQL injection.
+// Only these field names can be used in dynamic UPDATE statements.
+const ALLOWED_UPDATE_FIELDS = new Set(["status", "notes"]);
 
 /**
  * updateJobStatus
  * WHAT: Update a job's status and/or notes.
  */
 export function updateJobStatus(jobId: number, options: UpdateJobOptions): boolean {
+  // Security: Validate all keys in options against allowlist before building SQL
+  for (const key of Object.keys(options)) {
+    if (!ALLOWED_UPDATE_FIELDS.has(key)) {
+      logger.error(
+        { jobId, invalidKey: key },
+        "[artJobs] Invalid update field rejected - potential SQL injection attempt"
+      );
+      throw new Error(`Invalid update field: ${key}`);
+    }
+  }
+
   const updates: string[] = ["updated_at = datetime('now')"];
   const params: (string | null)[] = [];
 
@@ -246,16 +294,7 @@ export function getMonthlyLeaderboard(guildId: string, limit = 10): LeaderboardE
  * WHAT: Get artists ranked by all-time completed jobs.
  */
 export function getAllTimeLeaderboard(guildId: string, limit = 10): LeaderboardEntry[] {
-  return db
-    .prepare(
-      `SELECT artist_id as artistId, COUNT(*) as completedCount
-       FROM art_job
-       WHERE guild_id = ? AND status = 'done'
-       GROUP BY artist_id
-       ORDER BY completedCount DESC
-       LIMIT ?`
-    )
-    .all(guildId, limit) as LeaderboardEntry[];
+  return getAllTimeLeaderboardStmt.all(guildId, limit) as LeaderboardEntry[];
 }
 
 /**
@@ -268,19 +307,8 @@ export function getArtistStats(guildId: string, artistId: string): ArtistMonthly
   startOfMonth.setHours(0, 0, 0, 0);
   const startIso = startOfMonth.toISOString();
 
-  const monthly = db
-    .prepare(
-      `SELECT COUNT(*) as count FROM art_job
-       WHERE guild_id = ? AND artist_id = ? AND status = 'done' AND completed_at >= ?`
-    )
-    .get(guildId, artistId, startIso) as { count: number };
-
-  const allTime = db
-    .prepare(
-      `SELECT COUNT(*) as count FROM art_job
-       WHERE guild_id = ? AND artist_id = ? AND status = 'done'`
-    )
-    .get(guildId, artistId) as { count: number };
+  const monthly = getMonthlyCompletedStmt.get(guildId, artistId, startIso) as { count: number };
+  const allTime = getAllTimeCompletedStmt.get(guildId, artistId) as { count: number };
 
   return {
     artistId,
