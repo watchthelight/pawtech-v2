@@ -123,6 +123,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         });
       }
 
+      // Event listeners status
+      embed.addFields({
+        name: "Event Listeners",
+        value: "**NSFW Avatar Monitor**: Active",
+        inline: false,
+      });
+
       embed.setTimestamp();
 
       // Public by default (team status check), ephemeral only on timeout

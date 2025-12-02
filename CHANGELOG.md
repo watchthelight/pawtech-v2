@@ -9,6 +9,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.4.0] - 2025-12-03
+
+### Added
+- **Real-time NSFW Avatar Monitor** - Automatic scanning when users change avatars
+  - Listens to `guildMemberUpdate` events for avatar changes
+  - Scans new avatars with Google Vision API (80% threshold)
+  - Sends alert to logging channel with mod role ping
+  - Includes reverse image search link
+  - `src/features/avatarNsfwMonitor.ts` - New event listener
+- **NSFW Audit Resume Functionality** - Resume interrupted audits
+  - New `audit_sessions` and `audit_scanned_users` tables track progress
+  - Detects incomplete sessions and offers Resume/Start Fresh options
+  - Skips already-scanned users when resuming
+  - `src/store/auditSessionStore.ts` - Session tracking functions
+- **Health Command Enhancement** - Shows "Event Listeners" section
+  - Displays "NSFW Avatar Monitor: Active" status
+
+### Changed
+- **NSFW Audit Progress** - Better real-time feedback
+  - Progress bar now shows actual `current/total` (e.g., `500/2,500`)
+  - Updates every 10 members instead of 50
+  - Shows percentage completion
+  - Progress saved to database (survives restarts)
+
+---
+
 ## [4.3.0] - 2025-12-02
 
 ### Added

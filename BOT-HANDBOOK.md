@@ -812,6 +812,25 @@ Scan member avatars for NSFW content using Google Vision API SafeSearch detectio
 - Periodic server-wide avatar policy enforcement
 - Before server events or promotions
 
+**Resume functionality:**
+If an audit is interrupted (bot restart, error, etc.), running `/audit nsfw` again will detect the incomplete session and offer:
+- **Resume** — Continue where it left off, skipping already-scanned users
+- **Start Fresh** — Cancel the old session and start a new scan
+- **Cancel** — Do nothing
+
+Progress is saved to the database every 10 members, so you won't lose much work on interruption.
+
+#### Real-time Avatar Monitor
+
+In addition to manual audits, the bot automatically monitors avatar changes in real-time:
+
+- When any user changes their server avatar or global avatar, it's automatically scanned
+- If the avatar scores 80%+ adult content, an alert is sent to the logging channel
+- The alert pings the configured moderator role
+- Flagged users are saved to the `nsfw_flags` table
+
+This runs automatically — no commands needed. Check `/health` to confirm "NSFW Avatar Monitor: Active" is shown.
+
 ---
 
 ### `/approval-rate`
