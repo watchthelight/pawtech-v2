@@ -353,6 +353,48 @@ db.prepare(
 // WHY: Allows guilds to customize the threshold for short films vs feature films
 addColumnIfMissing("guild_movie_config", "qualification_threshold_minutes", "INTEGER DEFAULT 30");
 
+// Audit session tracking: stores audit progress for resume functionality
+// Allows interrupted audits (bot restart, errors) to be resumed where they left off
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS audit_sessions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    guild_id TEXT NOT NULL,
+    audit_type TEXT NOT NULL,
+    scope TEXT,
+    status TEXT NOT NULL DEFAULT 'in_progress',
+    started_by TEXT NOT NULL,
+    started_at TEXT NOT NULL DEFAULT (datetime('now')),
+    completed_at TEXT,
+    total_to_scan INTEGER NOT NULL DEFAULT 0,
+    scanned_count INTEGER NOT NULL DEFAULT 0,
+    flagged_count INTEGER NOT NULL DEFAULT 0,
+    api_calls INTEGER NOT NULL DEFAULT 0,
+    channel_id TEXT NOT NULL
+  )
+`
+).run();
+
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_audit_sessions_active ON audit_sessions(guild_id, audit_type, status)`
+).run();
+
+// Track which users have been scanned in each audit session (for resume)
+db.prepare(
+  `
+  CREATE TABLE IF NOT EXISTS audit_scanned_users (
+    session_id INTEGER NOT NULL,
+    user_id TEXT NOT NULL,
+    scanned_at TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (session_id, user_id)
+  )
+`
+).run();
+
+db.prepare(
+  `CREATE INDEX IF NOT EXISTS idx_audit_scanned_session ON audit_scanned_users(session_id)`
+).run();
+
 // NOTE: Database shutdown is handled by the coordinated graceful shutdown in index.ts
 // which ensures proper ordering (stop schedulers → cleanup features → close DB)
 // Do NOT add SIGTERM/SIGINT handlers here - they would conflict with the coordinated shutdown

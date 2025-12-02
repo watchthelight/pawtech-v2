@@ -36,6 +36,16 @@ import { isAlreadyFlagged, upsertManualFlag, getFlaggedUserIds } from "../store/
 import { detectNsfwVision } from "../features/googleVision.js";
 import { upsertNsfwFlag } from "../store/nsfwFlagsStore.js";
 import { googleReverseImageUrl } from "../ui/reviewCard.js";
+import {
+  createSession,
+  getActiveSession,
+  markUserScanned,
+  getScannedUserIds,
+  updateProgress,
+  completeSession,
+  cancelSession,
+  type AuditSession,
+} from "../store/auditSessionStore.js";
 
 // Allowed role IDs (Community Manager + Bot Developer)
 const ALLOWED_ROLES = [
@@ -105,7 +115,59 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   await interaction.deferReply();
 
   try {
-    // Fetch all members to get accurate count
+    // Check for active session that can be resumed
+    const activeSession = getActiveSession(guildId, subcommand as "members" | "nsfw");
+
+    if (activeSession) {
+      // Offer to resume the active session
+      const elapsed = Math.round((Date.now() - new Date(activeSession.started_at).getTime()) / 1000);
+      const remaining = activeSession.total_to_scan - activeSession.scanned_count;
+
+      const resumeEmbed = new EmbedBuilder()
+        .setTitle("🔄 Resume Previous Audit?")
+        .setDescription(
+          `Found an incomplete ${subcommand} audit that was interrupted.\n\n` +
+          `**Progress**: ${activeSession.scanned_count.toLocaleString()}/${activeSession.total_to_scan.toLocaleString()} scanned\n` +
+          `**Flagged**: ${activeSession.flagged_count}\n` +
+          `**Remaining**: ~${remaining.toLocaleString()} members\n` +
+          `**Started**: ${elapsed > 3600 ? `${Math.round(elapsed / 3600)}h ago` : `${Math.round(elapsed / 60)}m ago`}\n\n` +
+          `Do you want to **resume** where it left off or **start fresh**?`
+        )
+        .setColor(0x3B82F6)
+        .setFooter({ text: "Resume will skip already-scanned members." });
+
+      const nonce = generateNonce();
+      const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
+        new ButtonBuilder()
+          .setCustomId(`audit:${subcommand}:${nsfwScope ?? "none"}:resume:${activeSession.id}:${nonce}`)
+          .setLabel("Resume")
+          .setStyle(ButtonStyle.Primary)
+          .setEmoji("▶️"),
+        new ButtonBuilder()
+          .setCustomId(`audit:${subcommand}:${nsfwScope ?? "none"}:fresh:${activeSession.id}:${nonce}`)
+          .setLabel("Start Fresh")
+          .setStyle(ButtonStyle.Danger)
+          .setEmoji("🔄"),
+        new ButtonBuilder()
+          .setCustomId(`audit:${subcommand}:${nsfwScope ?? "none"}:cancel:0:${nonce}`)
+          .setLabel("Cancel")
+          .setStyle(ButtonStyle.Secondary)
+          .setEmoji("❌")
+      );
+
+      await interaction.editReply({
+        embeds: [resumeEmbed],
+        components: [row],
+      });
+
+      logger.info(
+        { userId: user.id, guildId, subcommand, sessionId: activeSession.id },
+        "[audit] Found active session, showing resume prompt"
+      );
+      return;
+    }
+
+    // No active session - show normal confirmation
     const members = await guild.members.fetch();
     const memberCount = members.size;
 
@@ -177,19 +239,24 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 }
 
 /**
- * Handle audit button interactions (Confirm/Cancel)
+ * Handle audit button interactions (Confirm/Cancel/Resume/Fresh)
  */
 export async function handleAuditButton(interaction: ButtonInteraction): Promise<void> {
   const { customId, user, guild, channel } = interaction;
 
   // Parse custom ID formats:
-  // - audit:members:confirm:nonce
-  // - audit:nsfw:all:confirm:nonce
-  // - audit:nsfw:flagged:confirm:nonce
+  // - audit:members:confirm:nonce (new audit)
+  // - audit:nsfw:all:confirm:nonce (new audit)
+  // - audit:nsfw:flagged:confirm:nonce (new audit)
+  // - audit:members:none:resume:sessionId:nonce (resume)
+  // - audit:nsfw:all:resume:sessionId:nonce (resume)
+  // - audit:nsfw:all:fresh:sessionId:nonce (start fresh, cancel old)
+  // - audit:nsfw:all:cancel:0:nonce (cancel without starting)
   const membersMatch = customId.match(/^audit:members:(confirm|cancel):([a-f0-9]{8})$/);
   const nsfwMatch = customId.match(/^audit:nsfw:(all|flagged):(confirm|cancel):([a-f0-9]{8})$/);
+  const resumeMatch = customId.match(/^audit:(members|nsfw):(all|flagged|none):(resume|fresh|cancel):(\d+):([a-f0-9]{8})$/);
 
-  if (!membersMatch && !nsfwMatch) {
+  if (!membersMatch && !nsfwMatch && !resumeMatch) {
     logger.warn({ customId }, "[audit] Invalid button custom ID format");
     await interaction.reply({
       content: "❌ Invalid button ID format.",
@@ -202,16 +269,24 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
   let action: string;
   let nonce: string;
   let scope: string | null = null;
+  let sessionId: number | null = null;
 
   if (membersMatch) {
     subcommand = "members";
     action = membersMatch[1];
     nonce = membersMatch[2];
-  } else {
+  } else if (nsfwMatch) {
     subcommand = "nsfw";
-    scope = nsfwMatch![1];
-    action = nsfwMatch![2];
-    nonce = nsfwMatch![3];
+    scope = nsfwMatch[1];
+    action = nsfwMatch[2];
+    nonce = nsfwMatch[3];
+  } else {
+    // Resume/fresh/cancel format
+    subcommand = resumeMatch![1];
+    scope = resumeMatch![2] === "none" ? null : resumeMatch![2];
+    action = resumeMatch![3];
+    sessionId = parseInt(resumeMatch![4], 10);
+    nonce = resumeMatch![5];
   }
 
   if (!guild) {
@@ -245,20 +320,36 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
     return;
   }
 
-  // action === "confirm"
+  // Handle "fresh" - cancel old session and start new
+  if (action === "fresh" && sessionId) {
+    cancelSession(sessionId);
+    logger.info({ sessionId }, "[audit] Cancelled old session for fresh start");
+  }
+
+  // For resume, use the existing session
+  const resumeSession = action === "resume" && sessionId ? getActiveSession(guild.id, subcommand as "members" | "nsfw") : null;
+
   logger.info(
-    { userId: user.id, guildId: guild.id, nonce, subcommand, scope },
+    { userId: user.id, guildId: guild.id, nonce, subcommand, scope, action, sessionId, resuming: !!resumeSession },
     "[audit] Audit confirmed, starting scan"
   );
 
-  // Update to show starting message
+  // Update to show starting message with proper progress bar
   const scopeLabel = scope === "flagged" ? " (flagged only)" : "";
-  const startTitle = subcommand === "nsfw" ? `🔞 Scanning avatars for NSFW content${scopeLabel}...` : "🔍 Auditing members...";
+  const resumeLabel = resumeSession ? " (resuming)" : "";
+  const startTitle = subcommand === "nsfw"
+    ? `🔞 Scanning avatars for NSFW content${scopeLabel}${resumeLabel}...`
+    : `🔍 Auditing members${resumeLabel}...`;
+
+  const initialProgress = resumeSession
+    ? `Resuming from ${resumeSession.scanned_count.toLocaleString()}/${resumeSession.total_to_scan.toLocaleString()}...`
+    : "Starting scan...";
+
   await interaction.update({
     embeds: [
       new EmbedBuilder()
         .setTitle(startTitle)
-        .setDescription(renderProgressBar(0, 1))
+        .setDescription(initialProgress)
         .setColor(subcommand === "nsfw" ? 0xE74C3C : 0x3B82F6),
     ],
     components: [],
@@ -266,11 +357,11 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
 
   // Run the appropriate audit in background (don't await - would timeout with large member counts)
   if (subcommand === "nsfw") {
-    runNsfwAudit(interaction, guild, channel as TextChannel, scope as "all" | "flagged").catch((err) => {
+    runNsfwAudit(interaction, guild, channel as TextChannel, (scope as "all" | "flagged") ?? "all", resumeSession).catch((err) => {
       logger.error({ err, guildId: guild.id, scope }, "[audit:nsfw] Background audit failed");
     });
   } else {
-    runMembersAudit(interaction, guild, channel as TextChannel).catch((err) => {
+    runMembersAudit(interaction, guild, channel as TextChannel, resumeSession).catch((err) => {
       logger.error({ err, guildId: guild.id }, "[audit:members] Background audit failed");
     });
   }
@@ -282,7 +373,8 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
 async function runMembersAudit(
   interaction: ButtonInteraction,
   guild: NonNullable<ButtonInteraction["guild"]>,
-  channel: TextChannel
+  channel: TextChannel,
+  resumeSession: AuditSession | null = null
 ): Promise<void> {
   const startTime = Date.now();
   const stats: AuditStats = createEmptyStats();
@@ -462,18 +554,24 @@ async function runNsfwAudit(
   interaction: ButtonInteraction,
   guild: NonNullable<ButtonInteraction["guild"]>,
   channel: TextChannel,
-  scope: "all" | "flagged"
+  scope: "all" | "flagged",
+  resumeSession: AuditSession | null = null
 ): Promise<void> {
   const startTime = Date.now();
-  let flaggedCount = 0;
-  let totalScanned = 0;
-  let apiCallCount = 0;
+  let flaggedCount = resumeSession?.flagged_count ?? 0;
+  let totalScanned = resumeSession?.scanned_count ?? 0;
+  let apiCallCount = resumeSession?.api_calls ?? 0;
   let skippedNoAvatar = 0;
+  let skippedAlreadyScanned = 0;
 
   const NSFW_THRESHOLD = 0.8; // 80% = hard evidence
+  const PROGRESS_UPDATE_INTERVAL = 10; // Update every 10 members for real-time feedback
+
+  // Load already-scanned user IDs if resuming
+  const alreadyScanned = resumeSession ? getScannedUserIds(resumeSession.id) : new Set<string>();
 
   try {
-    logger.info({ guildId: guild.id, scope }, "[audit:nsfw] Starting avatar scan...");
+    logger.info({ guildId: guild.id, scope, resuming: !!resumeSession, alreadyScannedCount: alreadyScanned.size }, "[audit:nsfw] Starting avatar scan...");
 
     // Collect members to scan based on scope
     const membersToScan: GuildMember[] = [];
@@ -519,11 +617,38 @@ async function runNsfwAudit(
       }
     }
 
-    logger.info({ guildId: guild.id, totalMembers: membersToScan.length }, "[audit:nsfw] Starting scan");
+    const totalMembers = membersToScan.length;
+    logger.info({ guildId: guild.id, totalMembers }, "[audit:nsfw] Starting scan");
+
+    // Create or use existing session
+    let sessionId: number;
+    if (resumeSession) {
+      sessionId = resumeSession.id;
+    } else {
+      sessionId = createSession({
+        guildId: guild.id,
+        auditType: "nsfw",
+        scope,
+        startedBy: interaction.user.id,
+        totalToScan: totalMembers,
+        channelId: channel.id,
+      });
+    }
 
     // Process collected members
+    let processedInThisRun = 0;
     for (const member of membersToScan) {
+      // Skip if already scanned in this session (for resume)
+      if (alreadyScanned.has(member.id)) {
+        skippedAlreadyScanned++;
+        continue;
+      }
+
+      processedInThisRun++;
       totalScanned++;
+
+      // Mark as scanned immediately (for resume support)
+      markUserScanned(sessionId, member.id);
 
       // Skip bots
       if (member.user.bot) {
@@ -575,7 +700,7 @@ async function runNsfwAudit(
             { name: "Classification", value: "Hard Evidence (Adult Content)" },
             { name: "Avatar", value: `[Reverse Image Search](${reverseSearchUrl})` }
           )
-          .setFooter({ text: `Scanned: ${totalScanned.toLocaleString()} members` });
+          .setFooter({ text: `Progress: ${totalScanned.toLocaleString()}/${totalMembers.toLocaleString()}` });
 
         await channel.send({ embeds: [flagEmbed] });
 
@@ -586,17 +711,22 @@ async function runNsfwAudit(
       // Small delay between API calls to avoid rate limiting
       await sleep(100);
 
-      // Update progress every 50 members
-      if (totalScanned % 50 === 0) {
+      // Update progress frequently for real-time feedback
+      if (processedInThisRun % PROGRESS_UPDATE_INTERVAL === 0) {
+        // Save progress to database
+        updateProgress(sessionId, totalScanned, flaggedCount, apiCallCount);
+
         try {
           const elapsed = Math.round((Date.now() - startTime) / 1000);
+          const pct = Math.round((totalScanned / totalMembers) * 100);
           await interaction.editReply({
             embeds: [
               new EmbedBuilder()
                 .setTitle("🔞 Scanning avatars for NSFW content...")
                 .setDescription(
-                  `**${totalScanned.toLocaleString()}** members scanned\n` +
-                  `**${flaggedCount}** flagged · **${apiCallCount}** API calls\n` +
+                  `${renderProgressBar(totalScanned, totalMembers)}\n\n` +
+                  `**${totalScanned.toLocaleString()}** / **${totalMembers.toLocaleString()}** members (${pct}%)\n` +
+                  `🚩 **${flaggedCount}** flagged · 📡 **${apiCallCount}** API calls\n` +
                   `⏱️ ${elapsed}s elapsed`
                 )
                 .setColor(0xE74C3C),
@@ -607,6 +737,9 @@ async function runNsfwAudit(
         }
       }
     }
+
+    // Mark session complete
+    completeSession(sessionId);
 
     // Calculate duration
     const durationSec = Math.round((Date.now() - startTime) / 1000);
@@ -625,6 +758,10 @@ async function runNsfwAudit(
         { name: "API Calls", value: apiCallCount.toString(), inline: true }
       )
       .setTimestamp();
+
+    if (resumeSession) {
+      summaryEmbed.addFields({ name: "Resumed", value: `Skipped ${skippedAlreadyScanned} already-scanned`, inline: true });
+    }
 
     await channel.send({ embeds: [summaryEmbed] });
 
@@ -650,7 +787,9 @@ async function runNsfwAudit(
         flaggedCount,
         apiCallCount,
         skippedNoAvatar,
+        skippedAlreadyScanned,
         durationSec,
+        resumed: !!resumeSession,
       },
       "[audit:nsfw] Audit complete"
     );

@@ -814,10 +814,24 @@ client.on("threadDelete", wrapEvent("threadDelete", async (thread) => {
 // DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-guildMemberUpdate
 import { handleLevelRoleAdded } from "./features/levelRewards.js";
 import { handleArtistRoleChange } from "./features/artistRotation/index.js";
+import { handleAvatarChange } from "./features/avatarNsfwMonitor.js";
 
 client.on("guildMemberUpdate", wrapEvent("guildMemberUpdate", async (oldMember, newMember) => {
   // Server Artist role detection (handles both add and remove)
   await handleArtistRoleChange(oldMember, newMember);
+
+  // NSFW Avatar monitoring: scan new server avatars
+  // WHY: Detect NSFW avatars as soon as users change them
+  // DOCS: See src/features/avatarNsfwMonitor.ts
+  try {
+    await handleAvatarChange(oldMember, newMember);
+  } catch (err) {
+    logger.error({
+      err,
+      userId: newMember.id,
+      guildId: newMember.guild.id,
+    }, "[guildMemberUpdate] Failed to scan avatar for NSFW");
+  }
 
   // Detect newly added roles for level rewards
   const addedRoles = newMember.roles.cache.filter(
