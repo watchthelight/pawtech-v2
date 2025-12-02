@@ -27,16 +27,17 @@ Everything you need to know about the bot — what it does, who can use it, and 
 - 2.6 [/analytics](#analytics) — Visual activity charts
 - 2.7 [/analytics-export](#analytics-export) — Export data as CSV
 - 2.8 [/flag](#flag) — Flag suspicious users
-- 2.9 [/approval-rate](#approval-rate) — Server-wide approval stats
-- 2.10 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
-  - 2.10.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
-  - 2.10.2 [What Gets Reset](#what-gets-reset)
-  - 2.10.3 [How the Epoch System Works](#how-the-epoch-system-works)
-  - 2.10.4 [Security Measures](#security-measures)
-- 2.11 [/sample](#sample) — Preview UI components for training
-  - 2.11.1 [/sample reviewcard](#sample-reviewcard)
-  - 2.11.2 [The Different Statuses](#the-different-statuses)
-  - 2.11.3 [Using Real Users in Samples](#using-real-users-in-samples)
+- 2.9 [/audit](#audit) — Bulk scan for bot accounts (restricted)
+- 2.10 [/approval-rate](#approval-rate) — Server-wide approval stats
+- 2.11 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
+  - 2.11.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
+  - 2.11.2 [What Gets Reset](#what-gets-reset)
+  - 2.11.3 [How the Epoch System Works](#how-the-epoch-system-works)
+  - 2.11.4 [Security Measures](#security-measures)
+- 2.12 [/sample](#sample) — Preview UI components for training
+  - 2.12.1 [/sample reviewcard](#sample-reviewcard)
+  - 2.12.2 [The Different Statuses](#the-different-statuses)
+  - 2.12.3 [Using Real Users in Samples](#using-real-users-in-samples)
 
 ### 3. [Artist Rotation](#artist-rotation)
 - 3.1 [How the Queue Works](#how-the-queue-works)
@@ -734,6 +735,50 @@ Flags don't automatically reject people — they just warn other reviewers to pa
 /flag user:@SuspiciousUser reason:Alt account of banned user
 /flag user:@NewAccount reason:Suspicious join pattern - review carefully
 ```
+
+---
+
+### `/audit`
+**Who can use it:** Community Managers and Bot Developer only (hardcoded user IDs)
+
+Bulk-scan all server members to detect bot accounts. This command crawls every member and flags suspicious accounts using multiple detection heuristics.
+
+**How it works:**
+1. Run `/audit` — you'll see a confirmation prompt with member count
+2. Click **Confirm** to start (or **Cancel** to abort)
+3. The bot scans every member and posts an embed for each flagged account
+4. A progress bar shows how far along the scan is
+5. At the end, you get a summary with total stats
+
+**Detection heuristics (scoring system):**
+
+| Check | Points | What it looks for |
+|-------|--------|-------------------|
+| No avatar | 2 | Default Discord profile picture |
+| New account | 3 | Discord account less than 7 days old |
+| No activity | 2 | No messages recorded in the server |
+| Low level | 1 | No Level 5+ Amaribot role |
+| Bot username | 2 | Patterns like `user_1234`, random strings, sequential numbers |
+
+**Threshold:** Accounts scoring 4+ points get flagged automatically.
+
+**What the flag embeds show:**
+- User mention and ID
+- Score (out of 11 possible points)
+- Which detection flags triggered
+- Progress bar showing scan progress
+
+**Important notes:**
+- Already-flagged users are skipped (won't double-flag)
+- Discord bot accounts are skipped
+- Flagged accounts use the same system as `/flag` — they show up in reviews
+- The scan can take a while on large servers (expect ~1 minute per 1000 members)
+- This command is restricted to prevent abuse — only 2 specific user IDs can run it
+
+**When to use this:**
+- After a suspected bot raid
+- Periodic cleanup of inactive/suspicious accounts
+- Before server events to ensure member quality
 
 ---
 

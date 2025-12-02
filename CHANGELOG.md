@@ -7,13 +7,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Bot Account Audit System** - `/audit` command for detecting suspicious bot accounts
+  - `src/commands/audit.ts` - Slash command with confirmation flow and live progress updates
+  - `src/features/botDetection.ts` - Detection heuristics (no avatar, new account, no activity, low level, bot-like username patterns)
+  - Scoring system: flags accounts with score >= 4 (max 11 points)
+  - Restricted to Community Manager and Bot Developer user IDs
+  - Progress bar showing scan progress with per-member embeds for flagged accounts
+- `CHANGELOG.md` - This file
+
 ### Removed
 - Suggestions feature (~1,700 lines) - unused, no guilds had configured it
   - `src/commands/suggest.ts`, `suggestion.ts`, `suggestions.ts`
   - `src/features/suggestions/` directory (embeds.ts, store.ts, voting.ts)
-
-### Added
-- `CHANGELOG.md` - This file
 
 ---
 

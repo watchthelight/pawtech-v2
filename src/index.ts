@@ -123,6 +123,7 @@ import {
   BTN_COPY_UID_RE,
   BTN_PING_UNVERIFIED_RE,
   BTN_DBRECOVER_RE,
+  BTN_AUDIT_RE,
   identifyModalRoute,
 } from "./lib/modalPatterns.js";
 import { REST, Routes } from "discord.js";
@@ -197,6 +198,10 @@ commands.set(resetdata.data.name, wrapCommand("resetdata", resetdata.execute));
 // Flag command (manual user flagging)
 import * as flag from "./commands/flag.js";
 commands.set(flag.data.name, wrapCommand("flag", flag.execute));
+
+// Audit command (bot account detection)
+import * as audit from "./commands/audit.js";
+commands.set(audit.data.name, wrapCommand("audit", audit.execute));
 
 // Unblock command (remove permanent rejection)
 import * as unblock from "./commands/unblock.js";
@@ -1148,6 +1153,24 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
               "route: database recovery"
             );
             await handleDbRecoveryButton(interaction);
+            succeeded = true;
+            return;
+          }
+
+          // Audit buttons (confirm/cancel for bot audit)
+          const auditMatch = customId.match(BTN_AUDIT_RE);
+          if (auditMatch) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "audit",
+                action: auditMatch[1],
+                traceId,
+              },
+              "route: audit"
+            );
+            await audit.handleAuditButton(interaction);
             succeeded = true;
             return;
           }

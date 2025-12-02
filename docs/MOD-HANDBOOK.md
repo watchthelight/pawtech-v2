@@ -59,6 +59,11 @@
     - [Workflow Summary](#workflow-summary)
     - [Best Practices for Artists](#best-practices-for-artists)
     - [Best Practices for Staff](#best-practices-for-staff)
+11. [Bot Account Detection](#11-bot-account-detection)
+    - [Overview](#overview-1)
+    - [Using the /audit Command](#using-the-audit-command)
+    - [Detection Heuristics](#detection-heuristics)
+    - [Reviewing Flagged Accounts](#reviewing-flagged-accounts)
 
 ---
 
@@ -919,6 +924,72 @@ Assign an art reward to a user.
 - **Use /art all** to monitor overall workload and identify bottlenecks
 - **Use /artistqueue skip** if an artist needs a temporary break
 - **Check /art leaderboard** to recognize top contributors
+
+---
+
+## 11. Bot Account Detection
+
+### Overview
+
+The server uses automated tools to detect and flag suspicious bot accounts. This helps maintain community quality by identifying:
+- Mass-created bot accounts
+- Raid participants
+- Inactive/abandoned accounts with suspicious patterns
+
+### The `/audit` Command
+
+**Who can use it:** Community Managers and Bot Developer only
+
+The `/audit` command performs a bulk scan of all server members and flags accounts that match bot-like patterns.
+
+#### What gets detected:
+
+| Detection | Points | Description |
+|-----------|--------|-------------|
+| No avatar | 2 | Default Discord profile picture |
+| New account | 3 | Account created less than 7 days ago |
+| No activity | 2 | Never sent a message in the server |
+| Low level | 1 | No Level 5+ Amaribot role |
+| Bot username | 2 | Patterns like `user_1234`, random strings |
+
+Accounts scoring **4 or more points** are automatically flagged.
+
+#### Running an audit:
+
+1. Use `/audit` in any staff channel
+2. Review the confirmation showing member count
+3. Click **Confirm** to start (this will send many messages)
+4. Watch for flagged accounts appearing with detailed embeds
+5. Review the final summary for statistics
+
+#### What to do with flagged accounts:
+
+Flagged accounts aren't automatically actioned — staff should review them:
+
+- **Check profile**: Look at their Discord profile for signs of legitimacy
+- **Check activity**: Have they interacted anywhere in the server?
+- **Check age**: Brand new accounts deserve more scrutiny
+- **Cross-reference**: Check if they appear in other community reports
+
+For confirmed bot accounts:
+- Ban using `/ban user:@user reason:Bot account (audit)`
+- For suspected alts of banned users, use permanent reject
+
+#### When to run audits:
+
+- **After suspected raids**: If you notice unusual join patterns
+- **Periodic cleanup**: Monthly or quarterly maintenance
+- **Before events**: Ensure member quality before big server events
+
+### Manual Flagging with `/flag`
+
+Any staff member can manually flag suspicious users:
+
+```
+/flag user:@SuspiciousUser reason:Alt of banned user
+```
+
+Flagged users show warning badges on their applications, alerting reviewers to look more carefully.
 
 ---
 
