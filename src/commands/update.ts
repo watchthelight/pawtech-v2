@@ -5,7 +5,7 @@
  * FLOWS:
  *  - /update activity: Sets activity with type (Playing/Watching/Listening/Competing)
  *  - /update status: Sets custom status (the green text below username)
- *  - /update banner: Updates bot profile banner, gate message, welcome message, and website
+ *  - /update banner: Updates bot profile banner, gate message, and welcome message
  *  - /update avatar: Updates bot profile picture (supports static images and animated GIFs)
  * DOCS:
  *  - Activities: https://discord.js.org/#/docs/discord.js/main/typedef/ActivitiesOptions
@@ -72,7 +72,7 @@ export const data = new SlashCommandBuilder()
   .addSubcommand((sub) =>
     sub
       .setName("banner")
-      .setDescription("Update bot profile, gate, welcome, and website banners")
+      .setDescription("Update bot profile, gate, and welcome banners")
       .addAttachmentOption((option) =>
         option
           .setName("image")
@@ -348,7 +348,6 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
         "• Bot profile banner (visible immediately)",
         "• Gate verification message (refreshed)",
         "• Welcome message banner (next member join)",
-        "• Website background (via API)",
         "• `assets/banner.png` (saved)",
         "• `assets/banner.webp` (saved)",
         "",

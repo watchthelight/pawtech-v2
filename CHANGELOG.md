@@ -9,6 +9,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+## [4.4.2] - 2025-12-03
+
+### Changed
+- **Banner Update Command** - Removed website references (website no longer exists)
+  - Removed "Website background (via API)" from success message
+  - Updated command description
+
+---
+
+## [4.4.1] - 2025-12-03
+
+### Added
+- **AI Image Detection Tools** in MOD-HANDBOOK — Links to Hive Moderation, Was It AI, and SightEngine for checking AI-generated content
+
+---
+
 ## [4.4.0] - 2025-12-03
 
 ### Added

@@ -1018,6 +1018,16 @@ For confirmed NSFW avatars:
 - If they refuse, mute until compliant
 - For egregious violations, escalate as appropriate
 
+#### AI Image Detection Tools
+
+When reviewing artwork or images (avatars, submissions, etc.), use these online tools to check if content is AI-generated:
+
+- **[Hive Moderation](https://hivemoderation.com/ai-generated-content-detection)** — Comprehensive AI content detection
+- **[Was It AI](https://wasitai.com/)** — Quick AI image checker
+- **[SightEngine](https://sightengine.com/detect-ai-generated-images)** — AI-generated image detection
+
+These are useful for verifying art authenticity in applications or submissions.
+
 #### API cost considerations:
 
 Google Vision API has costs after the free tier (~$1.50 per 1000 calls).
