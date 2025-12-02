@@ -56,9 +56,6 @@ export type GuildConfig = {
   notification_channel_id?: string | null;
   notify_cooldown_seconds?: number | null; // Default 5 seconds
   notify_max_per_hour?: number | null; // Default 10
-  // Suggestion box config (suggestions/store.ts)
-  suggestion_channel_id?: string | null;
-  suggestion_cooldown?: number | null; // Default 3600 seconds (1 hour)
   // Support channel for level reward skipped messages (057 issue)
   support_channel_id?: string | null;
   // Poke command config (079 issue)
@@ -490,8 +487,7 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
       "avatar_scan_weight_model", "avatar_scan_weight_edge", "flags_channel_id",
       "silent_first_msg_days", "logging_channel_id", "notify_mode", "notify_role_id",
       "forum_channel_id", "notification_channel_id", "notify_cooldown_seconds",
-      "notify_max_per_hour", "suggestion_channel_id", "suggestion_cooldown",
-      "support_channel_id", "poke_category_ids_json", "poke_excluded_channel_ids_json",
+      "notify_max_per_hour", "support_channel_id", "poke_category_ids_json", "poke_excluded_channel_ids_json",
       "artist_role_id", "ambassador_role_id", "server_artist_channel_id", "artist_ticket_roles_json",
       "artist_ignored_users_json", "backfill_notification_channel_id", "bot_dev_role_id",
       "gate_answer_max_length", "banner_sync_interval_minutes", "modmail_forward_max_size",

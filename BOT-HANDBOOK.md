@@ -38,92 +38,83 @@ Everything you need to know about the bot — what it does, who can use it, and 
   - 2.11.2 [The Different Statuses](#the-different-statuses)
   - 2.11.3 [Using Real Users in Samples](#using-real-users-in-samples)
 
-### 3. [Suggestion System](#suggestion-system)
-- 3.1 [How It Works](#how-it-works)
-- 3.2 [How Voting Works](#how-voting-works)
-- 3.3 [Cooldown System](#cooldown-system)
-- 3.4 [/suggest](#suggest) — Submit a feature idea
-- 3.5 [/suggestions](#suggestions) — Browse suggestions
-- 3.6 [/suggestion](#suggestion) — Manage suggestions (staff)
+### 3. [Artist Rotation](#artist-rotation)
+- 3.1 [How the Queue Works](#how-the-queue-works)
+- 3.2 [How Skipping Works](#how-skipping-works)
+- 3.3 [Sync System](#sync-system)
+- 3.4 [/artistqueue](#artistqueue) — Manage the artist queue
+- 3.5 [/redeemreward](#redeemreward) — Assign art rewards
+- 3.6 [Art Job Tracking System](#art-job-tracking-system)
+- 3.7 [/art](#art) — Manage art jobs (artists, recipients, and staff)
 
-### 4. [Artist Rotation](#artist-rotation)
-- 4.1 [How the Queue Works](#how-the-queue-works)
-- 4.2 [How Skipping Works](#how-skipping-works)
-- 4.3 [Sync System](#sync-system)
-- 4.4 [/artistqueue](#artistqueue) — Manage the artist queue
-- 4.5 [/redeemreward](#redeemreward) — Assign art rewards
-- 4.6 [Art Job Tracking System](#art-job-tracking-system)
-- 4.7 [/art](#art) — Manage art jobs (artists, recipients, and staff)
+### 4. [Movie Night](#movie-night)
+- 4.1 [How It Works](#how-it-works-1)
+- 4.2 [How Time Tracking Works](#how-time-tracking-works)
+- 4.3 [Tier Roles](#tier-roles)
+- 4.4 [/movie](#movie) — Movie night attendance commands
 
-### 5. [Movie Night](#movie-night)
-- 5.1 [How It Works](#how-it-works-1)
-- 5.2 [How Time Tracking Works](#how-time-tracking-works)
-- 5.3 [Tier Roles](#tier-roles)
-- 5.4 [/movie](#movie) — Movie night attendance commands
+### 5. [Role Automation](#role-automation)
+- 5.1 [How Role Automation Works](#how-role-automation-works)
+- 5.2 [How It Integrates with Amaribot](#how-it-integrates-with-amaribot)
+- 5.3 [Level Tiers vs Level Rewards](#level-tiers-vs-level-rewards)
+- 5.4 [/roles](#roles) — Configure role mappings
+- 5.5 [/panic](#panic) — Emergency role automation shutoff
 
-### 6. [Role Automation](#role-automation)
-- 6.1 [How Role Automation Works](#how-role-automation-works)
-- 6.2 [How It Integrates with Amaribot](#how-it-integrates-with-amaribot)
-- 6.3 [Level Tiers vs Level Rewards](#level-tiers-vs-level-rewards)
-- 6.4 [/roles](#roles) — Configure role mappings
-- 6.5 [/panic](#panic) — Emergency role automation shutoff
+### 6. [Configuration](#configuration)
+- 6.1 [How Configuration Works](#how-configuration-works)
+- 6.2 [/config](#config) — Server-wide settings
+- 6.3 [Understanding Each Setting](#understanding-each-setting)
+  - 6.3.1 [Logging Channel](#logging-channel)
+  - 6.3.2 [Flags Channel and Threshold](#flags-channel-and-threshold)
+  - 6.3.3 [Dad Mode](#dad-mode)
+  - 6.3.4 [Ping Dev on App](#ping-dev-on-app)
+  - 6.3.5 [Mod Roles](#mod-roles)
+  - 6.3.6 [Review Roles Mode](#review-roles-mode)
+- 6.4 [/review-set-notify-config](#review-set-notify-config) — Forum notifications
+- 6.5 [/review-get-notify-config](#review-get-notify-config) — View notification settings
+- 6.6 [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
 
-### 7. [Configuration](#configuration)
-- 7.1 [How Configuration Works](#how-configuration-works)
-- 7.2 [/config](#config) — Server-wide settings
-- 7.3 [Understanding Each Setting](#understanding-each-setting)
-  - 7.3.1 [Logging Channel](#logging-channel)
-  - 7.3.2 [Flags Channel and Threshold](#flags-channel-and-threshold)
-  - 7.3.3 [Dad Mode](#dad-mode)
-  - 7.3.4 [Ping Dev on App](#ping-dev-on-app)
-  - 7.3.5 [Suggestion Channel and Cooldown](#suggestion-channel-and-cooldown)
-  - 7.3.6 [Mod Roles](#mod-roles)
-  - 7.3.7 [Review Roles Mode](#review-roles-mode)
-- 7.4 [/review-set-notify-config](#review-set-notify-config) — Forum notifications
-- 7.5 [/review-get-notify-config](#review-get-notify-config) — View notification settings
-- 7.6 [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
+### 7. [Utility & Admin](#utility--admin)
+- 7.1 [/update](#update) — Bot presence and profile
+  - 7.1.1 [Activity Types](#activity-types)
+  - 7.1.2 [Banner Updates](#banner-updates)
+  - 7.1.3 [Avatar Updates](#avatar-updates)
+- 7.2 [/send](#send) — Post messages as the bot
+  - 7.2.1 [Understanding the Silent Option](#understanding-the-silent-option)
+- 7.3 [/purge](#purge) — Bulk delete messages
+  - 7.3.1 [How Purge Works](#how-purge-works)
+  - 7.3.2 [Important Limitations](#important-limitations)
+- 7.4 [/health](#health) — Bot status check
+- 7.5 [/activity](#activity) — Server activity heatmap
+  - 7.5.1 [What the Heatmap Shows](#what-the-heatmap-shows)
+- 7.6 [/backfill](#backfill) — Rebuild activity data
+  - 7.6.1 [When to Use Backfill](#when-to-use-backfill)
+  - 7.6.2 [How It Works](#how-it-works-2)
+- 7.7 [/poke](#poke) — Multi-channel ping (owner)
+- 7.8 [/database](#database) — Database management
+  - 7.8.1 [Database Check](#database-check)
+  - 7.8.2 [Database Recover](#database-recover)
 
-### 8. [Utility & Admin](#utility--admin)
-- 8.1 [/update](#update) — Bot presence and profile
-  - 8.1.1 [Activity Types](#activity-types)
-  - 8.1.2 [Banner Updates](#banner-updates)
-  - 8.1.3 [Avatar Updates](#avatar-updates)
-- 8.2 [/send](#send) — Post messages as the bot
-  - 8.2.1 [Understanding the Silent Option](#understanding-the-silent-option)
-- 8.3 [/purge](#purge) — Bulk delete messages
-  - 8.3.1 [How Purge Works](#how-purge-works)
-  - 8.3.2 [Important Limitations](#important-limitations)
-- 8.4 [/health](#health) — Bot status check
-- 8.5 [/activity](#activity) — Server activity heatmap
-  - 8.5.1 [What the Heatmap Shows](#what-the-heatmap-shows)
-- 8.6 [/backfill](#backfill) — Rebuild activity data
-  - 8.6.1 [When to Use Backfill](#when-to-use-backfill)
-  - 8.6.2 [How It Works](#how-it-works-2)
-- 8.7 [/poke](#poke) — Multi-channel ping (owner)
-- 8.8 [/database](#database) — Database management
-  - 8.8.1 [Database Check](#database-check)
-  - 8.8.2 [Database Recover](#database-recover)
+### 8. [Permission Reference](#permission-reference)
+- 8.1 [What counts as "Staff"?](#what-counts-as-staff)
 
-### 9. [Permission Reference](#permission-reference)
-- 9.1 [What counts as "Staff"?](#what-counts-as-staff)
+### 9. [Troubleshooting](#troubleshooting)
+- 9.1 [Quick Troubleshooting Decision Tree](#quick-troubleshooting-decision-tree)
+- 9.2 [Common Problems and Solutions](#common-problems-and-solutions)
+  - 9.2.1 [Buttons not working](#the-buttons-on-applications-arent-working)
+  - 9.2.2 [User left before review](#someone-left-before-i-could-acceptreject-them)
+  - 9.2.3 [Accidental permanent rejection](#i-accidentally-permanently-rejected-someone)
+  - 9.2.4 [Role automation issues](#role-automation-is-doing-something-weird)
+  - 9.2.5 [Bot not responding](#the-bot-isnt-responding-at-all)
+  - 9.2.6 [Config changes not taking effect](#config-changes-arent-taking-effect)
+  - 9.2.7 [Logging not working](#logging-isnt-working)
+  - 9.2.8 [Stats or history wrong](#application-stats-or-history-are-wrong)
+- 9.3 [When to Ask for Help](#when-to-ask-for-help)
+- 9.4 [Information to Include When Asking for Help](#information-to-include-when-asking-for-help)
 
-### 10. [Troubleshooting](#troubleshooting)
-- 10.1 [Quick Troubleshooting Decision Tree](#quick-troubleshooting-decision-tree)
-- 10.2 [Common Problems and Solutions](#common-problems-and-solutions)
-  - 10.2.1 [Buttons not working](#the-buttons-on-applications-arent-working)
-  - 10.2.2 [User left before review](#someone-left-before-i-could-acceptreject-them)
-  - 10.2.3 [Accidental permanent rejection](#i-accidentally-permanently-rejected-someone)
-  - 10.2.4 [Role automation issues](#role-automation-is-doing-something-weird)
-  - 10.2.5 [Bot not responding](#the-bot-isnt-responding-at-all)
-  - 10.2.6 [Config changes not taking effect](#config-changes-arent-taking-effect)
-  - 10.2.7 [Logging not working](#logging-isnt-working)
-  - 10.2.8 [Stats or history wrong](#application-stats-or-history-are-wrong)
-- 10.3 [When to Ask for Help](#when-to-ask-for-help)
-- 10.4 [Information to Include When Asking for Help](#information-to-include-when-asking-for-help)
-
-### 11. [Quick Reference](#quick-reference)
-- 11.1 [Commands you'll use all the time](#commands-youll-use-all-the-time)
-- 11.2 [Emergency commands](#emergency-commands)
+### 10. [Quick Reference](#quick-reference)
+- 10.1 [Commands you'll use all the time](#commands-youll-use-all-the-time)
+- 10.2 [Emergency commands](#emergency-commands)
 
 ---
 
@@ -959,195 +950,6 @@ Use this to verify the UI looks good even with verbose applicants.
 
 ---
 
-## Suggestion System
-
-A way for community members to submit feature ideas for the bot, vote on them, and for staff to manage them. Think of it like a suggestion box where everyone can see what others have suggested and vote on their favorites.
-
-### How It Works
-
-The suggestion system lets your community help shape the bot's future. Here's the complete flow from idea to implementation:
-
-1. **Someone has an idea** — They use `/suggest` to submit a feature idea
-2. **The bot posts it** — The suggestion appears in the configured suggestions channel as an embed with a unique ID number
-3. **The community votes** — Other members can click upvote or downvote buttons on the suggestion
-4. **Voting updates live** — Each time someone votes, the embed updates to show the current vote count
-5. **Staff reviews it** — Staff can approve, deny, or mark it as implemented using `/suggestion`
-6. **The embed updates** — When staff takes action, the suggestion embed changes color and shows the decision
-7. **They get notified** — The person who suggested it gets a DM explaining what happened
-8. **Voting closes** — Once a suggestion is approved, denied, or implemented, voting buttons are removed
-
-```mermaid
-graph TD
-    A[User submits /suggest] --> B[Bot checks cooldown]
-    B -->|On cooldown| C[Show wait time]
-    B -->|Ready| D[Create suggestion in database]
-    D --> E[Post embed in suggestions channel]
-    E --> F[Add upvote/downvote buttons]
-    F --> G[Community votes]
-    G --> H[Vote counts update in real-time]
-    H --> I[Staff reviews with /suggestion]
-    I --> J{Staff Decision}
-    J -->|Approve| K[Update embed - Green]
-    J -->|Deny| L[Update embed - Red]
-    J -->|Implement| M[Update embed - Blue]
-    K --> N[Remove vote buttons]
-    L --> N
-    M --> N
-    N --> O[Send DM to suggester]
-```
-
-### How Voting Works
-
-Anyone in the server can vote on open suggestions. Here's what you need to know:
-
-- **One vote per person** — You can upvote or downvote, but not both
-- **Change your mind** — Click the other button to switch your vote
-- **Only open suggestions** — You can't vote on suggestions that have been approved, denied, or implemented
-- **Vote counts are public** — Everyone can see how many upvotes and downvotes a suggestion has
-- **Your vote is recorded** — The bot remembers your vote even if you switch it later
-
-When you click a vote button, the bot instantly updates the suggestion embed to show the new vote totals. If you try to vote the same way twice, the bot will tell you that you've already voted that way.
-
-### Cooldown System
-
-To prevent spam, there's a cooldown between submissions. The cooldown is configurable by server admins (default is usually a few minutes to an hour). If you try to submit another suggestion too soon, the bot will tell you how many minutes you need to wait.
-
-The cooldown only applies to new submissions, not to voting on other people's suggestions.
-
-### `/suggest`
-**Who can use it:** Everyone
-
-Submit an idea for a new bot feature. There's a cooldown between submissions to prevent spam.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `suggestion` | **Yes** | Your idea (max 1000 characters) |
-
-**What happens when you submit:**
-1. Bot checks if you're on cooldown (if so, shows how long to wait)
-2. Bot checks if the suggestions channel is configured (if not, tells you to contact an admin)
-3. Your suggestion gets saved to the database with a unique ID
-4. An embed appears in the suggestions channel showing your suggestion
-5. Upvote and downvote buttons are added below the embed
-6. You get a confirmation message with a link to view your suggestion
-
-**Tips for good suggestions:**
-- Be specific about what you want (not just "make the bot better")
-- Explain why it would be useful (helps staff understand the value)
-- Keep it focused on one feature (don't bundle multiple ideas together)
-- Check existing suggestions first so you don't duplicate (use `/suggestions` to browse)
-- Stay under 1000 characters (Discord enforces this limit)
-
-**Examples:**
-```
-/suggest suggestion:Add a command to view server statistics like member count over time
-/suggest suggestion:Let users set their own timezone for event notifications
-/suggest suggestion:Add a way to export mod stats as a spreadsheet for monthly reports
-```
-
----
-
-### `/suggestions`
-**Who can use it:** Everyone
-
-Browse through all the suggestions people have submitted. Results are shown 5 suggestions per page with navigation buttons.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `status` | No | Filter by status (default: open) |
-
-**Status options:**
-| Status | What it shows |
-|--------|---------------|
-| `open` | New ones waiting for review (default) |
-| `approved` | Approved and planned for the future |
-| `denied` | Turned down with a reason why |
-| `implemented` | Done and live in the bot! |
-| `all` | Everything regardless of status |
-
-**The list shows:**
-- Suggestion ID number (you need this for `/suggestion` commands)
-- Who suggested it and when
-- Current vote counts (upvotes and downvotes)
-- Current status (open, approved, denied, or implemented)
-- Brief preview of the suggestion text
-
-**Navigation:**
-If there are more than 5 suggestions, you'll see Previous and Next buttons at the bottom. Click them to browse through the pages. The buttons remember your current filter (status) as you navigate.
-
-**Examples:**
-```
-/suggestions
-/suggestions status:approved
-/suggestions status:implemented
-/suggestions status:all
-```
-
----
-
-### `/suggestion`
-**Who can use it:** Staff (Manage Messages)
-
-Manage suggestions — approve them, deny them, or mark them done. When you take action, the suggestion embed updates and the user gets notified via DM.
-
-| Subcommand | What it does |
-|------------|--------------|
-| `approve` | Green light it — means you're planning to add it |
-| `deny` | Turn it down with a reason |
-| `implement` | Mark it as shipped and live |
-| `delete` | Remove it entirely (use sparingly) |
-
-**Options:**
-| Option | Works with | What it does |
-|--------|------------|--------------|
-| `id` | All | The suggestion's ID number (required) |
-| `response` | `approve`, `implement` | Optional message to the suggester |
-| `reason` | `deny` | Why you're denying it (required for deny) |
-
-**What happens when you approve:**
-1. Suggestion status changes to "approved" in the database
-2. The embed in the suggestions channel updates with a green color and shows who approved it
-3. Vote buttons are removed (voting closes after approval)
-4. The suggester gets a DM saying their idea was approved, with your optional response
-5. You get a confirmation message
-
-**What happens when you deny:**
-1. Suggestion status changes to "denied"
-2. The embed updates with a red color, showing who denied it and why
-3. Vote buttons are removed
-4. The suggester gets a DM explaining why it was denied (your reason is included)
-5. You get a confirmation message
-
-**What happens when you implement:**
-1. Suggestion status changes to "implemented"
-2. The embed updates with a blue/purple color showing it's done
-3. Vote buttons are removed
-4. The suggester gets a DM celebrating that their idea is now live
-5. You get a confirmation message
-
-**What happens when you delete:**
-1. The suggestion is removed from the database
-2. The embed message in the channel is deleted (if possible)
-3. No DM is sent to the suggester
-4. You get a confirmation message
-
-**When to use each action:**
-- **Approve** — The idea is good and you plan to add it eventually
-- **Deny** — The idea doesn't fit the bot's purpose, is too complex, or won't work
-- **Implement** — The feature has been built and is now available
-- **Delete** — The suggestion is spam, inappropriate, or was posted by mistake
-
-**Examples:**
-```
-/suggestion approve id:42 response:Great idea! Adding to the roadmap for next month.
-/suggestion deny id:43 reason:This is outside the scope of what the bot does.
-/suggestion implement id:42 response:This is now live! Thanks for the suggestion.
-/suggestion implement id:55
-/suggestion delete id:99
-```
-
----
-
 ## Artist Rotation
 
 A queue system that fairly distributes art commissions among Server Artists. When someone redeems an art reward, the next artist in line gets assigned. This ensures everyone gets a fair share of work and no one artist gets overwhelmed or left out.
@@ -1926,17 +1728,6 @@ Controls whether the Bot Dev role gets pinged when new applications arrive. Usef
 **Example:**
 ```
 /config set pingdevonapp enabled:false
-```
-
-#### Suggestion Channel and Cooldown
-Sets up the suggestion system where members can submit ideas for new bot features.
-
-**Cooldown prevents spam:** If someone submits a suggestion, they have to wait before submitting another one. This encourages thoughtful suggestions instead of rapid-fire ideas.
-
-**Example:**
-```
-/config set suggestion_channel channel:#bot-suggestions
-/config set suggestion_cooldown minutes:60
 ```
 
 #### Mod Roles

@@ -37,9 +37,6 @@ import { data as rolesData } from "./roles.js";
 import { data as panicData } from "./panic.js";
 import { data as searchData } from "./search.js";
 import { data as approvalRateData } from "./approvalRate.js";
-import { data as suggestData } from "./suggest.js";
-import { data as suggestionsData } from "./suggestions.js";
-import { data as suggestionData } from "./suggestion.js";
 import { data as artistqueueData } from "./artistqueue.js";
 import { data as redeemrewardData } from "./redeemreward.js";
 import { data as artData } from "./art.js";
@@ -86,11 +83,6 @@ export function buildCommands() {
     panicData.toJSON(),
     searchData.toJSON(),
     approvalRateData.toJSON(),
-
-    // Suggestion box commands
-    suggestData.toJSON(),
-    suggestionsData.toJSON(),
-    suggestionData.toJSON(),
 
     // Artist rotation commands
     artistqueueData.toJSON(),

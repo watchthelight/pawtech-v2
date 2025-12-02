@@ -215,7 +215,7 @@ await interaction.reply({ content: "Server maintenance at 3 PM." }); // ephemera
   - Example: "This command can only be used in a server."
 
 - **User Confirmations** - Personal acknowledgments with no team value
-  - Example: "Suggestion submitted!" (after /suggest)
+  - Example: "Role assigned successfully!"
 
 - **Status Queries** - Read-only information requests
   - Example: "Panic mode is OFF" (after /panic status)

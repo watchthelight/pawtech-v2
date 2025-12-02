@@ -149,27 +149,6 @@ export const data = new SlashCommandBuilder()
       )
       .addSubcommand((sc) =>
         sc
-          .setName("suggestion_channel")
-          .setDescription("Set the channel for bot feature suggestions")
-          .addChannelOption((o) =>
-            o.setName("channel").setDescription("Suggestions channel").setRequired(true)
-          )
-      )
-      .addSubcommand((sc) =>
-        sc
-          .setName("suggestion_cooldown")
-          .setDescription("Set cooldown between suggestions (in minutes)")
-          .addIntegerOption((o) =>
-            o
-              .setName("minutes")
-              .setDescription("Cooldown in minutes (1-1440, default: 60)")
-              .setRequired(true)
-              .setMinValue(1)
-              .setMaxValue(1440)
-          )
-      )
-      .addSubcommand((sc) =>
-        sc
           .setName("movie_threshold")
           .setDescription("Set movie night qualification threshold in minutes")
           .addIntegerOption((o) =>
@@ -959,7 +938,6 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
   channelValue += `• modmail_log_channel_id: ${fmt(cfg.modmail_log_channel_id, "channel")}\n`;
   channelValue += `• logging_channel_id: ${fmt(cfg.logging_channel_id, "channel")}\n`;
   channelValue += `• flags_channel_id: ${fmt(cfg.flags_channel_id, "channel")}\n`;
-  channelValue += `• suggestion_channel_id: ${fmt(cfg.suggestion_channel_id, "channel")}\n`;
   channelValue += `• forum_channel_id: ${fmt(cfg.forum_channel_id, "channel")}\n`;
   channelValue += `• notification_channel_id: ${fmt(cfg.notification_channel_id, "channel")}\n`;
   channelValue += `• backfill_notification_channel_id: ${fmt(cfg.backfill_notification_channel_id, "channel")}\n`;
@@ -1001,7 +979,6 @@ async function executeView(ctx: CommandContext<ChatInputCommandInteraction>) {
   timingValue += `• min_account_age_hours: ${cfg.min_account_age_hours ?? 0}\n`;
   timingValue += `• min_join_age_hours: ${cfg.min_join_age_hours ?? 0}\n`;
   timingValue += `• silent_first_msg_days: ${cfg.silent_first_msg_days ?? 90}\n`;
-  timingValue += `• suggestion_cooldown: ${(cfg.suggestion_cooldown ?? 3600) / 60}min\n`;
   timingValue += `• notify_cooldown_seconds: ${cfg.notify_cooldown_seconds ?? 5}s\n`;
   timingValue += `• notify_max_per_hour: ${cfg.notify_max_per_hour ?? 10}\n`;
   timingValue += `• banner_sync_interval_minutes: ${cfg.banner_sync_interval_minutes ?? 10}min\n`;
@@ -1130,71 +1107,6 @@ async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInteraction
     },
     "[config] dadmode updated"
   );
-}
-
-async function executeSetSuggestionChannel(ctx: CommandContext<ChatInputCommandInteraction>) {
-  /**
-   * executeSetSuggestionChannel
-   * WHAT: Sets the suggestion channel for bot feature ideas.
-   * WHY: Configures where suggestion embeds will be posted.
-   * PARAMS: ctx — command context; extracts channel option from interaction.
-   * RETURNS: Promise<void> after confirming update.
-   */
-  const { interaction } = ctx;
-  await ensureDeferred(interaction);
-
-  ctx.step("get_channel");
-  const channel = interaction.options.getChannel("channel", true);
-
-  ctx.step("persist_channel");
-  upsertConfig(interaction.guildId!, { suggestion_channel_id: channel.id });
-
-  logger.info(
-    { evt: "config_set_suggestion_channel", guildId: interaction.guildId, channelId: channel.id },
-    "[config] suggestion channel updated"
-  );
-
-  ctx.step("reply");
-  await replyOrEdit(interaction, {
-    content: `✅ Suggestion channel set to <#${channel.id}>\n\nUsers can now submit bot feature suggestions with \`/suggest\`.`,
-  });
-}
-
-async function executeSetSuggestionCooldown(ctx: CommandContext<ChatInputCommandInteraction>) {
-  /**
-   * executeSetSuggestionCooldown
-   * WHAT: Sets the cooldown between user suggestions.
-   * WHY: Prevents spam and encourages thoughtful suggestions.
-   * PARAMS: ctx — command context; extracts minutes option from interaction.
-   * RETURNS: Promise<void> after confirming update.
-   */
-  const { interaction } = ctx;
-  await ensureDeferred(interaction);
-
-  ctx.step("get_cooldown");
-  const minutes = interaction.options.getInteger("minutes", true);
-
-  if (minutes < 1 || minutes > 1440 || !Number.isInteger(minutes)) {
-    await replyOrEdit(interaction, {
-      content: '❌ Invalid cooldown value. Must be an integer between 1 and 1440 minutes.',
-      flags: MessageFlags.Ephemeral
-    });
-    return;
-  }
-
-  ctx.step("persist_cooldown");
-  const cooldownSeconds = minutes * 60;
-  upsertConfig(interaction.guildId!, { suggestion_cooldown: cooldownSeconds });
-
-  logger.info(
-    { evt: "config_set_suggestion_cooldown", guildId: interaction.guildId, cooldownSeconds },
-    "[config] suggestion cooldown updated"
-  );
-
-  ctx.step("reply");
-  await replyOrEdit(interaction, {
-    content: `✅ Suggestion cooldown set to **${minutes} minute${minutes === 1 ? "" : "s"}**\n\nUsers must wait this long between submitting suggestions.`,
-  });
 }
 
 async function executeSetPingDevOnApp(ctx: CommandContext<ChatInputCommandInteraction>) {
@@ -2410,10 +2322,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetDadMode(ctx);
     } else if (subcommand === "pingdevonapp") {
       await executeSetPingDevOnApp(ctx);
-    } else if (subcommand === "suggestion_channel") {
-      await executeSetSuggestionChannel(ctx);
-    } else if (subcommand === "suggestion_cooldown") {
-      await executeSetSuggestionCooldown(ctx);
     } else if (subcommand === "movie_threshold") {
       await executeSetMovieThreshold(ctx);
     } else if (subcommand === "artist_rotation") {

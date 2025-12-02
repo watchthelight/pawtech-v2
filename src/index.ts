@@ -256,14 +256,6 @@ import * as approvalRate from "./commands/approvalRate.js";
 import { executeApprovalRateCommand } from "./features/analytics/approvalRateCommand.js";
 commands.set(approvalRate.data.name, wrapCommand("approval-rate", executeApprovalRateCommand));
 
-// Suggestion box commands
-import * as suggest from "./commands/suggest.js";
-import * as suggestions from "./commands/suggestions.js";
-import * as suggestion from "./commands/suggestion.js";
-commands.set(suggest.data.name, wrapCommand("suggest", suggest.execute));
-commands.set(suggestions.data.name, wrapCommand("suggestions", suggestions.execute));
-commands.set(suggestion.data.name, wrapCommand("suggestion", suggestion.execute));
-
 // Artist rotation commands
 import * as artistqueue from "./commands/artistqueue.js";
 import * as redeemreward from "./commands/redeemreward.js";
@@ -291,7 +283,6 @@ client.once(Events.ClientReady, async () => {
       ensureArtistRotationConfigColumns,
     } = await import("./db/ensure.js");
     const { ensureBotStatusSchema } = await import("./features/statusStore.js");
-    const { ensureSuggestionSchema, ensureSuggestionConfigColumns } = await import("./features/suggestions/store.js");
     const {
       ensureUnverifiedChannelColumn,
       ensureWelcomeTemplateColumn,
@@ -313,8 +304,6 @@ client.once(Events.ClientReady, async () => {
     ensureApplicationStaleAlertColumns();
     ensureArtistRotationConfigColumns();
     ensureBotStatusSchema();
-    ensureSuggestionSchema();
-    ensureSuggestionConfigColumns();
     // Config column migrations (moved from getConfig/upsertConfig for performance)
     ensureUnverifiedChannelColumn();
     ensureWelcomeTemplateColumn();
@@ -1240,42 +1229,6 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
               "route: ping in unverified"
             );
             await handlePingInUnverified(interaction);
-            succeeded = true;
-            return;
-          }
-
-          // Suggestion box voting buttons
-          if (customId.startsWith("suggestion:vote:")) {
-            logger.info(
-              {
-                evt: "ix_route_match",
-                kind: "button",
-                route: "suggestion_vote",
-                id: customId,
-                traceId,
-              },
-              "route: suggestion vote"
-            );
-            const { handleSuggestionVote } = await import("./features/suggestions/voting.js");
-            await handleSuggestionVote(interaction);
-            succeeded = true;
-            return;
-          }
-
-          // Suggestion box list pagination buttons
-          if (customId.startsWith("suggestion:list:")) {
-            logger.info(
-              {
-                evt: "ix_route_match",
-                kind: "button",
-                route: "suggestion_list",
-                id: customId,
-                traceId,
-              },
-              "route: suggestion list pagination"
-            );
-            const { handleSuggestionsListPagination } = await import("./commands/suggestions.js");
-            await handleSuggestionsListPagination(interaction);
             succeeded = true;
             return;
           }

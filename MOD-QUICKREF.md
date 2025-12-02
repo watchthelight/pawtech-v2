@@ -52,15 +52,6 @@ To see who attended or check someone's movie history, use `/movie attendance`. A
 - <@&1388675577778802748> — attended 10+ movies
 - <@&1388677466993987677> — attended 20+ movies
 
-## Managing Suggestions
-
-Community members can submit feature ideas, and you can browse them with `/suggestions`. Filter by status using `status:open`, `status:approved`, etc.
-
-When reviewing suggestions:
-- `/suggestion approve id:42` — marks it approved (add `response:` to send feedback)
-- `/suggestion deny id:42 reason:Outside scope` — denies with an explanation
-- `/suggestion implement id:42` — marks it as shipped
-
 ## Utility Commands
 
 Need to post something as the bot? `/send message:Your text here` does the trick. Add `embed:true` for a nicer format, or `reply_to:` with a message ID to reply to something specific.
