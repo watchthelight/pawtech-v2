@@ -7,14 +7,26 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [4.3.0] - 2025-12-02
+
 ### Added
-- **Bot Account Audit System** - `/audit` command for detecting suspicious bot accounts
-  - `src/commands/audit.ts` - Slash command with confirmation flow and live progress updates
-  - `src/features/botDetection.ts` - Detection heuristics (no avatar, new account, no activity, low level, bot-like username patterns)
-  - Scoring system: flags accounts with score >= 4 (max 11 points)
-  - Restricted to Community Manager and Bot Developer user IDs
-  - Progress bar showing scan progress with per-member embeds for flagged accounts
-- `CHANGELOG.md` - This file
+- **Audit Command Subcommands** - Split `/audit` into two subcommands:
+  - `/audit members` - Bot detection audit (existing functionality)
+  - `/audit nsfw` - NEW: Scan member avatars for NSFW content using Google Vision API
+    - Scope options: "All members" or "Flagged members only"
+    - Threshold: 80%+ (Hard Evidence) to flag
+    - Includes reverse image search link for staff verification
+    - New `nsfw_flags` table separate from bot detection flags
+    - `src/store/nsfwFlagsStore.ts` - NSFW flag storage functions
+    - `migrations/032_nsfw_flags.ts` - New table for NSFW flags
+
+### Changed
+- **Bot Account Audit System** - Refactored to use subcommand structure
+  - `src/commands/audit.ts` - Now routes to `/audit members` or `/audit nsfw`
+  - `src/lib/modalPatterns.ts` - Updated button patterns for new customId format
+  - `src/store/flagsStore.ts` - Added `getFlaggedUserIds()` for NSFW audit scope
 
 ### Removed
 - Suggestions feature (~1,700 lines) - unused, no guilds had configured it

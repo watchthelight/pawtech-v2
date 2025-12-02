@@ -1,6 +1,6 @@
 # Pawtropolis Moderation Handbook
 
-> Last Updated: November 2025
+> Last Updated: December 2025
 
 ---
 
@@ -59,11 +59,11 @@
     - [Workflow Summary](#workflow-summary)
     - [Best Practices for Artists](#best-practices-for-artists)
     - [Best Practices for Staff](#best-practices-for-staff)
-11. [Bot Account Detection](#11-bot-account-detection)
+11. [Server Audit Tools](#11-server-audit-tools)
     - [Overview](#overview-1)
-    - [Using the /audit Command](#using-the-audit-command)
-    - [Detection Heuristics](#detection-heuristics)
-    - [Reviewing Flagged Accounts](#reviewing-flagged-accounts)
+    - [/audit members — Bot Account Detection](#audit-members--bot-account-detection)
+    - [/audit nsfw — Avatar NSFW Detection](#audit-nsfw--avatar-nsfw-detection)
+    - [Manual Flagging with /flag](#manual-flagging-with-flag)
 
 ---
 
@@ -927,20 +927,19 @@ Assign an art reward to a user.
 
 ---
 
-## 11. Bot Account Detection
+## 11. Server Audit Tools
 
 ### Overview
 
-The server uses automated tools to detect and flag suspicious bot accounts. This helps maintain community quality by identifying:
-- Mass-created bot accounts
-- Raid participants
-- Inactive/abandoned accounts with suspicious patterns
-
-### The `/audit` Command
+The server uses automated tools to detect and flag suspicious accounts and inappropriate content. The `/audit` command has two subcommands:
+- `/audit members` — Detect bot-like accounts
+- `/audit nsfw` — Scan member avatars for NSFW content
 
 **Who can use it:** Community Managers and Bot Developer only
 
-The `/audit` command performs a bulk scan of all server members and flags accounts that match bot-like patterns.
+### `/audit members` — Bot Account Detection
+
+The `/audit members` command performs a bulk scan of all server members and flags accounts that match bot-like patterns.
 
 #### What gets detected:
 
@@ -954,9 +953,9 @@ The `/audit` command performs a bulk scan of all server members and flags accoun
 
 Accounts scoring **4 or more points** are automatically flagged.
 
-#### Running an audit:
+#### Running a members audit:
 
-1. Use `/audit` in any staff channel
+1. Use `/audit members` in any staff channel
 2. Review the confirmation showing member count
 3. Click **Confirm** to start (this will send many messages)
 4. Watch for flagged accounts appearing with detailed embeds
@@ -975,11 +974,58 @@ For confirmed bot accounts:
 - Ban using `/ban user:@user reason:Bot account (audit)`
 - For suspected alts of banned users, use permanent reject
 
-#### When to run audits:
+#### When to run members audits:
 
 - **After suspected raids**: If you notice unusual join patterns
 - **Periodic cleanup**: Monthly or quarterly maintenance
 - **Before events**: Ensure member quality before big server events
+
+### `/audit nsfw` — Avatar NSFW Detection
+
+The `/audit nsfw` command scans member avatars using Google Vision API to detect NSFW content.
+
+#### Scope options:
+
+| Scope | Description | Use case |
+|-------|-------------|----------|
+| All members | Scan every server member | Server-wide avatar policy enforcement |
+| Flagged members only | Only scan already-flagged members | Cost-effective follow-up after `/audit members` |
+
+#### Running an NSFW audit:
+
+1. Use `/audit nsfw` and select the **scope** (all or flagged)
+2. Review the confirmation showing member count and API warning
+3. Click **Confirm** to start
+4. Watch for NSFW flagged avatars appearing with score percentages
+5. Review the final summary showing scan stats and API calls
+
+#### NSFW detection threshold:
+
+**80%+ adult content** = Hard Evidence (flagged)
+
+This conservative threshold reduces false positives. The bot uses Google Vision's SafeSearch API which is effective at detecting explicit content in various art styles.
+
+#### What to do with NSFW flagged avatars:
+
+NSFW flags require manual review:
+
+- **Check the avatar**: View the flagged avatar to confirm it's actually inappropriate
+- **Context matters**: Some edge cases may need moderator judgment
+- **False positives**: Not every 80%+ score is actually explicit content
+
+For confirmed NSFW avatars:
+- DM the user asking them to change their avatar
+- If they refuse, mute until compliant
+- For egregious violations, escalate as appropriate
+
+#### API cost considerations:
+
+Google Vision API has costs after the free tier (~$1.50 per 1000 calls).
+
+**Cost optimization tips:**
+- Use "Flagged members only" scope after running `/audit members` first
+- This targets suspicious accounts instead of scanning everyone
+- Reduces API calls while still catching high-risk avatars
 
 ### Manual Flagging with `/flag`
 

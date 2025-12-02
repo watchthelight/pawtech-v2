@@ -72,6 +72,28 @@ export function isAlreadyFlagged(guildId: string, userId: string): boolean {
 }
 
 /**
+ * WHAT: Get all flagged user IDs for a guild
+ * WHY: Support NSFW audit "flagged only" scope
+ *
+ * @param guildId - Discord guild ID
+ * @returns Array of user IDs that are flagged
+ */
+export function getFlaggedUserIds(guildId: string): string[] {
+  try {
+    const rows = db
+      .prepare(
+        `SELECT user_id FROM user_activity WHERE guild_id = ? AND flagged_at IS NOT NULL`
+      )
+      .all(guildId) as Array<{ user_id: string }>;
+
+    return rows.map((row) => row.user_id);
+  } catch (err) {
+    logger.error({ err, guildId }, "[flagsStore] Failed to get flagged user IDs");
+    return [];
+  }
+}
+
+/**
  * WHAT: Upsert manual flag for a user
  * WHY: Create or update flag record with moderator attribution
  *

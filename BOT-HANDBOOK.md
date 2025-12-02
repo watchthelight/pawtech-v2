@@ -27,7 +27,7 @@ Everything you need to know about the bot — what it does, who can use it, and 
 - 2.6 [/analytics](#analytics) — Visual activity charts
 - 2.7 [/analytics-export](#analytics-export) — Export data as CSV
 - 2.8 [/flag](#flag) — Flag suspicious users
-- 2.9 [/audit](#audit) — Bulk scan for bot accounts (restricted)
+- 2.9 [/audit](#audit) — Server audit commands (members and NSFW)
 - 2.10 [/approval-rate](#approval-rate) — Server-wide approval stats
 - 2.11 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
   - 2.11.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
@@ -739,12 +739,15 @@ Flags don't automatically reject people — they just warn other reviewers to pa
 ---
 
 ### `/audit`
-**Who can use it:** Community Managers and Bot Developer only (hardcoded user IDs)
+**Who can use it:** Community Managers and Bot Developer only (hardcoded role IDs)
 
+Server audit commands for detecting suspicious accounts and NSFW content. This command has two subcommands:
+
+#### `/audit members`
 Bulk-scan all server members to detect bot accounts. This command crawls every member and flags suspicious accounts using multiple detection heuristics.
 
 **How it works:**
-1. Run `/audit` — you'll see a confirmation prompt with member count
+1. Run `/audit members` — you'll see a confirmation prompt with member count
 2. Click **Confirm** to start (or **Cancel** to abort)
 3. The bot scans every member and posts an embed for each flagged account
 4. A progress bar shows how far along the scan is
@@ -773,12 +776,41 @@ Bulk-scan all server members to detect bot accounts. This command crawls every m
 - Discord bot accounts are skipped
 - Flagged accounts use the same system as `/flag` — they show up in reviews
 - The scan can take a while on large servers (expect ~1 minute per 1000 members)
-- This command is restricted to prevent abuse — only 2 specific user IDs can run it
+
+#### `/audit nsfw`
+Scan member avatars for NSFW content using Google Vision API SafeSearch detection.
+
+**Options:**
+- **Scope** (required):
+  - `All members` — Scan all server members
+  - `Flagged members only` — Only scan members already flagged by `/audit members` or `/flag`
+
+**How it works:**
+1. Run `/audit nsfw` and select scope
+2. Confirmation shows member count and API cost warning
+3. Click **Confirm** to start
+4. Each member's avatar is scanned via Google Vision API
+5. Avatars scoring 80%+ adult content are flagged
+6. Summary shows total scanned, flagged, and API calls made
+
+**Threshold:** 80% adult content score (Hard Evidence) — conservative to avoid false positives.
+
+**What NSFW flag embeds show:**
+- User mention and ID
+- Adult content score percentage
+- Classification: "Hard Evidence (Adult Content)"
+- Reverse image search link (for staff to verify via Google)
+
+**Important notes:**
+- NSFW flags are stored separately from bot detection flags (different database table)
+- Users without custom avatars (default Discord avatars) are skipped
+- API calls cost money after the free tier (~$1.50 per 1000 calls)
+- Use "Flagged members only" scope to reduce API costs when targeting suspicious accounts
 
 **When to use this:**
-- After a suspected bot raid
-- Periodic cleanup of inactive/suspicious accounts
-- Before server events to ensure member quality
+- After running `/audit members` to check flagged accounts' avatars
+- Periodic server-wide avatar policy enforcement
+- Before server events or promotions
 
 ---
 

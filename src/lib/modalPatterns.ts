@@ -48,8 +48,14 @@ export const BTN_PING_UNVERIFIED_RE = /^(?:v1:ping|review:ping_unverified):(?:co
 // The 8-char hex suffix is a nonce to prevent accidental re-clicks.
 export const BTN_DBRECOVER_RE = /^dbrecover:(validate|restore-dry|restore-confirm):([a-zA-Z0-9\-]+):([a-f0-9]{8})$/;
 
-// Audit buttons - confirm/cancel for member bot audit
-export const BTN_AUDIT_RE = /^audit:(confirm|cancel):([a-f0-9]{8})$/;
+// Audit buttons - subcommand-based audit system
+// - audit:members:confirm:nonce - bot detection audit
+// - audit:nsfw:all:confirm:nonce - NSFW audit (all members)
+// - audit:nsfw:flagged:confirm:nonce - NSFW audit (flagged members only)
+export const BTN_AUDIT_MEMBERS_RE = /^audit:members:(confirm|cancel):([a-f0-9]{8})$/;
+export const BTN_AUDIT_NSFW_RE = /^audit:nsfw:(all|flagged):(confirm|cancel):([a-f0-9]{8})$/;
+// Combined pattern that matches any audit button
+export const BTN_AUDIT_RE = /^audit:(members|nsfw):/;
 
 // Modal IDs for forms that need to capture text input
 export const MODAL_REJECT_RE = /^v1:modal:reject:code([0-9A-F]{6})$/;
