@@ -941,7 +941,7 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
     );
   }
 
-  // router map: slash → button → modal → select → contextMenu; anything else early‑return
+  // router map: slash → button → modal → select → autocomplete → contextMenu; anything else early‑return
   const kind = interaction.isChatInputCommand()
     ? "slash"
     : interaction.isButton()
@@ -950,9 +950,11 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
         ? "modal"
         : interaction.isStringSelectMenu()
           ? "select"
-          : interaction.isContextMenuCommand()
-            ? "contextMenu"
-            : "other";
+          : interaction.isAutocomplete()
+            ? "autocomplete"
+            : interaction.isContextMenuCommand()
+              ? "contextMenu"
+              : "other";
 
   if (kind === "other") {
     return;
@@ -960,8 +962,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
 
   const traceId = newTraceId();
   const cmdId =
-    kind === "slash"
-      ? interaction.isChatInputCommand()
+    kind === "slash" || kind === "autocomplete"
+      ? interaction.isChatInputCommand() || interaction.isAutocomplete()
         ? interaction.commandName
         : "unknown"
       : interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()

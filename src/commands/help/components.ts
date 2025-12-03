@@ -71,7 +71,6 @@ export function buildOverviewComponents(
       new ButtonBuilder()
         .setCustomId(buildHelpCustomId({ type: "category", category: cat, page: 0 }))
         .setLabel(info.label.split(" ")[0]) // First word only for compact buttons
-        .setEmoji(info.emoji)
         .setStyle(ButtonStyle.Secondary)
     );
   }
@@ -89,7 +88,6 @@ export function buildOverviewComponents(
         new ButtonBuilder()
           .setCustomId(buildHelpCustomId({ type: "category", category: cat, page: 0 }))
           .setLabel(info.label.split(" ")[0])
-          .setEmoji(info.emoji)
           .setStyle(ButtonStyle.Secondary)
       );
     }
@@ -101,7 +99,6 @@ export function buildOverviewComponents(
     new ButtonBuilder()
       .setCustomId(buildHelpCustomId({ type: "search_modal" }))
       .setLabel("Search...")
-      .setEmoji("\uD83D\uDD0D")
       .setStyle(ButtonStyle.Primary)
   );
   rows.push(searchRow);
@@ -129,7 +126,6 @@ export function buildCategoryComponents(
     new ButtonBuilder()
       .setCustomId(buildHelpCustomId({ type: "overview" }))
       .setLabel("Back")
-      .setEmoji("\u2B05\uFE0F")
       .setStyle(ButtonStyle.Secondary)
   );
 
@@ -247,7 +243,6 @@ export function buildSearchComponents(
     new ButtonBuilder()
       .setCustomId(buildHelpCustomId({ type: "search_modal" }))
       .setLabel("New Search")
-      .setEmoji("\uD83D\uDD0D")
       .setStyle(ButtonStyle.Primary)
   );
   rows.push(navRow);

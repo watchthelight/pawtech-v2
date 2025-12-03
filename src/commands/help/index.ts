@@ -288,6 +288,16 @@ async function showSearchResults(
  * Handle help button interactions.
  */
 export async function handleHelpButton(interaction: ButtonInteraction): Promise<void> {
+  // Only the original command user can interact
+  const originalUserId = interaction.message.interaction?.user.id;
+  if (originalUserId && interaction.user.id !== originalUserId) {
+    await interaction.reply({
+      content: "Only the person who ran this command can use these buttons.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const customId = interaction.customId;
   const nav = parseHelpCustomId(customId);
 
@@ -365,6 +375,16 @@ export async function handleHelpButton(interaction: ButtonInteraction): Promise<
 export async function handleHelpSelectMenu(
   interaction: StringSelectMenuInteraction
 ): Promise<void> {
+  // Only the original command user can interact
+  const originalUserId = interaction.message.interaction?.user.id;
+  if (originalUserId && interaction.user.id !== originalUserId) {
+    await interaction.reply({
+      content: "Only the person who ran this command can use this menu.",
+      flags: MessageFlags.Ephemeral,
+    });
+    return;
+  }
+
   const customId = interaction.customId;
   const selected = interaction.values[0];
 

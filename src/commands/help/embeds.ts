@@ -65,7 +65,7 @@ export function buildOverviewEmbed(
 ): EmbedBuilder {
   const lines: string[] = [
     DIVIDER,
-    "\uD83D\uDCD6 **Pawtropolis Tech Help**",
+    "**Pawtropolis Tech Help**",
     DIVIDER,
     "",
     "Welcome to the interactive help system!",
@@ -142,7 +142,7 @@ export function buildCategoryEmbed(
   // Add category tip if available
   if (info.tip) {
     lines.push("");
-    lines.push(`**\uD83D\uDCA1 Tip:** ${info.tip}`);
+    lines.push(`**Tip:** ${info.tip}`);
   }
 
   lines.push("");
@@ -283,7 +283,7 @@ export function buildCommandFullEmbed(cmd: CommandMetadata): EmbedBuilder {
 
   // Workflow tips
   if (cmd.workflowTips && cmd.workflowTips.length > 0) {
-    lines.push("**\uD83D\uDCA1 Workflow Tips:**");
+    lines.push("**Workflow Tips:**");
     for (const tip of cmd.workflowTips) {
       lines.push(`\u2022 ${tip}`);
     }
@@ -328,7 +328,7 @@ export function buildSearchResultsEmbed(
 ): EmbedBuilder {
   const lines: string[] = [
     DIVIDER,
-    `\uD83D\uDD0D **Search Results: "${truncate(query, 30)}"**`,
+    `**Search Results: "${truncate(query, 30)}"**`,
     DIVIDER,
     "",
   ];
@@ -375,7 +375,7 @@ export function buildSearchResultsEmbed(
 export function buildErrorEmbed(message: string): EmbedBuilder {
   return new EmbedBuilder()
     .setDescription(
-      [DIVIDER, "\u274C **Error**", DIVIDER, "", message].join("\n")
+      [DIVIDER, "**Error**", DIVIDER, "", message].join("\n")
     )
     .setColor(COLORS.error)
     .setTimestamp();

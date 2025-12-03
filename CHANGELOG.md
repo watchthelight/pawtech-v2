@@ -5,6 +5,24 @@ All notable changes to Pawtropolis Tech will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [4.7.1] - 2025-12-03
+
+### Fixed
+
+- **Help Command Interaction Routing** - Fixed autocomplete and select menu interactions being rejected:
+  - Added `isAutocomplete()` to interaction router (was returning early as "other")
+  - Added `isStringSelectMenu()` to interaction router (same issue)
+  - Autocomplete now works correctly for `/help command:` option
+
+### Changed
+
+- **Help Command User Restriction** - Only the person who ran `/help` can use buttons and select menus on that message
+- **Help Command Minimal Design** - Removed all emojis from help system for cleaner appearance:
+  - Removed category emojis from buttons and embeds
+  - Removed decorative emojis (book, lightbulb, search, error icons)
+
+---
+
 ## [4.7.0] - 2025-12-03
 
 ### Added
@@ -754,6 +772,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
+[4.7.1]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.7.0...v4.7.1
 [4.7.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.6.0...v4.7.0
 [4.6.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.5.0...v4.6.0
 [4.5.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.4...v4.5.0

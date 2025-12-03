@@ -45,55 +45,55 @@ export interface CategoryInfo {
  */
 export const CATEGORY_INFO: Record<CommandCategory, CategoryInfo> = {
   gate: {
-    emoji: "\u{1F6AA}", // door
+    emoji: "",
     label: "Gate & Verification",
     description: "Member verification and application review commands",
     tip: "Start with `/listopen` to see your pending reviews.",
   },
   config: {
-    emoji: "\u2699\uFE0F", // gear
+    emoji: "",
     label: "Configuration",
     description: "Server settings and customization",
     tip: "Use `/config view` to see all current settings.",
   },
   moderation: {
-    emoji: "\u{1F6E1}\uFE0F", // shield
+    emoji: "",
     label: "Moderation",
     description: "User moderation and audit tools",
     tip: "Flag suspicious users with `/flag` for team visibility.",
   },
   queue: {
-    emoji: "\u{1F4CB}", // clipboard
+    emoji: "",
     label: "Queue Management",
     description: "Application queue and review workflow",
     tip: "Use `/search user:@member` to see application history.",
   },
   analytics: {
-    emoji: "\u{1F4CA}", // bar_chart
+    emoji: "",
     label: "Analytics",
     description: "Statistics and performance metrics",
     tip: "Check `/activity` for server engagement heatmaps.",
   },
   messaging: {
-    emoji: "\u{1F4AC}", // speech_balloon
+    emoji: "",
     label: "Messaging",
     description: "Staff communication tools",
     tip: "Use `/send embed:true` for formatted announcements.",
   },
   roles: {
-    emoji: "\u{1F3AD}", // performing_arts
+    emoji: "",
     label: "Role Automation",
     description: "Automated role management",
     tip: "Enable `/panic on` to halt all role changes in emergencies.",
   },
   artist: {
-    emoji: "\u{1F3A8}", // art
+    emoji: "",
     label: "Artist System",
     description: "Artist rotation and rewards",
     tip: "Use `/artistqueue sync` after role changes.",
   },
   system: {
-    emoji: "\u{1F527}", // wrench
+    emoji: "",
     label: "System & Maintenance",
     description: "Bot administration and health",
     tip: "Check `/health` for bot status and latency.",
