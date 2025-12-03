@@ -1,0 +1,172 @@
+/**
+ * Pawtropolis Tech — src/features/aiDetection/index.ts
+ * WHAT: Orchestrates AI-generated image detection across multiple services.
+ * WHY: Provides averaged, reliable AI detection by combining multiple third-party APIs.
+ * FLOWS:
+ *  - detectAIForImages(): Process multiple images, return results for each
+ *  - detectAIForImage(): Call all 4 services in parallel, aggregate scores
+ *  - buildAIDetectionEmbed(): Format results as Discord embed
+ */
+
+import { EmbedBuilder, type Message } from "discord.js";
+import { detectHive } from "./hive.js";
+import { detectIlluminarty } from "./illuminarty.js";
+import { detectSightEngine } from "./sightengine.js";
+import { detectOptic } from "./optic.js";
+import type { AIDetectionResult, AIDetectionService, ServiceResult } from "./types.js";
+import { logger } from "../../lib/logger.js";
+
+/** Service display names for embed output */
+const SERVICE_NAMES: Record<AIDetectionService, string> = {
+  hive: "Engine 1",
+  illuminarty: "Engine 2",
+  sightengine: "Engine 3",
+  optic: "Engine 4",
+};
+
+/**
+ * Process a settled promise result into a ServiceResult.
+ */
+function processResult(
+  result: PromiseSettledResult<number | null>,
+  service: AIDetectionService
+): ServiceResult {
+  if (result.status === "fulfilled") {
+    return {
+      service,
+      displayName: SERVICE_NAMES[service],
+      score: result.value,
+    };
+  } else {
+    const errorMsg = result.reason instanceof Error ? result.reason.message : String(result.reason);
+
+    logger.warn({ service, error: errorMsg }, "[aiDetection] Service failed");
+
+    return {
+      service,
+      displayName: SERVICE_NAMES[service],
+      score: null,
+      error: errorMsg,
+    };
+  }
+}
+
+/**
+ * Detect AI-generated content in a single image using all configured services.
+ */
+export async function detectAIForImage(imageUrl: string, imageName: string): Promise<AIDetectionResult> {
+  logger.info({ imageUrl, imageName }, "[aiDetection] Starting detection for image");
+
+  // Call all services in parallel with Promise.allSettled
+  const results = await Promise.allSettled([
+    detectHive(imageUrl),
+    detectIlluminarty(imageUrl),
+    detectSightEngine(imageUrl),
+    detectOptic(imageUrl),
+  ]);
+
+  const services: ServiceResult[] = [
+    processResult(results[0], "hive"),
+    processResult(results[1], "illuminarty"),
+    processResult(results[2], "sightengine"),
+    processResult(results[3], "optic"),
+  ];
+
+  // Calculate average of successful results only (excludes null scores)
+  const successfulScores = services.filter((s) => s.score !== null).map((s) => s.score!);
+
+  const averageScore =
+    successfulScores.length > 0
+      ? successfulScores.reduce((a, b) => a + b, 0) / successfulScores.length
+      : null;
+
+  return {
+    imageUrl,
+    imageName,
+    services,
+    averageScore,
+    successCount: successfulScores.length,
+    failureCount: 4 - successfulScores.length,
+  };
+}
+
+/**
+ * Detect AI-generated content in multiple images.
+ * Processes images sequentially to avoid overwhelming APIs.
+ */
+export async function detectAIForImages(
+  images: Array<{ url: string; name: string }>
+): Promise<AIDetectionResult[]> {
+  const results: AIDetectionResult[] = [];
+
+  for (const img of images) {
+    const result = await detectAIForImage(img.url, img.name);
+    results.push(result);
+  }
+
+  return results;
+}
+
+/**
+ * Render a visual score bar using block characters.
+ * @param score 0-1 probability
+ * @returns String like "████████░░" for 80%
+ */
+function renderScoreBar(score: number): string {
+  const filled = Math.round(score * 10);
+  const empty = 10 - filled;
+  return "\u2588".repeat(filled) + "\u2591".repeat(empty);
+}
+
+/**
+ * Build a Discord embed displaying AI detection results.
+ */
+export function buildAIDetectionEmbed(results: AIDetectionResult[], message: Message): EmbedBuilder {
+  const embed = new EmbedBuilder()
+    .setTitle("AI Detection Results")
+    .setColor(0x3b82f6) // Blue
+    .setTimestamp()
+    .setFooter({ text: `Message from ${message.author.tag}` });
+
+  // Add message link at the top
+  embed.setDescription(`[Jump to message](${message.url})`);
+
+  for (let i = 0; i < results.length; i++) {
+    const result = results[i];
+    const imageHeader = results.length > 1 ? `Image ${i + 1}` : "Image";
+
+    // Build service breakdown with visual bars
+    const serviceLines = result.services.map((s) => {
+      if (s.score !== null) {
+        const pct = Math.round(s.score * 100);
+        const bar = renderScoreBar(s.score);
+        return `${s.displayName}: ${bar} ${pct}%`;
+      } else if (s.error) {
+        return `${s.displayName}: \u274C Error`;
+      } else {
+        return `${s.displayName}: \u2014 Not configured`;
+      }
+    });
+
+    // Average line
+    let avgLine: string;
+    if (result.averageScore !== null) {
+      const avgPct = Math.round(result.averageScore * 100);
+      avgLine = `**Overall Average: ${avgPct}% AI-generated**`;
+    } else {
+      avgLine = "**Overall Average: Unable to calculate**";
+    }
+
+    const fieldValue = [avgLine, "", ...serviceLines, "", `${result.successCount}/4 services responded`].join(
+      "\n"
+    );
+
+    embed.addFields({
+      name: imageHeader,
+      value: fieldValue,
+      inline: false,
+    });
+  }
+
+  return embed;
+}

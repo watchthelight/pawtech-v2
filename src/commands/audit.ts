@@ -6,7 +6,6 @@
  * - /audit nsfw - Scan member avatars for NSFW content using Google Vision API
  *
  * Restricted to specific roles (Community Manager + Bot Developer).
- * Shows live progress updates and a final summary.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -93,6 +92,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
+  const subcommand = interaction.options.getSubcommand();
+
   // Check if user has an allowed role
   const member = await guild.members.fetch(user.id);
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
@@ -109,7 +110,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  const subcommand = interaction.options.getSubcommand();
   const nsfwScope = subcommand === "nsfw" ? interaction.options.getString("scope", true) : null;
 
   // Fetch member count for confirmation message

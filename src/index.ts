@@ -202,6 +202,10 @@ commands.set(flag.data.name, wrapCommand("flag", flag.execute));
 import * as audit from "./commands/audit.js";
 commands.set(audit.data.name, wrapCommand("audit", audit.execute));
 
+// AI detection command
+import * as isitreal from "./commands/isitreal.js";
+commands.set(isitreal.data.name, wrapCommand("isitreal", isitreal.execute));
+
 // Unblock command (remove permanent rejection)
 import * as unblock from "./commands/unblock.js";
 commands.set(unblock.data.name, wrapCommand("unblock", unblock.execute));

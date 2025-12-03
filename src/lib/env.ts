@@ -85,6 +85,13 @@ const raw = {
   // Remote server SSH configuration (for database sync/recovery)
   REMOTE_ALIAS: process.env.REMOTE_ALIAS?.trim(),
   REMOTE_PATH: process.env.REMOTE_PATH?.trim(),
+
+  // AI Detection APIs (optional - /audit ai command)
+  HIVE_API_KEY: process.env.HIVE_API_KEY?.trim(),
+  ILLUMINARTY_API_KEY: process.env.ILLUMINARTY_API_KEY?.trim(),
+  SIGHTENGINE_API_USER: process.env.SIGHTENGINE_API_USER?.trim(),
+  SIGHTENGINE_API_SECRET: process.env.SIGHTENGINE_API_SECRET?.trim(),
+  OPTIC_API_KEY: process.env.OPTIC_API_KEY?.trim(),
 };
 
 /**
@@ -177,6 +184,13 @@ const schema = z.object({
     .refine((val) => !val || SAFE_PATH_REGEX.test(val), {
       message: "REMOTE_PATH contains invalid characters",
     }),
+
+  // AI Detection APIs (optional - /audit ai command)
+  HIVE_API_KEY: z.string().optional(),
+  ILLUMINARTY_API_KEY: z.string().optional(),
+  SIGHTENGINE_API_USER: z.string().optional(),
+  SIGHTENGINE_API_SECRET: z.string().optional(),
+  OPTIC_API_KEY: z.string().optional(),
 });
 
 /**

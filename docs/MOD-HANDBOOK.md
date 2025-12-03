@@ -63,6 +63,7 @@
     - [Overview](#overview-1)
     - [/audit members — Bot Account Detection](#audit-members--bot-account-detection)
     - [/audit nsfw — Avatar NSFW Detection](#audit-nsfw--avatar-nsfw-detection)
+    - [/isitreal — AI Image Detection](#isitreal--ai-image-detection)
     - [Manual Flagging with /flag](#manual-flagging-with-flag)
 
 ---
@@ -1018,15 +1019,56 @@ For confirmed NSFW avatars:
 - If they refuse, mute until compliant
 - For egregious violations, escalate as appropriate
 
-#### AI Image Detection Tools
+### `/isitreal` — AI Image Detection
 
-When reviewing artwork or images (avatars, submissions, etc.), use these online tools to check if content is AI-generated:
+The `/isitreal` command lets staff detect AI-generated images directly in Discord without visiting external websites.
+
+**Who can use it:** Staff (requires mod role)
+
+#### How it works:
+
+1. Find a message containing images you want to check
+2. Copy the message ID (right-click > Copy Message ID) or the message link
+3. Run `/isitreal message:<id_or_link>`
+4. The bot scans all images in that message through multiple AI detection APIs
+5. Results appear in an ephemeral (private) embed
+
+#### Detection services:
+
+The bot uses multiple AI detection engines for accuracy:
+- **Engine 1** through **Engine 4**
+
+Each engine returns a percentage score. The bot averages them for an overall confidence score.
+
+#### Reading results:
+
+| Score | Interpretation |
+|-------|----------------|
+| **70%+** | Highly likely AI-generated |
+| **40-70%** | Uncertain — use judgment |
+| **Below 40%** | Likely authentic |
+
+#### When to use:
+
+- **Verified Artist applications** — Check if submitted art samples are AI-generated
+- **Art contest submissions** — Verify authenticity of entries
+- **Suspicious profile images** — Check avatars that look "too perfect"
+- **Commission disputes** — Help verify if delivered art is AI-generated
+
+#### Important considerations:
+
+- **Not 100% accurate** — Use as guidance, not absolute proof
+- **Digital art styles** — Anime and digital art may get false positives
+- **Ask questions** — If suspicious, ask the artist for process screenshots or speedpaints
+- **Multiple checks** — Consider checking multiple pieces from the same artist
+
+#### External AI Detection Tools
+
+For manual verification or when the bot command isn't available, use these websites:
 
 - **[Hive Moderation](https://hivemoderation.com/ai-generated-content-detection)** — Comprehensive AI content detection
 - **[Was It AI](https://wasitai.com/)** — Quick AI image checker
 - **[SightEngine](https://sightengine.com/detect-ai-generated-images)** — AI-generated image detection
-
-These are useful for verifying art authenticity in applications or submissions.
 
 #### API cost considerations:
 
@@ -1085,6 +1127,7 @@ Flagged users show warning badges on their applications, alerting reviewers to l
 | Mute | `/mute user: @user limit: duration reason: text` |
 | Kick | `/kick user: @user reason: text` |
 | Ban | `/ban user: @user reason: text preserve_messages: true` |
+| Check AI Art | `/isitreal message: <id or link>` |
 
 ---
 

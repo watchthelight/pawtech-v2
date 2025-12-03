@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **AI Detection Command** - New `/isitreal` command to detect AI-generated images in messages using external APIs:
+  - Hive Moderation, SightEngine, Optic AI Or Not (Illuminarty support planned)
+  - Averages scores across all configured services
+  - Shows per-service breakdown with visual score bars
+  - Ephemeral response for staff-only visibility
+  - Permission controlled via `mod_role_ids` guild config (same as other staff commands)
+  - New environment variables: `HIVE_API_KEY`, `SIGHTENGINE_API_USER`, `SIGHTENGINE_API_SECRET`, `OPTIC_API_KEY` (all optional)
+
+### Chores
+
+- Removed 10 empty orphaned directories: `tests/ui`, `tests/components`, `tests/api`, `tests/events`, `tests/e2e`, `docs/plans`, `logs`, `.github/`, `authentication`, `src/commands/config/handlers`
+
 ---
 
 ## [4.5.0] - 2025-12-02

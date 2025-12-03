@@ -28,16 +28,17 @@ Everything you need to know about the bot — what it does, who can use it, and 
 - 2.7 [/analytics-export](#analytics-export) — Export data as CSV
 - 2.8 [/flag](#flag) — Flag suspicious users
 - 2.9 [/audit](#audit) — Server audit commands (members and NSFW)
-- 2.10 [/approval-rate](#approval-rate) — Server-wide approval stats
-- 2.11 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
-  - 2.11.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
-  - 2.11.2 [What Gets Reset](#what-gets-reset)
-  - 2.11.3 [How the Epoch System Works](#how-the-epoch-system-works)
-  - 2.11.4 [Security Measures](#security-measures)
-- 2.12 [/sample](#sample) — Preview UI components for training
-  - 2.12.1 [/sample reviewcard](#sample-reviewcard)
-  - 2.12.2 [The Different Statuses](#the-different-statuses)
-  - 2.12.3 [Using Real Users in Samples](#using-real-users-in-samples)
+- 2.10 [/isitreal](#isitreal) — Detect AI-generated images
+- 2.11 [/approval-rate](#approval-rate) — Server-wide approval stats
+- 2.12 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
+  - 2.12.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
+  - 2.12.2 [What Gets Reset](#what-gets-reset)
+  - 2.12.3 [How the Epoch System Works](#how-the-epoch-system-works)
+  - 2.12.4 [Security Measures](#security-measures)
+- 2.13 [/sample](#sample) — Preview UI components for training
+  - 2.13.1 [/sample reviewcard](#sample-reviewcard)
+  - 2.13.2 [The Different Statuses](#the-different-statuses)
+  - 2.13.3 [Using Real Users in Samples](#using-real-users-in-samples)
 
 ### 3. [Artist Rotation](#artist-rotation)
 - 3.1 [How the Queue Works](#how-the-queue-works)
@@ -830,6 +831,58 @@ In addition to manual audits, the bot automatically monitors avatar changes in r
 - Flagged users are saved to the `nsfw_flags` table
 
 This runs automatically — no commands needed. Check `/health` to confirm "NSFW Avatar Monitor: Active" is shown.
+
+---
+
+### `/isitreal`
+**Who can use it:** Staff
+
+Detect AI-generated images in any Discord message. This command uses multiple external AI detection APIs to analyze images and provide a confidence score for whether they're AI-generated.
+
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `message` | Yes | Message ID or Discord message link containing images |
+
+**How it works:**
+1. Run `/isitreal message:<id_or_link>` — provide a message ID or full Discord message link
+2. The bot extracts all images from the message (attachments and embeds, up to 10)
+3. Each image is sent to multiple AI detection services in parallel
+4. Results are averaged and displayed in an ephemeral embed
+
+**Detection engines:**
+The bot uses multiple AI detection engines (Engine 1-4) to analyze images. Each engine returns a 0-100% confidence score, and the bot calculates an average across all responding engines.
+
+**Example output:**
+```
+AI Detection Results
+[Jump to message]
+
+Image
+Overall Average: 72% AI-generated
+
+Engine 1:  85%
+Engine 3:  77%
+Engine 4:  60%
+
+3/4 services responded
+```
+
+**Reading the results:**
+- **70%+** — Highly likely AI-generated
+- **40-70%** — Uncertain, use judgment
+- **Below 40%** — Likely authentic
+
+**When to use this:**
+- Reviewing art submissions for authenticity
+- Checking suspicious avatars or profile images
+- Verifying claims about artwork ownership
+- Supporting verified artist applications
+
+**Important notes:**
+- Results are ephemeral (only visible to you)
+- API services have rate limits — don't spam the command
+- Not all services are 100% accurate — use results as guidance, not absolute proof
+- Some art styles (digital art, anime) may get false positives
 
 ---
 
