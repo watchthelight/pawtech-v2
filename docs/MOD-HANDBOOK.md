@@ -4,6 +4,16 @@
 
 ---
 
+## Related Documentation
+
+| Document | Description |
+|----------|-------------|
+| [BOT-HANDBOOK.md](/BOT-HANDBOOK.md) | Complete technical guide to all bot commands and features |
+| [MOD-QUICKREF.md](/MOD-QUICKREF.md) | Quick reference card for common moderation tasks |
+| [CHANGELOG.md](/CHANGELOG.md) | Full version history and release notes |
+
+---
+
 ## Table of Contents
 
 1. [Introduction](#1-introduction)
@@ -1134,3 +1144,11 @@ Flagged users show warning badges on their applications, alerting reviewers to l
 *This handbook is maintained by Pawtropolis Leadership. For questions, contact a Senior Moderator or higher.*
 
 *Ban Appeals: https://dyno.gg/form/b18001d3*
+
+---
+
+## See Also
+
+- **[BOT-HANDBOOK.md](/BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
+- **[MOD-QUICKREF.md](/MOD-QUICKREF.md)** — Quick reference for everyday tasks
+- **[CHANGELOG.md](/CHANGELOG.md)** — Version history and recent changes

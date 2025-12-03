@@ -1,8 +1,10 @@
 # Slash Commands and UX
 
+> **Note:** For a complete, user-friendly guide to all bot commands, see [BOT-HANDBOOK.md](/BOT-HANDBOOK.md). This document covers implementation details for developers.
+
 ## Complete Command Registry
 
-All commands are guild-scoped and registered via `scripts/commands.ts` on deploy. Use `npm run commands` to sync with Discord.
+All commands are guild-scoped and registered via `scripts/deploy-commands.ts` on deploy. Use `npm run deploy:cmds` to sync with Discord.
 
 ### Core Commands
 

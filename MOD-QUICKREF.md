@@ -1,4 +1,8 @@
-# Pawtech Handbook
+# Pawtech Quick Reference
+
+> For full documentation, see [BOT-HANDBOOK.md](BOT-HANDBOOK.md) and [MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)
+
+---
 
 ## Reviewing Applications
 
@@ -58,9 +62,29 @@ Need to post something as the bot? `/send message:Your text here` does the trick
 
 If someone seems suspicious, `/flag user:@Username reason:Alt account` flags them for other staff to see.
 
+## Audit & Detection Tools
+
+Check if an image is AI-generated:
+- `/isitreal message:<message_id_or_link>` — scans all images in a message
+
+Flag suspicious users:
+- `/flag user:@Username reason:Alt account` — marks user for extra review
+
+Server audits (leadership only):
+- `/audit members` — scan for bot accounts
+- `/audit nsfw` — scan avatars for NSFW content
+
 ## Tips
 
 - Only use ONE identifier per command (app code, user mention, OR user ID — not multiple)
 - Always claim before reviewing to avoid stepping on someone else's work
 - The `perm:true` option is permanent — use it sparingly
 - User left the server? Their Discord ID still works with the `uid:` option
+
+---
+
+## Related Documentation
+
+- **[BOT-HANDBOOK.md](BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
+- **[MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)** — Staff policies, escalation, and moderation protocols
+- **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent changes

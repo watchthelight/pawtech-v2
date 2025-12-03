@@ -6,13 +6,24 @@ This documentation covers the architecture, configuration, operation, and develo
 
 ---
 
+## Staff Handbooks
+
+| Document | Description |
+|----------|-------------|
+| [BOT-HANDBOOK.md](/BOT-HANDBOOK.md) | **Complete bot usage guide** — all commands, features, and troubleshooting |
+| [MOD-HANDBOOK.md](MOD-HANDBOOK.md) | **Staff policies** — escalation guidelines, moderation protocols, and training |
+| [MOD-QUICKREF.md](/MOD-QUICKREF.md) | **Quick reference** — commands at a glance for everyday tasks |
+| [CHANGELOG.md](/CHANGELOG.md) | **Version history** — full release notes and recent changes |
+
+---
+
 ## Quick Links
 
 | Need to... | Go to |
 |------------|-------|
 | Get started | [Executive Summary](overview/executive-summary.md) |
 | Understand the system | [System Architecture](architecture/system-overview.md) |
-| Use commands | [Slash Commands Reference](reference/slash-commands.md) |
+| Use commands | [BOT-HANDBOOK.md](/BOT-HANDBOOK.md) |
 | Deploy the bot | [Deployment Config](operations/deployment-config.md) |
 | Fix issues | [Troubleshooting](operations/troubleshooting.md) |
 
@@ -60,7 +71,8 @@ Deployment, configuration, and maintenance.
 
 ### Roadmap
 
-- [Roadmap and Open Issues](roadmap.md) - Future plans and known issues
+- [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Ideas for future development
+- [Rejected Ideas](roadmap/REJECTED.md) - Previously considered but not implemented
 
 ---
 

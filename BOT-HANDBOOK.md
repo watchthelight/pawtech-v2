@@ -4,6 +4,16 @@ Everything you need to know about the bot — what it does, who can use it, and 
 
 ---
 
+## Related Documentation
+
+| Document | Description |
+|----------|-------------|
+| [MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md) | Staff policies, escalation guidelines, and moderation protocols |
+| [MOD-QUICKREF.md](MOD-QUICKREF.md) | Quick reference card for common tasks |
+| [CHANGELOG.md](CHANGELOG.md) | Full version history and release notes |
+
+---
+
 ## Table of Contents
 
 ### 1. [Gate System (Application Review)](#gate-system-application-review)
@@ -2257,7 +2267,7 @@ This is an interactive wizard that helps you:
 
 | Level | Who has it | Example commands |
 |-------|------------|------------------|
-| **Everyone** | All server members | `/health`, `/activity`, `/suggest` |
+| **Everyone** | All server members | `/health`, `/art getstatus`, `/art leaderboard` |
 | **Staff** | Reviewer role or Manage Guild | `/accept`, `/reject`, `/listopen`, `/modstats` |
 | **Leadership** | Server owners + leadership role | `/modhistory` |
 | **Administrator** | Administrator permission | `/config`, `/review-set-notify-config` |
@@ -2630,4 +2640,12 @@ The more details you provide, the faster support can help you.
 
 ---
 
-*Last revised: November 29, 2025*
+*Last revised: December 3, 2025*
+
+---
+
+## See Also
+
+- **[MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)** — Staff policies, escalation guidelines, and moderation protocols
+- **[MOD-QUICKREF.md](MOD-QUICKREF.md)** — Quick reference for everyday tasks
+- **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent changes
