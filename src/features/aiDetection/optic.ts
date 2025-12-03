@@ -28,6 +28,7 @@ export async function detectOptic(imageUrl: string): Promise<number | null> {
         Authorization: `Bearer ${env.OPTIC_API_KEY}`,
         "Content-Type": "application/json",
       },
+      // Yes, they call it "object" not "url". Every API is a unique snowflake.
       body: JSON.stringify({
         object: imageUrl,
       }),
@@ -46,8 +47,11 @@ export async function detectOptic(imageUrl: string): Promise<number | null> {
       };
     };
 
-    // Optic response structure:
-    // { report: { verdict: "ai" | "human", ai: { confidence: 0.95 } } }
+    /*
+     * Optic returns both a verdict ("ai"/"human") and a confidence score.
+     * We only use the confidence since averaging string verdicts is... tricky.
+     * The verdict is basically just confidence > 0.5 anyway.
+     */
     const confidence = data?.report?.ai?.confidence;
 
     if (typeof confidence !== "number") {

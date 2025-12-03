@@ -23,6 +23,9 @@ import { getNotifyConfig } from "../features/notifyConfig.js";
 import { notifyLimiter } from "../lib/notifyLimiter.js";
 import { DISCORD_RETRY_DELAY_MS, SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 
+// GOTCHA: This fires on ALL thread creations, not just forum posts.
+// We filter to forum/media channels immediately because Discord's event system
+// is about as specific as a shotgun blast.
 export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
   try {
     if (thread.parent?.type !== ChannelType.GuildForum && thread.parent?.type !== ChannelType.GuildMedia) {
@@ -37,6 +40,12 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
 
     if (config.forum_channel_id && thread.parentId !== config.forum_channel_id) return;
 
+    /*
+     * WHY the retry dance below: Discord fires threadCreate before the starter
+     * message actually exists in their database. This is documented nowhere,
+     * discovered through pain, and probably won't be fixed because Discord.
+     * The 10008 error ("Unknown Message") is our cue to wait and try again.
+     */
     let starterMessage;
     try {
       starterMessage = await thread.fetchStarterMessage();
@@ -58,8 +67,11 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
       }
     }
 
+    // Skip bot-authored posts. We don't need to ping staff about the bot's own announcements.
     if (!starterMessage || starterMessage.author.bot) return;
 
+    // Rate limiting: prevents someone from creating 50 forum posts and
+    // pinging staff into oblivion. The limiter tracks per-guild cooldowns.
     const rateLimitCheck = notifyLimiter.canNotify(guildId, config);
     if (!rateLimitCheck.ok) {
       logger.info({ guildId, threadId: thread.id, reason: rateLimitCheck.reason }, "[forumPostNotify] rate limit exceeded");
@@ -80,9 +92,14 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
     const threadUrl = `https://discord.com/channels/${guildId}/${thread.id}/${starterMessage.id}`;
     const content = `<@&${roleId}> heads up! A member has feedback in ${threadUrl}`;
 
+    // Yeah, that's an `any`. Sue me. TypeScript's channel types are a nightmare
+    // and this gets reassigned conditionally. Both paths are text-based so .send() works.
     let targetChannel: any = thread;
     let notifyMode = config.notify_mode || "post";
 
+    // Two modes: "post" pings inside the thread itself, "channel" pings in a dedicated channel.
+    // If the channel fetch fails (deleted? permissions?), we fall back to posting in the thread
+    // rather than silently failing. Some notification is better than none.
     if (notifyMode === "channel" && config.notification_channel_id) {
       try {
         const channel = await thread.client.channels.fetch(config.notification_channel_id);
@@ -95,6 +112,8 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
     }
 
     try {
+      // SECURITY: allowedMentions is critical here. Without it, a crafted thread name
+      // could potentially mention @everyone. We explicitly whitelist only our role.
       await targetChannel.send({ content, allowedMentions: { roles: [roleId], users: [], repliedUser: false } });
       logger.info({ guildId, threadId: thread.id, roleId, mode: notifyMode }, "[forumPostNotify] ping sent");
       if (thread.guild) {
@@ -118,11 +137,16 @@ export async function forumPostNotify(thread: ThreadChannel): Promise<void> {
           meta: { thread_name: thread.name, starter_message_id: starterMessage.id, role_id: roleId, error_code: err.code, failure_reason: failureReason },
         });
       }
+      // If the role isn't mentionable, we still want staff to know about the post.
+      // This fallback message won't ping but at least it shows up. Someone should
+      // probably fix their role settings, but that's a them problem.
       if (failureReason === "role_not_mentionable") {
         try { await thread.send({ content: `New feedback post by ${starterMessage.author} - role <@&${roleId}> (not mentionable): ${threadUrl}`, allowedMentions: SAFE_ALLOWED_MENTIONS }); } catch (err) { logger.warn({ err, threadId: thread.id, roleId }, "[forumPostNotify] fallback message failed"); }
       }
     }
   } catch (err) {
+    // Outer try-catch: if we got here, something truly unexpected happened.
+    // All the expected failures are handled above with specific error codes.
     logger.error({ err, threadId: thread.id, guildId: thread.guildId }, "[forumPostNotify] unexpected error");
   }
 }

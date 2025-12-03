@@ -8,6 +8,11 @@
 import { describe, it, expect, beforeEach, vi, afterEach } from "vitest";
 import { LRUCache } from "../../src/lib/lruCache.js";
 
+/*
+ * GOTCHA: These tests use fake timers. If you add any test that does actual async work
+ * (like fetching), you'll have a bad time. vi.advanceTimersByTime() doesn't play nice
+ * with real network calls - they just hang forever while fake time marches on.
+ */
 describe("LRUCache", () => {
   beforeEach(() => {
     vi.useFakeTimers();
@@ -126,6 +131,8 @@ describe("LRUCache", () => {
       expect(cache.size).toBe(0);
     });
 
+    // WHY: has() is intentionally read-only for LRU purposes. This lets you check
+    // if something exists without accidentally keeping stale data alive longer.
     it("does not update LRU order", () => {
       const cache = new LRUCache<string, number>(2, 60000);
       cache.set("key1", 100);
@@ -166,6 +173,8 @@ describe("LRUCache", () => {
       expect(cache.get("key")).toBeUndefined();
     });
 
+    // Boundary conditions are where off-by-one bugs hide. This test caught one in
+    // an earlier version where we used < instead of <=.
     it("entries at exactly TTL boundary are expired", () => {
       const cache = new LRUCache<string, number>(10, 1000);
       cache.set("key", 100);
@@ -194,6 +203,11 @@ describe("LRUCache", () => {
     });
   });
 
+  /*
+   * LRU eviction is the whole reason this class exists instead of just using Map.
+   * The logic relies on Map iteration order being insertion order (guaranteed in ES6+),
+   * which is why we can just iterate and delete the first N entries to evict the oldest.
+   */
   describe("LRU eviction", () => {
     it("evicts least recently used entry when at capacity", () => {
       const cache = new LRUCache<string, number>(3, 60000);
@@ -325,6 +339,9 @@ describe("LRUCache", () => {
       expect(cache.get("arr")).toEqual([1, 2, 3]);
     });
 
+    // GOTCHA: null is a valid cached value, undefined means "not found".
+    // If you ever change get() to return null for missing keys, this test will
+    // catch it but you'll also break every consumer that distinguishes these cases.
     it("works with null values", () => {
       const cache = new LRUCache<string, string | null>(10, 60000);
       cache.set("nullable", null);
@@ -342,6 +359,7 @@ describe("LRUCache", () => {
     });
   });
 
+  // Edge cases section is really "things that would be bugs if Map didn't handle them"
   describe("edge cases", () => {
     it("handles empty string keys", () => {
       const cache = new LRUCache<string, number>(10, 60000);

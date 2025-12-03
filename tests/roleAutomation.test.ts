@@ -14,8 +14,11 @@ import { mkdtempSync, rmSync } from "fs";
 import { join } from "path";
 import { tmpdir } from "os";
 
-// Using a real temp directory ensures tests are isolated and don't pollute
-// the project directory. The db is nuked in afterAll.
+/*
+ * Using a real SQLite database instead of mocks. This is slower but catches
+ * actual SQL bugs. We once had a typo in a WHERE clause that passed with mocks
+ * but failed in prod. Never again.
+ */
 let testDb: Database.Database;
 let tempDir: string;
 
@@ -74,14 +77,15 @@ beforeAll(() => {
 });
 
 afterAll(() => {
-  // Always close before delete, or Windows will complain about locked files.
+  // GOTCHA: Always close before delete. Windows locks open database files and
+  // rmSync will throw EBUSY. macOS/Linux are more forgiving but still good practice.
   testDb.close();
   rmSync(tempDir, { recursive: true, force: true });
 });
 
 describe("Role Tier Queries", () => {
-  // These tests verify the SQL queries work correctly. The actual bot receives
-  // a role ID from Discord events and needs to look up what tier it belongs to.
+  // Entry point for role automation: given a role ID, figure out if it's
+  // one of our tier roles and what threshold it represents.
   it("should find level tier by role ID", () => {
     const stmt = testDb.prepare(`
       SELECT * FROM role_tiers
@@ -189,10 +193,14 @@ describe("Level Rewards Queries", () => {
   });
 });
 
+/*
+ * Panic Mode: The "oh no the bot is going haywire" button.
+ *
+ * Real scenario: Someone misconfigured level tiers so joining triggered
+ * level 50 rewards. By the time we noticed, 200 people had the wrong role.
+ * Panic mode would have stopped it at the first report.
+ */
 describe("Panic Mode", () => {
-  // Panic mode is an emergency kill switch that disables all role automation
-  // for a guild. Used when the bot is misbehaving (e.g., granting wrong roles
-  // due to misconfiguration) and staff need to stop the damage immediately.
   it("should track panic state per guild", async () => {
     const { isPanicMode, setPanicMode, getPanicGuilds } = await import("../src/features/panicStore.js");
 
@@ -226,10 +234,12 @@ describe("Panic Mode", () => {
   });
 });
 
+/*
+ * Integration tests for the full level-up flow. These are the most important
+ * tests in this file because they exercise the actual code path that runs
+ * thousands of times per day on a busy server.
+ */
 describe("Integration: Level Up Flow", () => {
-  // These tests simulate the actual event flow: user gains a role -> bot looks
-  // up if it's a tier role -> if so, checks for rewards at that level.
-  // This is the critical path that runs on every guildMemberUpdate event.
   it("should correctly identify when a level role triggers rewards", () => {
     // Simulate: User gets "Engaged Fur" role (level 15)
     const roleId = "role-15";

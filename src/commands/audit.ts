@@ -48,12 +48,18 @@ import {
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 
 // Allowed role IDs (Community Manager + Bot Developer)
+// GOTCHA: These are hardcoded role IDs. If roles get recreated (or this runs
+// in a different server), you'll need to update these. Consider moving to
+// guild config if this bot ever needs multi-server flexibility.
 const ALLOWED_ROLES = [
   "1190093021170114680", // Community Manager
   "1120074045883420753", // Bot Developer
 ];
 
 // Nonce generation for button security
+// WHY: Without this, anyone could craft a button customId and trigger audits.
+// The nonce ties the button to the specific command invocation. Not cryptographically
+// secure (Math.random is PRNG), but good enough to prevent casual button spoofing.
 function generateNonce(): string {
   return Math.random().toString(16).slice(2, 10);
 }
@@ -113,10 +119,15 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   const nsfwScope = subcommand === "nsfw" ? interaction.options.getString("scope", true) : null;
 
   // Fetch member count for confirmation message
+  // WHY deferReply: The member fetch below can take several seconds for large
+  // guilds, and Discord's 3-second interaction timeout is merciless.
   await interaction.deferReply();
 
   try {
     // Check for active session that can be resumed
+    // WHY: NSFW audits can take 20+ minutes for large guilds. If the bot restarts
+    // mid-scan (deploy, crash, Discord hiccup), we don't want to re-scan everyone.
+    // The session tracks which users were already checked.
     const activeSession = getActiveSession(guildId, subcommand as "members" | "nsfw");
 
     if (activeSession) {
@@ -169,6 +180,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     }
 
     // No active session - show normal confirmation
+    // NOTE: This fetches ALL members into memory at once. For a 10k member guild,
+    // that's fine. For 100k+, this could be problematic. The actual scan uses
+    // pagination (guild.members.list), but this confirmation count doesn't.
+    // Could be optimized if we ever run this on massive guilds.
     const members = await guild.members.fetch();
     const memberCount = members.size;
 
@@ -241,6 +256,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
 /**
  * Handle audit button interactions (Confirm/Cancel/Resume/Fresh)
+ *
+ * This function handles a horrifying number of button ID formats. I tried to
+ * consolidate them but the different audit types need different metadata
+ * (scope for NSFW, session IDs for resume). The regex parsing below is the
+ * least-bad solution I could come up with.
  */
 export async function handleAuditButton(interaction: ButtonInteraction): Promise<void> {
   const { customId, user, guild, channel } = interaction;
@@ -253,6 +273,11 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
   // - audit:nsfw:all:resume:sessionId:nonce (resume)
   // - audit:nsfw:all:fresh:sessionId:nonce (start fresh, cancel old)
   // - audit:nsfw:all:cancel:0:nonce (cancel without starting)
+  // These regexes look like line noise but they're pretty straightforward:
+  // - membersMatch: audit:members:{action}:{nonce}
+  // - nsfwMatch: audit:nsfw:{scope}:{action}:{nonce}
+  // - resumeMatch: audit:{type}:{scope}:{action}:{sessionId}:{nonce}
+  // If you're adding a new button format, update the parsing below too.
   const membersMatch = customId.match(/^audit:members:(confirm|cancel):([a-f0-9]{8})$/);
   const nsfwMatch = customId.match(/^audit:nsfw:(all|flagged):(confirm|cancel):([a-f0-9]{8})$/);
   const resumeMatch = customId.match(/^audit:(members|nsfw):(all|flagged|none):(resume|fresh|cancel):(\d+):([a-f0-9]{8})$/);
@@ -283,6 +308,9 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
     nonce = nsfwMatch[3];
   } else {
     // Resume/fresh/cancel format
+    // The non-null assertions (!) are safe here because we already checked
+    // that resumeMatch exists in the if/else chain above. TypeScript just
+    // can't track that through the conditional logic.
     subcommand = resumeMatch![1];
     scope = resumeMatch![2] === "none" ? null : resumeMatch![2];
     action = resumeMatch![3];
@@ -298,7 +326,8 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
     return;
   }
 
-  // Check permissions again
+  // Check permissions again - yes, we already checked in execute(), but buttons
+  // can be clicked by anyone who sees the message. Re-checking is paranoid but correct.
   const member = await guild.members.fetch(user.id);
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
 
@@ -323,6 +352,9 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
 
   // Security: Rate limit expensive audit operations per guild
   // Skip rate limit check for resume (user is continuing existing work)
+  // WHY: NSFW audits hit Google Vision API ($$$ and quotas). Member audits
+  // just churn CPU, but could still DoS the bot if spammed. One audit per
+  // guild per cooldown period keeps things sane.
   if (action !== "resume") {
     const cooldownMs = subcommand === "nsfw" ? COOLDOWNS.AUDIT_NSFW_MS : COOLDOWNS.AUDIT_MEMBERS_MS;
     const cooldownKey = `audit:${subcommand}`;
@@ -378,6 +410,9 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
   });
 
   // Run the appropriate audit in background (don't await - would timeout with large member counts)
+  // CRITICAL: We intentionally fire-and-forget here. Discord interactions expire
+  // after 15 minutes, but these audits can run for 30+ minutes on large servers.
+  // The .catch() handles failures gracefully without crashing the event loop.
   if (subcommand === "nsfw") {
     runNsfwAudit(interaction, guild, channel as TextChannel, (scope as "all" | "flagged") ?? "all", resumeSession).catch(async (err) => {
       logger.error({ err, guildId: guild.id, scope }, "[audit:nsfw] Background audit failed");
@@ -421,6 +456,12 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
 
 /**
  * Run the members audit process (bot detection)
+ *
+ * Scans all guild members looking for accounts that match bot/spam heuristics:
+ * - No avatar, new account, no activity, low level, suspicious username patterns
+ *
+ * Unlike the NSFW audit, this is CPU-bound (no external API calls), so it's
+ * much faster but also has less sophisticated detection. False positives happen.
  */
 async function runMembersAudit(
   interaction: ButtonInteraction,
@@ -436,11 +477,14 @@ async function runMembersAudit(
 
   try {
     // Paginate through members using list() - much faster than fetch() for large guilds
+    // WHY list() instead of fetch(): fetch() loads ALL members into memory at once.
+    // list() with pagination keeps memory usage constant regardless of guild size.
+    // For a 50k member guild, this is the difference between 500MB RAM spike vs ~10MB.
     logger.info({ guildId: guild.id }, "[audit:members] Starting paginated member scan...");
 
     let lastMemberId: string | undefined;
     let processedBatches = 0;
-    const BATCH_SIZE = 1000;
+    const BATCH_SIZE = 1000; // Discord's max for guild.members.list()
 
     // Process members in batches
     while (true) {
@@ -509,10 +553,15 @@ async function runMembersAudit(
           await channel.send({ embeds: [flagEmbed] });
 
           // Small delay to avoid rate limits
+          // WHY 300ms: Discord's message rate limit is ~5/5sec per channel.
+          // 300ms gives us headroom without making the audit painfully slow.
           await sleep(300);
         }
 
         // Update progress every 50 members for real-time feedback
+        // GOTCHA: interaction.editReply can fail if the interaction token expired
+        // (15 min limit) or if the message was deleted. We catch and log but don't
+        // abort the audit - the channel embeds are the real output anyway.
         if (totalScanned % 50 === 0) {
           try {
             const elapsed = Math.round((Date.now() - startTime) / 1000);
@@ -589,6 +638,8 @@ async function runMembersAudit(
   } catch (err) {
     logger.error({ err, guildId: guild.id }, "[audit:members] Audit failed");
 
+    // Best-effort error notification. If this also fails, we're probably having
+    // a bad day with Discord's API and there's nothing more we can do.
     try {
       await channel.send({
         content: `❌ Audit failed with error: ${err instanceof Error ? err.message : "Unknown error"}`,
@@ -601,6 +652,12 @@ async function runMembersAudit(
 
 /**
  * Run the NSFW avatar audit process
+ *
+ * This is the expensive one. Every member with a custom avatar triggers a
+ * Google Cloud Vision API call (~$1.50/1000 images). For a 10k member guild,
+ * that's potentially $15 per full scan. The 80% threshold is intentionally
+ * high to minimize false positives - we'd rather miss edge cases than flag
+ * someone's abstract art as porn.
  */
 async function runNsfwAudit(
   interaction: ButtonInteraction,
@@ -616,12 +673,13 @@ async function runNsfwAudit(
   let skippedNoAvatar = 0;
   let skippedAlreadyScanned = 0;
 
-  const NSFW_THRESHOLD = 0.8; // 80% = hard evidence
+  const NSFW_THRESHOLD = 0.8; // 80% = hard evidence (see doc comment above)
   const PROGRESS_UPDATE_INTERVAL = 10; // Update every 10 members for real-time feedback
 
   // Batch processing configuration for Vision API calls
   // Before: Sequential with 100ms sleep per member = 100+ seconds for 1000 members
   // After: 10 concurrent requests with 200ms between batches = ~15 seconds for 1000 members
+  // CAREFUL: Don't crank VISION_BATCH_SIZE too high or you'll hit Vision API rate limits
   const VISION_BATCH_SIZE = 10;
   const BATCH_DELAY_MS = 200;
 
@@ -644,7 +702,8 @@ async function runNsfwAudit(
           const member = await guild.members.fetch(userId);
           membersToScan.push(member);
         } catch {
-          // Member may have left the server
+          // Member may have left the server - silently skip
+          // This is expected behavior, not an error worth logging
         }
       }
     } else {
@@ -679,6 +738,9 @@ async function runNsfwAudit(
     logger.info({ guildId: guild.id, totalMembers }, "[audit:nsfw] Starting scan");
 
     // Create or use existing session
+    // The session is our crash-recovery mechanism. If the bot dies mid-audit,
+    // we can offer to resume from where we left off instead of re-scanning
+    // thousands of avatars (and burning API quota).
     let sessionId: number;
     if (resumeSession) {
       sessionId = resumeSession.id;
@@ -710,6 +772,8 @@ async function runNsfwAudit(
       }
 
       // Skip users without custom avatars (default Discord avatars)
+      // WHY: Default avatars are Discord-generated geometric patterns based on
+      // discriminator. Zero chance of NSFW content, so don't waste API calls.
       const avatarUrl = member.user.avatar
         ? member.user.displayAvatarURL({ extension: "png", size: 256 })
         : null;
@@ -726,6 +790,11 @@ async function runNsfwAudit(
 
     // Process members in batches with concurrent Vision API calls
     // This replaces sequential processing with 100ms sleep per member
+    //
+    // PERFORMANCE NOTE: Promise.all means if one request hangs, we wait for all
+    // of them. Could use Promise.allSettled for better resilience, but then we'd
+    // need to handle partial failures per-batch. Current approach is simpler and
+    // Vision API is reliable enough that timeouts are rare.
     let processedInThisRun = 0;
     for (let i = 0; i < membersToProcess.length; i += VISION_BATCH_SIZE) {
       const batch = membersToProcess.slice(i, i + VISION_BATCH_SIZE);
@@ -746,6 +815,9 @@ async function runNsfwAudit(
         markUserScanned(sessionId, member.id);
 
         if (!visionResult) {
+          // Vision API returned null - could be network error, quota exceeded,
+          // or image couldn't be processed. We skip rather than retry because
+          // retries would slow down the audit and most failures are transient.
           continue;
         }
 
@@ -764,6 +836,8 @@ async function runNsfwAudit(
           flaggedCount++;
 
           // Send flag embed to channel
+          // Reverse image search link helps mods verify - sometimes Vision flags
+          // legitimate art or memes that happen to have skin tones
           const reverseSearchUrl = googleReverseImageUrl(avatarUrl);
           const flagEmbed = new EmbedBuilder()
             .setTitle(`🔞 NSFW Avatar Detected [${flaggedCount}]`)
@@ -790,6 +864,8 @@ async function runNsfwAudit(
       }
 
       // Update progress after each batch
+      // We save to DB frequently so resume works even if the bot crashes mid-scan.
+      // The conditional ensures we don't spam the database on every single member.
       if (processedInThisRun % PROGRESS_UPDATE_INTERVAL === 0 || i + VISION_BATCH_SIZE >= membersToProcess.length) {
         // Save progress to database
         updateProgress(sessionId, totalScanned, flaggedCount, apiCallCount);
@@ -884,6 +960,8 @@ async function runNsfwAudit(
   }
 }
 
+// Yes, we're promisifying setTimeout in 2024. No, there's no built-in for this.
+// Node 16+ has timers/promises but we're keeping it simple.
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }

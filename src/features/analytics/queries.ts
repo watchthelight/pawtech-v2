@@ -20,6 +20,9 @@ import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import { nowUtc } from "../../lib/time.js";
 
+// All query options are optional, which means every function needs to handle
+// the "give me everything" case. This is intentional - cross-guild queries are
+// a valid use case for bot owners doing aggregate analytics.
 export type QueryOptions = {
   guildId?: string;
   from?: number;
@@ -68,6 +71,12 @@ export type QueueAgeStats = {
  * @param opts - Query options (guildId, from, to)
  * @returns Array of { moderator_id, action, count }
  */
+/*
+ * GOTCHA: This function builds SQL dynamically. Yes, I know what you're thinking.
+ * No, it's not vulnerable - all user input goes through parameterized queries.
+ * The only dynamic parts are table/column names which are hardcoded strings.
+ * Still makes me nervous every time I look at it though.
+ */
 export function getActionCountsByMod(opts: QueryOptions): ActionCount[] {
   const start = Date.now();
 
@@ -111,6 +120,9 @@ export function getActionCountsByMod(opts: QueryOptions): ActionCount[] {
 
     sql += ` GROUP BY ra.moderator_id, ra.action ORDER BY count DESC`;
 
+    // Preparing statements on every call is fine for analytics - these queries run
+    // maybe a few times per day. If this ever becomes a hot path (it won't), consider
+    // pre-compiling the fixed variants and picking the right one at runtime.
     const stmt = db.prepare(sql);
     const rows = stmt.all(...params) as ActionCount[];
 
@@ -194,6 +206,8 @@ export function getLeadTimeStats(opts: QueryOptions): LeadTimeStats {
       )
       ORDER BY lead_time_sec ASC
     `;
+    // This correlated subquery is O(n*m) in the worst case, but review_action is small
+    // enough that it doesn't matter. Famous last words, I know.
 
     const stmt = db.prepare(sql);
     const rows = stmt.all(...params) as Array<{ lead_time_sec: number }>;
@@ -205,6 +219,8 @@ export function getLeadTimeStats(opts: QueryOptions): LeadTimeStats {
     // Calculate statistics
     // We compute these in JS rather than SQL because SQLite lacks percentile functions
     // and the dataset is typically small enough (thousands of rows) that this is fine.
+    // WHY JS instead of a SQLite extension? Because adding native extensions to SQLite
+    // is a deployment nightmare, and the percentile-of-1000-rows cost is basically free.
     const leadTimes = rows.map((r) => r.lead_time_sec);
     const n = leadTimes.length;
     const sum = leadTimes.reduce((acc, val) => acc + val, 0);
@@ -213,6 +229,9 @@ export function getLeadTimeStats(opts: QueryOptions): LeadTimeStats {
     // Percentiles (using nearest-rank method)
     // This is simpler than interpolation and good enough for our analytics purposes.
     // At small n, the difference between methods is negligible anyway.
+    //
+    // The Math.max(0, Math.min(...)) dance is defensive programming against array bounds.
+    // Could probably just use leadTimes[Math.floor(n * 0.5)] but I've been burned before.
     const p50Index = Math.max(0, Math.min(Math.ceil(0.5 * n) - 1, n - 1));
     const p90Index = Math.max(0, Math.min(Math.ceil(0.9 * n) - 1, n - 1));
     const p50 = leadTimes[p50Index];
@@ -262,6 +281,10 @@ export function getTopReasons(opts: QueryOptions & { limit?: number }): ReasonCo
     // The REPLACE chain is ugly but SQLite doesn't have regex replace.
     // Known limitation: Only collapses double-spaces once; "too   young" becomes "too  young".
     // Not worth fixing since it's rare and the results are still readable.
+    //
+    // Yes, this normalization is duplicated in approvalRate.ts. No, I haven't extracted it
+    // into a shared constant. The SQL snippets are slightly different and abstracting SQL
+    // fragments tends to make things worse, not better.
     let sql = `
       SELECT
         LOWER(TRIM(REPLACE(REPLACE(reason, CHAR(10), ' '), '  ', ' '))) as normalized_reason,
@@ -296,6 +319,8 @@ export function getTopReasons(opts: QueryOptions & { limit?: number }): ReasonCo
     sql += ` WHERE ${conditions.join(" AND ")}`;
     sql += ` GROUP BY normalized_reason`;
     sql += ` HAVING normalized_reason IS NOT NULL AND normalized_reason != ''`;
+    // Secondary sort by reason name so results are deterministic when counts tie.
+    // Without this, pagination would be unreliable if we ever added it.
     sql += ` ORDER BY count DESC, normalized_reason ASC`;
     sql += ` LIMIT ?`;
 
@@ -345,6 +370,8 @@ export function getTopReasons(opts: QueryOptions & { limit?: number }): ReasonCo
  * @param opts - Query options (guildId, from, to, bucket)
  * @returns Array of { t0, t1, total, approvals, rejects, permrejects }
  */
+// "day" | "week" only - no "month" option because months have variable lengths
+// and someone will inevitably file a bug when February looks different from March.
 export function getVolumeSeries(opts: QueryOptions & { bucket?: "day" | "week" }): VolumeBucket[] {
   const start = Date.now();
   const bucket = opts.bucket || "day";
@@ -359,6 +386,10 @@ export function getVolumeSeries(opts: QueryOptions & { bucket?: "day" | "week" }
     // This truncates timestamps to bucket boundaries (midnight UTC for days).
     // Note: This uses server timezone (UTC assumed). If you need local timezone bucketing,
     // you'd need to offset timestamps before division, which gets complicated.
+    //
+    // EDGE CASE: If an action happens at exactly midnight UTC (bucket boundary), it lands
+    // in the new bucket. This is the intuitive behavior but occasionally confuses people
+    // doing audits who expect "today's stats" to include that midnight action.
     let sql = `
       SELECT
         (ra.created_at / ${bucketSec}) * ${bucketSec} as bucket_start,
@@ -439,6 +470,8 @@ export function getVolumeSeries(opts: QueryOptions & { bucket?: "day" | "week" }
  * @param guildId - Guild ID to filter (required for queue stats)
  * @returns { count, max_age_sec, p50_age_sec }
  */
+// Unlike the other functions, this one requires guildId. Cross-guild queue stats
+// don't make sense - each guild has its own backlog and SLA expectations.
 export function getOpenQueueAge(guildId: string): QueueAgeStats {
   const start = Date.now();
 
@@ -467,7 +500,8 @@ export function getOpenQueueAge(guildId: string): QueueAgeStats {
 
     const ages = rows.map((r) => r.age_sec);
     const count = ages.length;
-    const max_age_sec = ages[Math.min(ages.length - 1, 0)];
+    // Query orders ASC, so last element is oldest (max age)
+    const max_age_sec = ages[ages.length - 1];
 
     // p50 (median)
     const p50Index = Math.max(0, Math.min(Math.ceil(0.5 * count) - 1, count - 1));

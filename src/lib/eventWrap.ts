@@ -65,8 +65,12 @@ export function wrapEvent<T extends unknown[]>(
 ): EventHandler<T> {
   // Return an async wrapper that will never throw. This is critical -
   // an unhandled rejection in an event handler can crash the process.
+  // Ask me how I know. (The answer is "production at 3am")
   return async (...args: T) => {
     try {
+      // Promise.race: first one to settle wins. Either the handler completes,
+      // or the timeout fires. Yes, the "losing" promise keeps running - we can't
+      // cancel it in JS. The timeout just lets us stop waiting and move on.
       await Promise.race([
         handler(...args),
         new Promise<void>((_, reject) =>
@@ -105,6 +109,7 @@ export function wrapEvent<T extends unknown[]>(
       // IMPORTANT: Never re-throw. The bot must keep running even if one event
       // handler fails. Unhandled promise rejections in event handlers can
       // terminate the process depending on Node.js version and flags.
+      // Node 15+ with --unhandled-rejections=strict WILL kill your process.
     }
   };
 }
@@ -122,6 +127,9 @@ export function wrapEvent<T extends unknown[]>(
  * issues in specific servers.
  */
 function extractEventContext(args: unknown[]): Record<string, unknown> {
+  // Best-effort extraction of IDs from Discord.js event payloads. This is
+  // intentionally defensive - we probe for common properties and silently
+  // skip anything that doesn't match. Not every event has every field.
   const context: Record<string, unknown> = {};
 
   for (const arg of args) {

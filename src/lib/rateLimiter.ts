@@ -13,6 +13,8 @@
 import { logger } from "./logger.js";
 
 // Map of command name -> Map of scope (userId or guildId) -> last used timestamp
+// GOTCHA: This is module-level state - hot-reloads in dev will reset all cooldowns.
+// Users will absolutely notice and exploit this if they figure it out.
 const cooldowns = new Map<string, Map<string, number>>();
 
 // Cleanup interval to prevent unbounded memory growth
@@ -41,6 +43,8 @@ export function checkCooldown(
 ): { allowed: boolean; remainingMs?: number } {
   const now = Date.now();
   const scopeCooldowns = cooldowns.get(commandName) ?? new Map<string, number>();
+  // Defaulting to 0 means "last used at the Unix epoch" which is always older than
+  // any reasonable cooldown. Slightly clever, mostly confusing on first read.
   const lastUsed = scopeCooldowns.get(scopeId) ?? 0;
 
   const elapsed = now - lastUsed;
@@ -53,7 +57,12 @@ export function checkCooldown(
     return { allowed: false, remainingMs };
   }
 
-  // Update last used timestamp
+  /*
+   * Update last used timestamp BEFORE returning.
+   * This is intentional - we set the timestamp even if the caller never actually
+   * runs the command. The alternative (caller calls "recordUsage" after success)
+   * would require trusting every caller to remember. They won't.
+   */
   scopeCooldowns.set(scopeId, now);
   cooldowns.set(commandName, scopeCooldowns);
 
@@ -75,6 +84,8 @@ export function clearCooldown(commandName: string, scopeId: string): void {
 /**
  * Format remaining cooldown time as human-readable string.
  */
+// WHY Math.ceil everywhere: Telling users "0 seconds remaining" when there's 900ms
+// left just makes them spam retry. Round up and let them wait an extra second.
 export function formatCooldown(remainingMs: number): string {
   const seconds = Math.ceil(remainingMs / 1000);
   if (seconds < 60) {
@@ -84,6 +95,7 @@ export function formatCooldown(remainingMs: number): string {
   if (minutes < 60) {
     return `${minutes} minute${minutes === 1 ? "" : "s"}`;
   }
+  // Switch to floor() for hours because "2 hours" when there's 1h 59m left feels wrong
   const hours = Math.floor(minutes / 60);
   const remainingMins = minutes % 60;
   if (remainingMins === 0) {
@@ -92,7 +104,12 @@ export function formatCooldown(remainingMs: number): string {
   return `${hours}h ${remainingMins}m`;
 }
 
-// Periodic cleanup of old cooldown entries
+/*
+ * Periodic cleanup of old cooldown entries.
+ * Without this, a bot running for months would slowly accumulate dead entries
+ * from users who ran a command once and never came back. Memory death by
+ * a thousand paper cuts.
+ */
 function cleanupOldCooldowns(): void {
   const now = Date.now();
   let cleaned = 0;
@@ -116,9 +133,18 @@ function cleanupOldCooldowns(): void {
 }
 
 // Start cleanup interval
+// GOTCHA: This interval is never cleared, so this module can't be cleanly unloaded.
+// Fine for production, annoying for tests. If tests start hanging, this is why.
 setInterval(cleanupOldCooldowns, CLEANUP_INTERVAL_MS);
 
-// Export cooldown constants for commands to use
+/*
+ * Export cooldown constants for commands to use.
+ * These values are somewhat arbitrary but based on operational experience:
+ * - 1 hour for audits = long enough that spamming is painful, short enough
+ *   that legitimate re-runs aren't blocked for too long
+ * - 5 min for database = quick checks are fine, prevents refresh spam
+ * - 10 min for sync = Discord's global rate limit is stricter anyway
+ */
 export const COOLDOWNS = {
   /** NSFW audit: 1 hour per guild (expensive API calls) */
   AUDIT_NSFW_MS: 60 * 60 * 1000,

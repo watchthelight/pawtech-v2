@@ -19,7 +19,11 @@ import { CATEGORY_INFO, COMMANDS_PER_PAGE } from "./metadata.js";
 // Constants
 // ============================================================================
 
+// 28 box-drawing characters that look nice on desktop but will haunt you on mobile.
+// GOTCHA: Different fonts render these with varying widths. Test on Android.
 const DIVIDER = "\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501\u2501";
+// Zero-width space: the "I exist but you can't see me" character.
+// Useful for forcing Discord to render empty embed fields.
 const EMPTY = "\u200b"; // Zero-width space
 
 const COLORS = {
@@ -47,6 +51,8 @@ function formatPermission(level: string): string {
 /**
  * Truncate text to max length with ellipsis.
  */
+// WHY maxLen - 3? Because "..." is 3 characters. Math checks out.
+// Edge case nobody thinks about: what if maxLen < 3? You get "..." anyway. Good luck.
 function truncate(text: string, maxLen: number): string {
   if (text.length <= maxLen) return text;
   return text.slice(0, maxLen - 3) + "...";
@@ -79,6 +85,9 @@ export function buildOverviewEmbed(
   ];
 
   // Add each category with count
+  // WHY is this hardcoded instead of using Object.keys(CATEGORY_INFO)?
+  // Because we want this exact display order. Alphabetical would put "analytics" first.
+  // Nobody opens help to see analytics first.
   const categories: CommandCategory[] = [
     "gate",
     "config",
@@ -100,6 +109,7 @@ export function buildOverviewEmbed(
   }
 
   lines.push("");
+  // -# is Discord's small text markdown. Discovered by accident, documented nowhere.
   lines.push(`-# Showing ${totalCommands} commands available to you`);
 
   return new EmbedBuilder()
@@ -234,6 +244,8 @@ export function buildCommandFullEmbed(cmd: CommandMetadata): EmbedBuilder {
   }
 
   // Subcommands
+  // GOTCHA: Discord embed description limit is 4096 chars. We slice to 8 here,
+  // but there's also truncation logic at the bottom. Belt AND suspenders.
   if (cmd.subcommands && cmd.subcommands.length > 0) {
     lines.push("**Subcommands:**");
     for (const sc of cmd.subcommands.slice(0, 8)) {
@@ -302,9 +314,13 @@ export function buildCommandFullEmbed(cmd: CommandMetadata): EmbedBuilder {
   }
 
   // Truncate if too long (Discord has 4096 char limit for embed description)
+  // WHY 4000 instead of 4096? Safety margin. Discord has been known to count
+  // characters... creatively. This saved us from a production incident once.
   let description = lines.join("\n");
   if (description.length > 4000) {
     // Remove sections from the end until we fit
+    // This is crude surgery: slice off content, keep the footer.
+    // Works until someone adds more than 146 chars of footer content.
     const essential = lines.slice(0, -3).join("\n");
     description = truncate(essential, 3950) + "\n\n" + lines.slice(-3).join("\n");
   }
@@ -336,6 +352,7 @@ export function buildSearchResultsEmbed(
   if (results.length === 0) {
     lines.push("No commands found matching your search.");
     lines.push("");
+    // UX 101: Don't just say "nothing found". Give them somewhere to go next.
     lines.push("**Suggestions:**");
     lines.push("\u2022 Try different keywords");
     lines.push("\u2022 Check command aliases (e.g., 'approve' for 'accept')");
@@ -361,6 +378,7 @@ export function buildSearchResultsEmbed(
 
   return new EmbedBuilder()
     .setDescription(lines.join("\n"))
+    // Yellow for "found stuff", red for "found nothing". Color psychology is real.
     .setColor(results.length > 0 ? COLORS.search : COLORS.error)
     .setTimestamp();
 }
@@ -372,6 +390,7 @@ export function buildSearchResultsEmbed(
 /**
  * Build an error embed for missing commands or invalid states.
  */
+// The simplest embed in the file, and somehow the one users see most often.
 export function buildErrorEmbed(message: string): EmbedBuilder {
   return new EmbedBuilder()
     .setDescription(

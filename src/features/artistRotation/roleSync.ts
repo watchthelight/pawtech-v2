@@ -23,7 +23,11 @@ export async function handleArtistRoleAdded(
   guild: Guild,
   member: GuildMember
 ): Promise<void> {
-  // Skip ignored users (now configurable via /config set artist_ignored_users)
+  /*
+   * WHY ignore certain users? Some people have the Artist role for other reasons
+   * (legacy, special arrangements, bots) but shouldn't be in the queue.
+   * Configurable via /config set artist_ignored_users.
+   */
   const ignoredUsers = getIgnoredArtistUsers(guild.id);
   if (ignoredUsers.has(member.id)) {
     logger.debug({ guildId: guild.id, userId: member.id }, "[artistRotation] Ignored user, skipping queue add");
@@ -33,7 +37,8 @@ export async function handleArtistRoleAdded(
   const position = addArtist(guild.id, member.id);
 
   if (position === null) {
-    // Already in queue (shouldn't happen normally)
+    // Already in queue. This happens if someone removes and re-adds the role
+    // quickly, or if the queue got out of sync. Not harmful, just noisy.
     logger.debug(
       { guildId: guild.id, userId: member.id },
       "[artistRotation] Artist role added but user already in queue"
@@ -46,7 +51,8 @@ export async function handleArtistRoleAdded(
     "[artistRotation] Server Artist role added - user added to queue"
   );
 
-  // Log to Discord audit channel
+  // Log to Discord audit channel. We attribute to the bot since we can't
+  // easily tell who actually added the role (would require audit log fetch).
   const botId = guild.client.user?.id ?? "system";
   await logActionPretty(guild, {
     actorId: botId,
@@ -88,7 +94,8 @@ export async function handleArtistRoleRemoved(
     "[artistRotation] Server Artist role removed - user removed from queue"
   );
 
-  // Calculate time in program if we have the data
+  // Calculate tenure for the departure log. Nice for staff to see
+  // "wow, they were with us for 847 days" or "2 days? that was fast".
   let daysInProgram: number | null = null;
   if (artist?.added_at) {
     const addedDate = new Date(artist.added_at);
@@ -119,6 +126,11 @@ export async function handleArtistRoleRemoved(
  * WHAT: Check if the Server Artist role was added or removed.
  * WHY: Called from guildMemberUpdate to route to appropriate handler.
  * @returns 'added' | 'removed' | null
+ *
+ * GOTCHA: oldMember might be a PartialGuildMember if the member wasn't cached.
+ * Discord.js will have an incomplete role cache in that case. If the bot just
+ * started and someone loses a role, we might miss it. The sync command exists
+ * to fix these edge cases.
  */
 export function detectArtistRoleChange(
   oldMember: GuildMember | PartialGuildMember,
@@ -153,6 +165,8 @@ export async function handleArtistRoleChange(
   if (change === "added") {
     await handleArtistRoleAdded(newMember.guild, newMember);
   } else if (change === "removed") {
+    // We pass oldMember here to access the user_id. The role is already gone
+    // from newMember, so we need the "before" snapshot.
     await handleArtistRoleRemoved(newMember.guild, oldMember);
   }
 }

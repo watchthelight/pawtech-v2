@@ -10,6 +10,11 @@
  *  - /artistqueue unskip <user> → Remove skip status
  *  - /artistqueue history [user] → View assignment history
  *  - /artistqueue setup → Initial setup (permissions, sync)
+ *
+ * This is basically a round-robin scheduler with a database. The complexity
+ * comes from people leaving the role, people going on vacation, and the
+ * inevitable "but I should be next!" complaints that any fair queue system
+ * generates. The skip/unskip dance is real and frequent.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -36,9 +41,14 @@ import {
 import { fmtAgeShort } from "../lib/timefmt.js";
 import { nowUtc } from "../lib/time.js";
 
+// Seven subcommands for one queue. Discord's slash command UX really
+// encourages this kind of feature creep. At least subcommands are
+// discoverable, unlike the old prefix-based "read the manual" approach.
 export const data = new SlashCommandBuilder()
   .setName("artistqueue")
   .setDescription("Manage the Server Artist rotation queue")
+  // ManageRoles is a reasonable gate here. Anyone who can mess with roles
+  // probably should be able to manage the artist queue.
   .setDefaultMemberPermissions(PermissionFlagsBits.ManageRoles)
   .addSubcommand((sub) =>
     sub
@@ -108,6 +118,11 @@ export const data = new SlashCommandBuilder()
 
 /**
  * Execute /artistqueue command
+ *
+ * Classic dispatch pattern. The switch statement is fine here - TypeScript's
+ * exhaustiveness checking doesn't work great with getSubcommand() anyway
+ * since it returns string, not a union type. We'd need a lookup table with
+ * explicit typing to get that benefit.
  */
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
   const { interaction } = ctx;
@@ -138,17 +153,23 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       await handleSetup(interaction, ctx);
       break;
     default:
+      // This should be unreachable if the SlashCommandBuilder is in sync
+      // with the switch cases. Famous last words.
       await interaction.reply({ content: "Unknown subcommand.", ephemeral: true });
   }
 }
 
 /**
  * /artistqueue list - View current queue order
+ *
+ * Defers as non-ephemeral so everyone can see the queue. This is intentional -
+ * transparency about queue position reduces "why am I not getting picked" drama.
  */
 async function handleList(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext
 ): Promise<void> {
+  // Public reply. Let everyone see the queue order to reduce conspiracy theories.
   await interaction.deferReply({ ephemeral: false });
 
   const guildId = interaction.guildId;
@@ -169,12 +190,18 @@ async function handleList(
     return;
   }
 
-  // Build queue list
+  // Build queue list. We're building one long string here which can get
+  // dicey with Discord's 4096 char embed description limit. With, say,
+  // 50 artists at ~80 chars each, we'd be at 4000 chars. Close call.
+  // Something to watch if the server ever gets really popular.
   const lines: string[] = [];
   let totalAssignments = 0;
 
   for (const artist of artists) {
     const skipIndicator = artist.skipped ? " (skipped)" : "";
+    // The epoch dance: SQLite stores ISO strings, we convert to epoch for
+    // the formatting helper. This is the kind of thing that makes you miss
+    // having a proper ORM with date handling. Or not - ORMs have their own sins.
     const lastAssigned = artist.last_assigned_at
       ? fmtAgeShort(Math.floor(new Date(artist.last_assigned_at).getTime() / 1000), nowUtc()) + " ago"
       : "Never";
@@ -196,6 +223,11 @@ async function handleList(
 
 /**
  * /artistqueue sync - Sync with Server Artist role holders
+ *
+ * This is the "reconciliation" step. People get the role, people lose the role,
+ * the queue needs to reflect reality. We fetch everyone and diff against what's
+ * in the DB. New role holders go to the end of the queue (fair), removed ones
+ * get purged.
  */
 async function handleSync(
   interaction: ChatInputCommandInteraction,
@@ -219,8 +251,9 @@ async function handleSync(
     return;
   }
 
-  // Fetch all members and filter by role (role.members may not update after fetch)
-  // Also exclude ignored user IDs (now configurable via /config set artist_ignored_users)
+  // GOTCHA: role.members is cached and may be stale. We need to fetch the full
+  // member list and filter manually. Yes, this means fetching ALL members.
+  // For large servers this is expensive. Discord rate limits are not our friend.
   const members = await guild.members.fetch();
   const ignoredUsers = getIgnoredArtistUsers(guild.id);
   const roleHolderIds = members
@@ -267,6 +300,11 @@ async function handleSync(
 
 /**
  * /artistqueue move - Move artist to specific position
+ *
+ * The "make it fair" escape hatch. When someone's been waiting forever due to
+ * bad timing or they got unfairly bumped, staff can manually reorder. This is
+ * the "I know better than the algorithm" button. Use sparingly or the whole
+ * queue concept falls apart.
  */
 async function handleMove(
   interaction: ChatInputCommandInteraction,
@@ -291,9 +329,13 @@ async function handleMove(
   }
 
   const oldPosition = artist.position;
+  // moveToPosition handles the cascade of position updates for everyone between
+  // old and new positions. It's doing a lot more work than this call suggests.
   const success = moveToPosition(guildId, user.id, newPosition);
 
   if (!success) {
+    // Unhelpfully vague error message. The store function doesn't tell us why
+    // it failed (position out of range? DB error?). Could be improved.
     await interaction.reply({ content: "Failed to move artist.", ephemeral: true });
     return;
   }
@@ -308,6 +350,10 @@ async function handleMove(
 
 /**
  * /artistqueue skip - Skip an artist in rotation
+ *
+ * For when an artist is away, busy, or just needs a break. They stay in the
+ * queue but get passed over during assignment. Their position is preserved
+ * so they don't lose their place - they'll resume where they left off.
  */
 async function handleSkip(
   interaction: ChatInputCommandInteraction,
@@ -320,6 +366,8 @@ async function handleSkip(
   }
 
   const user = interaction.options.getUser("user", true);
+  // The ?? undefined dance: getString returns string | null, but skipArtist
+  // wants string | undefined. TypeScript pedantry at its finest.
   const reason = interaction.options.getString("reason") ?? undefined;
 
   const artist = getArtist(guildId, user.id);
@@ -358,6 +406,9 @@ async function handleSkip(
 
 /**
  * /artistqueue unskip - Remove skip status
+ *
+ * The "I'm back" button. Artist resumes their place in rotation. Note that
+ * their position is unchanged - they were just invisible, not removed.
  */
 async function handleUnskip(
   interaction: ChatInputCommandInteraction,
@@ -405,6 +456,11 @@ async function handleUnskip(
 
 /**
  * /artistqueue history - View assignment history
+ *
+ * The audit trail. Who got assigned to whom, and when. Useful for settling
+ * disputes about fairness ("I haven't been picked in months!") and tracking
+ * overall system health. The override indicator shows manual assignments
+ * that bypassed the normal queue order.
  */
 async function handleHistory(
   interaction: ChatInputCommandInteraction,
@@ -419,6 +475,7 @@ async function handleHistory(
   }
 
   const user = interaction.options.getUser("user");
+  // 10 is a reasonable default. 50 max prevents embed size explosions.
   const limit = interaction.options.getInteger("limit") ?? 10;
 
   const history = getAssignmentHistory(guildId, user?.id, limit);
@@ -433,11 +490,15 @@ async function handleHistory(
     return;
   }
 
-  // Build history list
+  // Build history list. Each line is: artist → recipient (type) - time ago
+  // The arrow direction matters: artist draws FOR the recipient.
   const lines: string[] = [];
 
   for (const entry of history) {
     const assignedAtEpoch = Math.floor(new Date(entry.assigned_at).getTime() / 1000);
+    // Overrides are when staff manually picked an artist out of order.
+    // Could be favoritism, could be making up for a missed turn. Either way,
+    // it's worth flagging for transparency.
     const overrideIndicator = entry.override ? " (override)" : "";
 
     lines.push(
@@ -463,6 +524,13 @@ async function handleHistory(
 
 /**
  * /artistqueue setup - Initial setup
+ *
+ * The "run this first" command. Does two things:
+ * 1. Sets up channel permissions so ambassadors can post in #server-artist
+ * 2. Syncs the queue with whoever currently has the role
+ *
+ * This is idempotent - safe to run multiple times if something seems off.
+ * Each step is independent and will report its own success/failure.
  */
 async function handleSetup(
   interaction: ChatInputCommandInteraction,
@@ -476,15 +544,21 @@ async function handleSetup(
     return;
   }
 
+  // Accumulate results from each setup step. We don't fail-fast because
+  // partial success is still useful information.
   const results: string[] = [];
 
   // Get guild-specific artist rotation config
   const artistConfig = getArtistConfig(guild.id);
 
   // Step 1: Update channel permissions
+  // The bot needs ManageChannels + ManageRoles permissions on the target channel.
+  // If this fails, it's usually a bot permission issue, not a code issue.
   ctx.step("update_permissions");
   try {
     const channel = await guild.channels.fetch(artistConfig.serverArtistChannelId);
+    // The "permissionOverwrites" in channel check is for TypeScript narrowing.
+    // Text channels have it, but we need to guard against voice channels etc.
     if (channel && channel.isTextBased() && "permissionOverwrites" in channel) {
       await channel.permissionOverwrites.edit(artistConfig.ambassadorRoleId, {
         ViewChannel: true,
@@ -496,15 +570,19 @@ async function handleSetup(
       results.push("Could not find #server-artist channel or update permissions");
     }
   } catch (err) {
+    // Most common failure: bot doesn't have ManageRoles permission on the channel.
     logger.warn({ err, guildId: guild.id }, "[artistqueue] Failed to update channel permissions");
     results.push("Failed to update channel permissions (check bot permissions)");
   }
 
   // Step 2: Sync queue with role holders
+  // This duplicates the logic from handleSync. Would be nice to extract, but
+  // setup has slightly different error handling (accumulate vs return early).
   ctx.step("sync_queue");
   try {
     const role = await guild.roles.fetch(artistConfig.artistRoleId);
     if (role) {
+      // Same full-member-fetch as in handleSync. Yes, we hit the API hard here.
       const members = await guild.members.fetch();
       const ignoredUsers = getIgnoredArtistUsers(guild.id);
       const roleHolderIds = members
@@ -522,12 +600,16 @@ async function handleSetup(
     results.push("Failed to sync queue");
   }
 
+  // Always green even if some steps failed. Title says "Complete" not "Success".
+  // The individual step results tell the real story.
   const embed = new EmbedBuilder()
     .setTitle("Artist Queue Setup Complete")
     .setDescription(results.map((r) => `- ${r}`).join("\n"))
     .setColor(0x00cc00)
     .addFields({
       name: "Available Commands",
+      // Mini help text. Mentioning /redeemreward here since that's the
+      // command that actually uses the queue we just set up.
       value: [
         "`/artistqueue list` - View rotation order",
         "`/artistqueue sync` - Re-sync with role",

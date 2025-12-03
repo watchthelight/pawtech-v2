@@ -15,6 +15,9 @@
 
 // ===== Error Type Definitions =====
 
+// GOTCHA: Don't use instanceof checks for these error types. The discriminated
+// union pattern (switching on `kind`) is more reliable across module boundaries.
+
 /**
  * Base error interface for the discriminated union pattern.
  *
@@ -145,6 +148,9 @@ export function classifyError(err: unknown): ClassifiedError {
   }
 
   // Handle Error-like objects
+  // WHY the cast? We're probing an unknown value for properties. This is safe
+  // because we check each property exists before using it. TypeScript just needs
+  // the Record type to let us access arbitrary keys.
   const error = err as Record<string, unknown>;
   const message = (error?.message as string) ?? String(err);
   const code = error?.code;
@@ -183,6 +189,8 @@ export function classifyError(err: unknown): ClassifiedError {
 
   // Network errors - these are Node.js libuv error codes.
   // EAI_AGAIN is DNS resolution failure (transient), often seen during network hiccups.
+  // GOTCHA: EPIPE can also mean "tried to write to a closed socket" - not always network.
+  // But retrying is still the right call either way.
   if (
     typeof code === "string" &&
     ["ECONNRESET", "ETIMEDOUT", "ENOTFOUND", "ECONNREFUSED", "EPIPE", "EAI_AGAIN"].includes(code)
@@ -240,6 +248,8 @@ export function classifyError(err: unknown): ClassifiedError {
  * so we don't need to retry those ourselves.
  */
 export function isRecoverable(err: ClassifiedError): boolean {
+  // Be conservative here. If in doubt, return false. Retrying non-recoverable
+  // errors just wastes time and can make outages worse (thundering herd).
   switch (err.kind) {
     case "network":
       return true; // Transient, retry

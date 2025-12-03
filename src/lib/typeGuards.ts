@@ -26,7 +26,12 @@ export function isGuildMember(
   if (!member) return false;
 
   // APIInteractionGuildMember has string permissions, GuildMember has PermissionsBitField
-  // Also check for roles property which only exists on GuildMember
+  // Also check for roles property which only exists on GuildMember.
+  //
+  // WHY this roundabout check? Because Discord.js gives you different types depending
+  // on cache state. If the member is cached, you get GuildMember with all the methods.
+  // If not, you get the raw API shape which has permissions as a string and no role cache.
+  // This distinction matters for permission checks - role.cache.has() only works on the real thing.
   return typeof member.permissions !== "string" && "roles" in member;
 }
 
@@ -44,6 +49,14 @@ export function requireGuildMember(
   context: string
 ): GuildMember {
   if (!isGuildMember(member)) {
+    // This happens when Discord sends APIInteractionGuildMember (partial data)
+    // instead of a full GuildMember. Common causes:
+    // - Interaction from a server where bot just joined (cache cold)
+    // - Member left the server between interaction creation and handling
+    // - Discord API returning partial data under load (rare but happens)
+    //
+    // Recovery: caller should either handle gracefully or use member.fetch()
+    // before calling code that needs roles/permissions.
     throw new Error(
       `${context}: Full GuildMember required but not available. ` +
         `This usually means the member isn't cached.`

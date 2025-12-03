@@ -12,12 +12,19 @@
 import { db } from "../../db/db.js";
 import { withSql, type SqlTrackingCtx } from "../../lib/cmdWrap.js";
 
+// GOTCHA: required is 0|1 not boolean because SQLite doesn't have a native bool type.
+// If you're tempted to change this to boolean, enjoy debugging your broken queries.
 export type QuestionRow = { q_index: number; prompt: string; required: 0 | 1 };
 
 // Default questions seeded for new guilds. These are intentionally simple
 // to verify the applicant is human, 18+, and has read the rules.
 // Question 4 (password) is the "read the rules" check - must match whatever
 // is in the server's rules channel.
+/*
+ * WHY all required=1: You'd think making some optional would be nice, but every
+ * "optional" question we tried became either ignored completely or filled with
+ * "asdf". Turns out people don't volunteer information. Who knew.
+ */
 export const DEFAULT_QUESTIONS: ReadonlyArray<QuestionRow> = [
   { q_index: 0, prompt: "What is your age?", required: 1 },
   { q_index: 1, prompt: "How did you find this server?", required: 1 },
@@ -26,6 +33,7 @@ export const DEFAULT_QUESTIONS: ReadonlyArray<QuestionRow> = [
   { q_index: 4, prompt: "What is the password stated in our rules?", required: 1 },
 ];
 
+// EDGE CASE: Returns empty array for unknown guilds, not null. Callers rely on this.
 export function getQuestions(guildId: string) {
   // SELECT question rows ordered by index; required is 0/1 integer
   return db
@@ -40,6 +48,8 @@ export function getQuestions(guildId: string) {
     .all(guildId) as Array<{ q_index: number; prompt: string; required: number }>;
 }
 
+// EDGE CASE: This returns 0 for non-existent guilds, which is correct but subtle.
+// Zero questions triggers seeding, so a typo in guildId silently creates defaults.
 export function getQuestionCount(guildId: string) {
   // Simple count; used to detect whether to seed defaults
   const row = db
@@ -60,6 +70,8 @@ export function upsertQuestion(
   required: 0 | 1,
   ctx?: SqlTrackingCtx
 ): void {
+  // WHY 0-4? Discord modals max out at 5 text inputs. This is a hard platform limit.
+  // If Discord ever raises this, we can bump the cap, but don't hold your breath.
   if (qIndex < 0 || qIndex > 4) {
     throw new Error(`Question index must be between 0 and 4, got ${qIndex}`);
   }
@@ -73,6 +85,7 @@ export function upsertQuestion(
     throw new Error('Question prompt cannot be empty or whitespace only');
   }
 
+  // 45 chars, not 80. Discord modal LABELS are shorter than input VALUES. Ask me how I know.
   if (trimmedPrompt.length > 45) {
     throw new Error('Question prompt must be 45 characters or less (Discord modal label limit)');
   }
@@ -95,6 +108,12 @@ export function upsertQuestion(
 
   const run = () => db.prepare(sql).run(guildId, qIndex, trimmedPrompt, required);
 
+  /*
+   * The ctx dance here is for SQL instrumentation/tracing. When ctx exists we're
+   * being called from a command handler that wants to log query timing. When it
+   * doesn't, we're probably in a migration or test. Both paths work, one just
+   * phones home to Sentry.
+   */
   if (ctx) {
     withSql(ctx, sql, run);
   } else {
@@ -121,6 +140,14 @@ export function seedDefaultQuestionsIfEmpty(
   const count = getQuestionCount(guildId);
   if (count > 0) return { inserted: 0, total: count };
 
+  /*
+   * Transaction wrapper ensures atomicity. We prepare the statement once
+   * outside the loop because better-sqlite3 caches prepared statements anyway,
+   * but this makes the intent clear and saves a few microseconds. The real win
+   * is the transaction itself - 5 inserts without it would be 5 disk syncs.
+   */
+  // PERF: Using transaction() here is not just for atomicity - it's a 5x speedup.
+  // Without it, each INSERT does a separate disk sync. With it, one sync at the end.
   const tx = db.transaction(() => {
     const sql = `INSERT INTO guild_question (guild_id, q_index, prompt, required) VALUES (?, ?, ?, ?)`;
     const stmt = db.prepare(sql);
@@ -134,6 +161,8 @@ export function seedDefaultQuestionsIfEmpty(
   });
   tx();
 
+  // Re-query to confirm the insert worked. Yes, we could just return DEFAULT_QUESTIONS.length,
+  // but if something went sideways in the transaction, I'd rather know about it here.
   const total = getQuestionCount(guildId);
   return { inserted: total - count, total };
 }

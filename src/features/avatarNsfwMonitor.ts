@@ -19,7 +19,10 @@ import { upsertNsfwFlag } from "../store/nsfwFlagsStore.js";
 import { googleReverseImageUrl } from "../ui/reviewCard.js";
 import { getConfig } from "../lib/config.js";
 
-const NSFW_THRESHOLD = 0.8; // 80% = hard evidence
+// 80% threshold is intentionally high to minimize false positives.
+// Google Vision flags anime characters, furry art, and beach photos pretty aggressively.
+// At 80%, we only catch the obvious stuff. Lower this at your own peril.
+const NSFW_THRESHOLD = 0.8;
 
 /**
  * Handle avatar changes from guildMemberUpdate event
@@ -32,6 +35,8 @@ export async function handleAvatarChange(
   // Check if avatar actually changed
   // member.avatar = server-specific avatar (can be null)
   // member.user.avatar = global Discord avatar
+  // GOTCHA: Discord fires guildMemberUpdate for TONS of reasons (role changes, nickname,
+  // status, etc). We get called on every single one. Most of the time, avatar hasn't changed.
   const oldServerAvatar = oldMember.avatar;
   const newServerAvatar = newMember.avatar;
   const oldUserAvatar = oldMember.user?.avatar;
@@ -45,6 +50,8 @@ export async function handleAvatarChange(
   }
 
   // Get the current avatar URL (prefer server avatar if set)
+  // WHY 256px? Larger = more API cost and slower. Smaller = Vision API struggles.
+  // 256 is the sweet spot for NSFW detection accuracy vs performance.
   const avatarUrl = newMember.avatar
     ? newMember.displayAvatarURL({ extension: "png", size: 256 })
     : newMember.user.avatar
@@ -55,7 +62,8 @@ export async function handleAvatarChange(
     return; // No custom avatar (default Discord avatar)
   }
 
-  // Skip bots
+  // Skip bots - they can have whatever avatar they want.
+  // If a bot has an NSFW avatar, that's between the bot and its creator.
   if (newMember.user.bot) {
     return;
   }
@@ -69,6 +77,8 @@ export async function handleAvatarChange(
   );
 
   // Scan with Google Vision
+  // This is the expensive part. Each call costs money. If you're getting spammed
+  // with avatar changes, you might want to add rate limiting per user.
   const visionResult = await detectNsfwVision(avatarUrl);
 
   if (!visionResult) {
@@ -82,6 +92,7 @@ export async function handleAvatarChange(
   );
 
   // Check if above threshold
+  // Below 80% we let it slide. False positives are annoying for everyone.
   if (visionResult.adultScore < NSFW_THRESHOLD) {
     return; // Clean avatar
   }
@@ -117,11 +128,15 @@ export async function handleAvatarChange(
     }
 
     // Get mod role to ping
+    // Only pings the FIRST mod role. If you have multiple mod tiers, senior mods
+    // won't get pinged. Probably fine - junior mods can escalate if needed.
     const config = getConfig(guildId);
     const modRoleIds = config?.mod_role_ids?.split(",").map((id) => id.trim()).filter(Boolean) ?? [];
     const rolePing = modRoleIds.length > 0 ? `<@&${modRoleIds[0]}>` : "";
 
     const reverseSearchUrl = googleReverseImageUrl(avatarUrl);
+    // The embed is intentionally attention-grabbing. Mods need to see this.
+    // If the color/emoji feels aggressive, that's by design.
     const alertEmbed = new EmbedBuilder()
       .setTitle("🔞 NSFW Avatar Detected")
       .setDescription(
@@ -152,6 +167,9 @@ export async function handleAvatarChange(
     logger.error({ err, guildId, userId }, "[avatarNsfwMonitor] Failed to send alert");
 
     // Fallback: Try to DM guild owner about misconfiguration
+    // This is a last-ditch effort. If logging channel is broken AND owner has DMs closed,
+    // we silently fail. The NSFW user stays in the server undetected. Not ideal, but
+    // there's only so much we can do when admins don't configure things properly.
     try {
       const owner = await newMember.guild.fetchOwner();
       await owner.send({

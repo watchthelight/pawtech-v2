@@ -11,6 +11,9 @@ import type { ChatInputCommandInteraction } from "discord.js";
 // MOCK SETUP — vi.hoisted() ensures these run before ES module imports execute.
 // This is critical: without hoisting, the real modules would load first and
 // the mocks would never take effect. Order matters in ESM land.
+//
+// GOTCHA: If you add a new mock, put it ABOVE the imports that use it.
+// vi.mock() is hoisted but vi.hoisted() is evaluated at definition position.
 // ============================================================================
 
 const loggerMock = vi.hoisted(() => ({
@@ -66,8 +69,10 @@ import { wrapCommand, withStep } from "../../src/lib/cmdWrap.js";
 
 /**
  * Factory for minimal ChatInputCommandInteraction stubs.
- * Only includes properties that wrapCommand actually touches. The real object
- * has dozens more fields, but we don't need them for these tests.
+ *
+ * We only mock what wrapCommand touches. The real discord.js interaction object
+ * is a monster with 50+ properties, but chasing full fidelity is a fool's errand.
+ * If the tests pass and prod works, the mock is good enough.
  */
 function createInteraction(): ChatInputCommandInteraction {
   return {
@@ -153,8 +158,9 @@ describe("wrapCommand", () => {
       throw err;
     });
 
-    // Key behavior: wrapCommand swallows errors gracefully (resolves, doesn't reject).
-    // This prevents unhandled rejections from crashing the bot.
+    // Key behavior: wrapCommand ALWAYS resolves, never rejects.
+    // If we let errors bubble, Node's unhandled rejection handler would fire,
+    // and in prod that means "randomly crash and restart via PM2".
     await expect(handler(interaction)).resolves.toBeUndefined();
 
     // Verify structured error logging with all diagnostic fields.

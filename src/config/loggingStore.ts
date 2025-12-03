@@ -18,6 +18,10 @@ import { LRUCache } from "../lib/lruCache.js";
 // Prepared Statements (cached at module load for performance)
 // ============================================================================
 
+// WHY a separate SELECT statement when we could just use getConfig()?
+// Performance. This is called on every action log, and getConfig() returns
+// the entire row. We only need one column. Micro-optimization? Maybe.
+// But it adds up when you're logging dozens of actions per minute.
 const getLoggingChannelStmt = db.prepare(
   `SELECT logging_channel_id FROM guild_config WHERE guild_id = ?`
 );
@@ -41,6 +45,9 @@ const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory 
 
 // Note: LRUCache stores values directly, but we need to distinguish between
 // "not cached" (undefined) and "cached null" (null). We use a wrapper type.
+// This is the billion dollar mistake in action: null vs undefined vs "not present."
+// Welcome to JavaScript.
+// If you're thinking "just use a Map with has()"... we do. LRU has delete on expiry.
 type CachedValue = { value: string | null };
 const loggingChannelCache = new LRUCache<string, CachedValue>(CACHE_MAX_SIZE, CACHE_TTL_MS);
 
@@ -121,6 +128,8 @@ export function getLoggingChannelId(guildId: string): string | null {
 
   // Fallback to env variable (applies to all guilds without override)
   // Set LOGGING_CHANNEL in .env to configure default logging destination
+  // GOTCHA: Empty string in .env counts as "set" to node but falsy to JS.
+  // The || null handles both undefined AND empty string cases.
   const envChannel = process.env.LOGGING_CHANNEL;
   result = envChannel || null;
 
@@ -151,6 +160,8 @@ export function setLoggingChannelId(guildId: string, channelId: string): void {
 
     // Invalidate cache AFTER successful write to prevent serving stale data
     // This ensures any subsequent reads get the fresh value from DB
+    // Order matters here: invalidate AFTER the write succeeds, not before.
+    // Otherwise a read during the write window gets the old value and caches it.
     invalidateCache(guildId);
 
     logger.info({ guildId, channelId }, "[config] logging_channel_id updated");

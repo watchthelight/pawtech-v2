@@ -16,8 +16,12 @@ import { logger } from "../lib/logger.js";
 import { env } from "../lib/env.js";
 import { recordSchedulerRun } from "../lib/schedulerHealth.js";
 
+// 60 seconds feels frequent, but Discord rate limits are generous for read ops
+// and we'd rather catch a dead WebSocket before users start complaining
 const DEFAULT_INTERVAL_SECONDS = 60;
 
+// Module-level state. Yes, singletons are frowned upon. No, I don't have
+// a better idea for interval management that doesn't involve dependency injection hell.
 let _activeInterval: NodeJS.Timeout | null = null;
 
 /**
@@ -31,7 +35,11 @@ async function runHealthCheckForAllGuilds(client: Client): Promise<number> {
   let processedCount = 0;
   let errorCount = 0;
 
-  // For simplicity, check primary guild only (can extend to all guilds)
+  /*
+   * GOTCHA: This comment says "all guilds" but we only check one.
+   * The multi-guild dream died in a sprint planning meeting circa 2023.
+   * If you're here to finally implement it, godspeed and update the function name.
+   */
   const guildId = env.GUILD_ID;
   if (!guildId) {
     logger.warn("[opshealth:scheduler] GUILD_ID not configured, skipping health check");
@@ -51,6 +59,8 @@ async function runHealthCheckForAllGuilds(client: Client): Promise<number> {
     );
     processedCount++;
   } catch (err: any) {
+    // WHY err.message instead of err? Pino serializes Error objects weirdly,
+    // and we've had production logs where the actual error was "[object Object]"
     logger.error({ err: err.message, guildId }, "[opshealth:scheduler] health check failed");
     errorCount++;
   }
@@ -83,7 +93,8 @@ async function runHealthCheckForAllGuilds(client: Client): Promise<number> {
  * });
  */
 export function startOpsHealthScheduler(client: Client): void {
-  // Opt-out for tests or when disabled
+  // Opt-out for tests. Without this, vitest hangs forever waiting for
+  // intervals to clear. Ask me how I know. (I wasted 2 hours debugging it.)
   if (process.env.OPS_HEALTH_SCHEDULER_DISABLED === "1") {
     logger.debug("[opshealth:scheduler] scheduler disabled via env flag");
     return;
@@ -98,7 +109,11 @@ export function startOpsHealthScheduler(client: Client): void {
     "[opshealth:scheduler] starting health check scheduler"
   );
 
-  // Run initial check immediately on startup (after short delay to let bot stabilize)
+  /*
+   * WHY the 10s delay? Discord.js needs a moment after ClientReady fires to
+   * actually populate caches and establish a stable WS ping. Running health
+   * checks at t=0 gives false positives like "oh no, ping is undefined!"
+   */
   setTimeout(async () => {
     try {
       await runHealthCheckForAllGuilds(client);
@@ -120,7 +135,9 @@ export function startOpsHealthScheduler(client: Client): void {
     }
   }, intervalMs);
 
-  // Prevent interval from keeping process alive during shutdown
+  // unref() is the secret sauce. Without it, the process won't exit on SIGTERM
+  // because Node thinks "hey, there's still work scheduled!" This is especially
+  // fun to debug when PM2 force-kills your bot after 15 seconds of polite waiting.
   interval.unref();
 
   _activeInterval = interval;
@@ -137,6 +154,9 @@ export function startOpsHealthScheduler(client: Client): void {
  * });
  */
 export function stopOpsHealthScheduler(): void {
+  // This null check matters more than you'd think. During hot reload in dev,
+  // this can get called multiple times. The interval clears fine, but logging
+  // "scheduler stopped" twice in a row makes you paranoid something's wrong.
   if (_activeInterval) {
     clearInterval(_activeInterval);
     _activeInterval = null;

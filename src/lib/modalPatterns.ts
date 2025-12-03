@@ -25,10 +25,13 @@
 
 // Multi-page modal flow. Session ID is typically an application ID or UUID.
 // Page index (p0, p1, ...) tracks wizard progress.
+// GOTCHA: The session ID can contain any character except colons. If someone
+// manages to get a colon in there, this regex will misbehave silently.
 export const MODAL_PAGE_RE = /^v1:modal:([^:]+):p(\d+)$/;
 
 // Review decision buttons. "accept" is a legacy alias for "approve" - kept for
 // backwards compat with old button embeds that might still exist in channels.
+// These buttons can live in channels for weeks, so backwards compat matters here.
 export const BTN_DECIDE_RE = /^(?:v1:decide|review):(approve|accept|reject|kick|claim|unclaim):code([0-9A-F]{6})$/;
 
 // Modmail button - opens a DM thread with the applicant
@@ -84,7 +87,9 @@ export type ModalRoute =
  * exclusive, but we check the most common one (page submissions) first.
  */
 export function identifyModalRoute(id: string): ModalRoute | null {
-  // Most common: wizard page submissions during gate flow
+  // Check patterns in rough order of frequency. Page submissions happen constantly,
+  // reject modals happen occasionally, confirm18 is rare. Not that it matters
+  // much - regex matching is fast. But it's nice to fail fast on the common case.
   const page = id.match(MODAL_PAGE_RE);
   if (page) {
     return { type: "gate_submit_page", sessionId: page[1], pageIndex: Number(page[2]) };

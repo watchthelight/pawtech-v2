@@ -29,6 +29,12 @@ import {
 } from "./shared.js";
 import { MAX_REASON_LENGTH } from "../../lib/constants.js";
 
+/*
+ * Three ways to identify who you're rejecting: short code, @mention, or raw UID.
+ * WHY all three? Short codes are fast if you have the review card open.
+ * @mentions are intuitive. Raw UIDs are the escape hatch for users who
+ * already left the server (they still have a pending app in the DB).
+ */
 export const rejectData = new SlashCommandBuilder()
   .setName("reject")
   .setDescription("Reject an application by short code, user mention, or user ID")
@@ -75,7 +81,8 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
   const reasonRaw = interaction.options.getString("reason", true);
   const permanent = interaction.options.getBoolean("perm", false) ?? false;
 
-  // Count how many identifier options were provided
+  // GOTCHA: We enforce exactly ONE identifier. Users will absolutely try to
+  // provide both a short code AND a @mention, then get confused when we reject it.
   const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;
   if (providedCount === 0) {
     await replyOrEdit(interaction, {
@@ -92,7 +99,8 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
 
   const reason = reasonRaw.trim();
 
-  // Security: Validate reason length to prevent database bloat and potential DoS
+  // Security: Validate reason length. Someone WILL paste a manifesto as a rejection reason.
+  // MAX_REASON_LENGTH = 500, which is plenty for "underage account" or "spam alt".
   if (reason.length > MAX_REASON_LENGTH) {
     await replyOrEdit(interaction, {
       content: `Reason too long (max ${MAX_REASON_LENGTH} characters, you provided ${reason.length}).`,
@@ -126,6 +134,8 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
   } else if (uidRaw) {
     const uid = uidRaw.trim();
     // Validate UID format
+    // Discord snowflakes are 17-19 digits currently, but we're generous with 5-20
+    // because Discord's docs are vague and snowflakes could theoretically grow.
     if (!/^[0-9]{5,20}$/.test(uid)) {
       await replyOrEdit(interaction, { content: "Invalid user ID. Must be 5-20 digits." });
       return;
@@ -139,7 +149,9 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     }
   }
 
-  // At this point app is guaranteed to be non-null due to early return above
+  // The non-null assertion is ugly but TypeScript can't track the early returns
+  // through the if/else-if chain above. Refactoring to satisfy the type checker
+  // would make the code harder to follow, so we pick our battles.
   const resolvedApp = app!;
 
   ctx.step("claim_check");
@@ -150,6 +162,8 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     return;
   }
 
+  // rejectTx does the actual database write. It returns a discriminated union
+  // so we can give specific error messages instead of a generic "something broke".
   ctx.step("reject_tx");
   const tx = rejectTx(resolvedApp.id, interaction.user.id, reason, permanent);
   if (tx.kind === "already") {
@@ -166,6 +180,8 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
   }
 
   ctx.step("reject_flow");
+  // Fetch can fail if user deleted their account, got banned globally, etc.
+  // We still want to record the rejection even if we can't DM them.
   const user = await interaction.client.users.fetch(resolvedApp.user_id).catch(() => null);
   let dmDelivered = false;
   if (user) {
@@ -189,10 +205,16 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     });
   }
 
-  // Note: Claim preserved for review card display
+  /*
+   * We intentionally keep the claim around after rejection. Releasing it
+   * would cause the review card to show "Unclaimed" which is misleading
+   * since the case is resolved. The claim just... hangs out, inert.
+   */
 
   ctx.step("close_modmail");
   const code = shortCode(resolvedApp.id);
+  // Non-fatal: if modmail close fails, we still completed the rejection.
+  // This can happen if the modmail ticket was already closed, deleted, or never existed.
   try {
     await closeModmailForApplication(interaction.guildId, resolvedApp.user_id, code, {
       reason: permanent ? "permanently rejected" : "rejected",
@@ -203,6 +225,8 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     logger.warn({ err: mmErr, appId: resolvedApp.id }, "[reject] Failed to close modmail (non-fatal)");
   }
 
+  // Update the review card to show the new rejected status. This is also non-fatal
+  // because the rejection itself already succeeded in the database.
   ctx.step("refresh_review");
   try {
     await ensureReviewMessage(interaction.client, resolvedApp.id);

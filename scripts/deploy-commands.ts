@@ -9,6 +9,8 @@
  *  - Node ESM: https://nodejs.org/api/esm.html
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
+// GOTCHA: This import has side effects - it mutates process.env before anything else runs.
+// If you move it below the discord.js import, you'll have a fun debugging session.
 import "dotenv/config";
 import { REST, Routes, Client, GatewayIntentBits } from "discord.js";
 import { buildSpec } from "./commands.js";
@@ -23,6 +25,10 @@ export function buildCommands() {
   return buildSpec();
 }
 
+/*
+ * Why not use a library? Because adding a dependency for a one-liner
+ * is how you end up with 847 packages in node_modules.
+ */
 function wait(ms: number) {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
@@ -42,6 +48,8 @@ async function verifyGuildCommands(
   guildId: string
 ): Promise<{ ok: boolean; opts?: string[]; error?: string; status?: number }> {
   try {
+    // Discord's API types are a maze. The `as any[]` is ugly but saves us from
+    // wrestling with RESTGetAPIApplicationGuildCommandsResult or whatever it's called this week.
     const existing = (await rest.get(Routes.applicationGuildCommands(appId, guildId))) as any[];
 
     const gateCmd = existing.find((cmd: any) => cmd.name === "gate");
@@ -55,6 +63,8 @@ async function verifyGuildCommands(
     }
 
     const opts = setupSub.options?.map((o: any) => o.name) || [];
+    // WHY hardcoded? Because if you mess up the command builder and forget an option,
+    // this catches it before prod users start filing bug reports. Trust issues? Maybe.
     const expected = [
       "review_channel",
       "gate_channel",
@@ -87,7 +97,12 @@ async function syncGuild(
 
     const verify = await verifyGuildCommands(rest, appId, guildId);
     if (!verify.ok) {
-      // one more try: delete + re-PUT
+      /*
+       * The nuclear option: wipe and re-deploy. Discord's command cache can get
+       * into weird states where it thinks it has commands it doesn't, or vice versa.
+       * The 500ms wait is cargo-culted from trial and error - shorter and it fails,
+       * longer and we're just wasting time. Don't @ me.
+       */
       await rest.put(Routes.applicationGuildCommands(appId, guildId), { body: [] });
       await wait(500);
       await rest.put(Routes.applicationGuildCommands(appId, guildId), { body: commands });
@@ -124,7 +139,12 @@ export async function syncAllGuilds(appId: string, token: string): Promise<void>
 
   console.log("[sync] fetching guilds...");
 
-  // tiny helper, big juicey
+  /*
+   * We spin up a whole Client just to fetch guild IDs. Yes, there's probably
+   * a REST-only way to do this. No, I didn't find one that actually works.
+   * Intents are minimal because we don't need message content or member lists
+   * just to enumerate servers.
+   */
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   await client.login(token);
 
@@ -154,6 +174,8 @@ export async function syncAllGuilds(appId: string, token: string): Promise<void>
       );
     }
 
+    // Rate limit anxiety. Discord's limits are generous but not infinite.
+    // 750ms between guilds keeps us well under threshold even with retries.
     await wait(750);
   }
 
@@ -170,8 +192,14 @@ export async function syncAllGuilds(appId: string, token: string): Promise<void>
   console.log("[sync] all guilds synced successfully");
 }
 
-// CLI entry point
+/*
+ * CLI entry point. The import.meta.url check is the ESM way of saying
+ * "only run this if I'm the main script, not if I'm being imported."
+ * The backslash replacement handles Windows paths because of course it does.
+ */
 if (import.meta.url === `file://${process.argv[1].replace(/\\/g, "/")}`) {
+  // Supporting both because someone (me) couldn't decide on a naming convention
+  // and now we're stuck supporting both forever.
   const appId = process.env.APP_ID || process.env.CLIENT_ID;
   const token = process.env.DISCORD_TOKEN;
 

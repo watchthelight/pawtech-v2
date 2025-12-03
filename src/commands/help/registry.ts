@@ -15,6 +15,11 @@ import type { CommandMetadata, CommandCategory } from "./metadata.js";
  * Complete command registry with documentation for all Pawtropolis Tech commands.
  * Each entry includes usage, options, examples, notes, workflow tips, and related commands.
  */
+/*
+ * GOTCHA: This entire array is loaded into memory at startup. At ~900 lines,
+ * it's not a problem now, but if someone decides to add inline images or
+ * Base64-encoded help videos, future you will be very unhappy.
+ */
 export const COMMAND_REGISTRY: CommandMetadata[] = [
   // ============================================================================
   // GATE & VERIFICATION
@@ -44,6 +49,9 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       {
         name: "questions",
         description: "Manage gate application questions",
+        // WHY q1-q5 instead of a single "set" with an index? Because Discord slash
+        // command autocomplete makes numbered subcommands feel more intuitive than
+        // "/gate questions set index:3 text:...". Sometimes UX trumps DRY.
         subcommands: [
           { name: "q1", description: "Set question 1" },
           { name: "q2", description: "Set question 2" },
@@ -69,6 +77,9 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
   },
   {
     name: "accept",
+    // GOTCHA: Despite having three mutually exclusive identifiers (app, user, uid),
+    // the actual command implementation should validate that exactly one is provided.
+    // If you're getting weird behavior, check if someone passed both app AND user.
     description: "Approve an application and grant verified role",
     category: "gate",
     permissionLevel: "reviewer",
@@ -103,6 +114,7 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       { name: "app", description: "Application short code (e.g., A1B2C3)", type: "string", required: false },
       { name: "user", description: "User to reject (@mention or select)", type: "user", required: false },
       { name: "uid", description: "Discord User ID (if user not in server)", type: "string", required: false },
+      // perm:true is the nuclear option. Use sparingly or your appeals inbox will hate you.
       { name: "perm", description: "Permanently reject (blocks re-application)", type: "boolean", required: false },
     ],
     examples: [
@@ -165,6 +177,12 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
   // ============================================================================
   {
     name: "config",
+    /*
+     * This command has grown organically over time. What started as "set a few
+     * channels" is now a sprawling config empire. If you're adding yet another
+     * subcommand, consider whether it really belongs here or deserves its own
+     * top-level command. Your future self will thank you for the restraint.
+     */
     description: "Guild configuration management",
     category: "config",
     permissionLevel: "staff",
@@ -188,7 +206,7 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
           { name: "notification_channel", description: "Set notification channel" },
           { name: "support_channel", description: "Set support channel" },
           { name: "review_roles", description: "Set role display in review cards" },
-          { name: "dadmode", description: "Toggle Dad Mode responses" },
+          { name: "dadmode", description: "Toggle Dad Mode responses" }, // Yes, this is what you think it is.
           { name: "pingdevonapp", description: "Toggle bot dev pings" },
           { name: "banner_sync_toggle", description: "Toggle banner sync" },
           { name: "avatar_scan_toggle", description: "Toggle avatar scanning" },
@@ -288,6 +306,8 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       },
     ],
     examples: ["/audit members", "/audit nsfw scope:all", "/audit nsfw scope:flagged"],
+    // Note: Google Vision API bills per-image. A server-wide scan with 10k members
+    // can get expensive fast. Always scope appropriately.
     notes: "Restricted to Community Manager and Bot Developer roles. Uses Google Vision API for NSFW detection.",
     workflowTips: [
       "Run /audit members periodically to catch bot accounts",
@@ -311,6 +331,8 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       "/flag user:@SuspiciousUser",
       "/flag user:@SpamBot reason:Advertising in DMs",
     ],
+    // Idempotent means you can spam the command without creating duplicate flags.
+    // The rate limit exists because someone definitely tried.
     notes: "Flags are idempotent - reflagging an already-flagged user is a no-op. Has a 2-second rate limit.",
     workflowTips: [
       "Flag users who exhibit suspicious behavior for team visibility",
@@ -333,6 +355,8 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       "/isitreal message:1234567890123456789",
       "/isitreal message:https://discord.com/channels/123/456/789",
     ],
+    // WHY multiple APIs? Because no single AI detection service is reliable enough on
+    // its own, and the false positive rate drops significantly with consensus.
     notes: "Uses multiple AI detection APIs to analyze images. Shows per-service confidence scores.",
     workflowTips: [
       "Use on art submissions to verify authenticity",
@@ -592,6 +616,8 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       { name: "count", description: "Number of messages to delete", type: "integer", required: false },
     ],
     examples: ["/purge password:secretpass count:50"],
+    // The 14-day limit is a Discord API limitation, not a design choice.
+    // If someone asks why we can't purge older messages, blame Discord, not us.
     notes: "Requires password confirmation and ManageMessages permission. Cannot delete messages older than 14 days.",
     workflowTips: [
       "Use for cleaning up spam or accidental messages",
@@ -690,6 +716,8 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
       "/movie end",
       "/movie attendance user:@User",
     ],
+    // 30 minutes is the magic number. Less than that and people game it by joining
+    // for a minute then leaving. Ask me how we know.
     notes: "Users need 30+ minutes to qualify. Tier roles are assigned automatically.",
     workflowTips: [
       "Start tracking before the movie begins",
@@ -701,6 +729,7 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
   },
   {
     name: "panic",
+    // Named "panic" because that's exactly what you'll be doing when you need it.
     description: "Emergency halt for role automation",
     category: "roles",
     permissionLevel: "owner",
@@ -904,6 +933,9 @@ export const COMMAND_REGISTRY: CommandMetadata[] = [
 /**
  * Get a command by name from the registry.
  */
+// O(n) lookup. For 30-ish commands this is fine. If the registry grows to hundreds
+// of commands, consider building a Map at module load time. But honestly, if you
+// have hundreds of commands, the registry structure is the least of your problems.
 export function getCommand(name: string): CommandMetadata | undefined {
   return COMMAND_REGISTRY.find((cmd) => cmd.name === name);
 }
@@ -918,6 +950,8 @@ export function getCommandsByCategory(category: CommandCategory): CommandMetadat
 /**
  * Get all unique category keys from the registry.
  */
+// Returns categories in order of first appearance in the registry.
+// If you want alphabetical order, sort it yourself.
 export function getAllCategories(): CommandCategory[] {
   return [...new Set(COMMAND_REGISTRY.map((cmd) => cmd.category))];
 }

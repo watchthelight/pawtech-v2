@@ -15,6 +15,10 @@ import { recalcModMetrics } from "../features/modPerformance.js";
 import { logger } from "../lib/logger.js";
 import { recordSchedulerRun } from "../lib/schedulerHealth.js";
 
+// WHY 15 minutes? It's a Goldilocks number. 5 min would be too aggressive
+// (these recalcs touch a lot of rows), 30 min means stale leaderboards.
+// Also, 15 min intervals mean the scheduler fires at :00, :15, :30, :45
+// which is predictable for debugging. "When did metrics last update?" -> "Quarter past."
 const REFRESH_INTERVAL_MS = 15 * 60 * 1000; // 15 minutes
 
 let _activeInterval: NodeJS.Timeout | null = null;
@@ -30,6 +34,10 @@ async function refreshAllGuildMetrics(client: Client): Promise<number> {
   let processedCount = 0;
   let errorCount = 0;
 
+  // GOTCHA: client.guilds.cache is populated lazily. If the bot just started
+  // and hasn't received GUILD_CREATE events yet, this loop might be empty.
+  // The initial setTimeout in startModMetricsScheduler() helps, but edge cases exist.
+  // Not a big deal - next interval will catch everything.
   for (const [guildId, guild] of client.guilds.cache) {
     try {
       const updatedMods = await recalcModMetrics(guildId);

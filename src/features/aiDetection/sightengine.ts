@@ -8,6 +8,7 @@
 import { logger } from "../../lib/logger.js";
 import { env } from "../../lib/env.js";
 
+// SightEngine needs BOTH credentials. One without the other is useless.
 const ENABLED = !!(env.SIGHTENGINE_API_USER && env.SIGHTENGINE_API_SECRET);
 const TIMEOUT_MS = 15000;
 
@@ -22,6 +23,11 @@ export async function detectSightEngine(imageUrl: string): Promise<number | null
   }
 
   try {
+    /*
+     * SightEngine uses GET with query params instead of POST with a body.
+     * Yes, they put the API secret in the URL. It's fine. It's HTTPS.
+     * (It's not fine but we don't have a choice.)
+     */
     const params = new URLSearchParams({
       url: imageUrl,
       models: "genai",

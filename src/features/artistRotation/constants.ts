@@ -25,16 +25,23 @@ export interface TicketRolesConfig {
   fullbody: string | null;
 }
 
-// =============================================================================
-// FALLBACK VALUES (hardcoded for main guild backward compatibility)
-// =============================================================================
+/*
+ * =============================================================================
+ * FALLBACK VALUES (hardcoded for main guild backward compatibility)
+ * =============================================================================
+ *
+ * These are the original hardcoded IDs from before we had per-guild config.
+ * They're still used as defaults when a guild hasn't configured their own.
+ * Yes, it's ugly having Discord IDs in source code. Issue #78 is about this.
+ */
 
 /** Server Artist role - members with this role are in the rotation queue */
 export const ARTIST_ROLE_ID = "896070888749940770";
 
-/** User IDs to exclude from the artist queue - FALLBACK only (prefer getIgnoredArtistUsers) */
+// The "do not add to queue" list. Usually bot accounts or special cases.
+// This is the fallback - real config comes from /config set artist_ignored_users.
 const FALLBACK_IGNORED_ARTIST_USER_IDS: Set<string> = new Set([
-  "840832083084836942", // Legacy hardcoded value
+  "840832083084836942", // Legacy value - ask leadership why this person is special
 ]);
 
 /**
@@ -53,7 +60,7 @@ export function getIgnoredArtistUsers(guildId: string): Set<string> {
         return new Set(parsed);
       }
     } catch {
-      // JSON parse failed, use fallback
+      // Someone put garbage in the config. Their problem, fallback wins.
     }
   }
   return FALLBACK_IGNORED_ARTIST_USER_IDS;
@@ -65,12 +72,16 @@ export const AMBASSADOR_ROLE_ID = "896070888762535967";
 /** Server artist coordination channel */
 export const SERVER_ARTIST_CHANNEL_ID = "1131332813585661982";
 
-/** Ticket role IDs mapped by art type (fallback values) */
+/*
+ * Ticket roles represent "this user has earned X type of art reward".
+ * The bot removes the role when they redeem it. If your server doesn't
+ * use ticket roles, set these to null in guild config.
+ */
 export const TICKET_ROLES: TicketRolesConfig = {
   headshot: "929950578379993108",
   halfbody: "1402298352560902224",
   emoji: "1414982808631377971",
-  fullbody: null, // TBD - create role if needed
+  fullbody: null, // Aspirational. Someday we'll have full-body commissions.
 };
 
 // =============================================================================
@@ -87,7 +98,11 @@ export const TICKET_ROLES: TicketRolesConfig = {
 export function getArtistConfig(guildId: string): ArtistRotationConfig {
   const cfg = getConfig(guildId);
 
-  // Parse ticket roles JSON if present, otherwise use fallback
+  /*
+   * GOTCHA: We merge with fallbacks per-field, not wholesale. This means you
+   * can override just headshot and keep the other defaults. Probably what you
+   * want, but could be surprising if you expected a clean slate.
+   */
   let ticketRoles: TicketRolesConfig = TICKET_ROLES;
   if (cfg?.artist_ticket_roles_json) {
     try {
@@ -99,7 +114,7 @@ export function getArtistConfig(guildId: string): ArtistRotationConfig {
         fullbody: parsed.fullbody ?? TICKET_ROLES.fullbody,
       };
     } catch {
-      // JSON parse failed, use fallback
+      // Bad JSON in config. Fall through to defaults.
       ticketRoles = TICKET_ROLES;
     }
   }
@@ -139,14 +154,19 @@ export function getTicketRoles(guildId: string): TicketRolesConfig {
   return getArtistConfig(guildId).ticketRoles;
 }
 
-/** Human-readable names for ticket roles */
+/*
+ * Human-readable names for ticket roles. Used in log messages.
+ * GOTCHA: This only covers the fallback role IDs. If a guild uses custom
+ * role IDs, we just display the art type instead. Good enough.
+ */
 export const TICKET_ROLE_NAMES: Record<string, string> = {
   "929950578379993108": "OC Headshot Ticket",
   "1402298352560902224": "OC Half-body Ticket",
   "1414982808631377971": "OC Emoji Ticket",
 };
 
-/** Art types as a union type */
+// Deriving the union from the config object. Add a new field there,
+// and it automatically becomes a valid art type. TypeScript is nice sometimes.
 export type ArtType = keyof TicketRolesConfig;
 
 /** All valid art types for command choices */

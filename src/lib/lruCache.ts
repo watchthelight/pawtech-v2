@@ -30,6 +30,9 @@
  * const config = cache.get('guild-123'); // Returns config or undefined
  */
 export class LRUCache<K, V> {
+  // The underlying Map does the heavy lifting. JS Maps maintain insertion order
+  // (unlike objects), which gives us LRU for free. The first key is always the
+  // oldest. No need for a doubly-linked list like in C textbooks.
   private cache = new Map<K, { value: V; timestamp: number }>();
   private maxSize: number;
   private ttlMs: number;
@@ -73,8 +76,10 @@ export class LRUCache<K, V> {
       return undefined;
     }
 
-    // Move to end (most recently used) by delete + re-insert
-    // Map maintains insertion order, so this moves the entry to last position
+    // Move to end (most recently used) by delete + re-insert.
+    // This looks wasteful but it's O(1) - Map.delete and Map.set are both
+    // constant time. The "proper" LRU with a linked list is actually slower
+    // in JS because object allocation overhead dominates.
     this.cache.delete(key);
     this.cache.set(key, entry);
     return entry.value;
@@ -97,8 +102,11 @@ export class LRUCache<K, V> {
       this.cache.delete(key);
     }
 
-    // Evict oldest if at capacity
+    // Evict oldest if at capacity.
+    // GOTCHA: We use >= not > because we're about to add one more entry.
+    // Getting this wrong means cache grows to maxSize + 1 permanently.
     if (this.cache.size >= this.maxSize) {
+      // .keys().next().value is the first (oldest) key in the Map
       const oldestKey = this.cache.keys().next().value;
       if (oldestKey !== undefined) {
         this.cache.delete(oldestKey);

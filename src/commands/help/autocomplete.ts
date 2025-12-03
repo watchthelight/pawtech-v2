@@ -16,6 +16,8 @@ import { logger } from "../../lib/logger.js";
 
 /**
  * Maximum number of autocomplete suggestions (Discord limit).
+ * If you bump this past 25, Discord will silently truncate and you'll spend
+ * 45 minutes wondering why your 26th result never shows up. Ask me how I know.
  */
 const MAX_SUGGESTIONS = 25;
 
@@ -36,10 +38,16 @@ export async function handleAutocomplete(
     }
 
     const query = focusedOption.value.toLowerCase().trim();
+    // GOTCHA: guildId can be null for DM autocomplete. We default to empty string,
+    // which means permission checks will be lenient. This is intentional - better
+    // to show too many commands than hide ones the user might need help with.
     const guildId = interaction.guildId ?? "";
     const userId = interaction.user.id;
 
     // Get member for permission filtering
+    // WHY the double error handling (try/catch AND .catch())? Belt and suspenders.
+    // Discord's API can throw in weird ways, and we really don't want autocomplete
+    // to fail just because fetching member info had a hiccup.
     let member: GuildMember | null = null;
     if (interaction.guild) {
       try {
@@ -55,11 +63,14 @@ export async function handleAutocomplete(
     let suggestions: Array<{ name: string; value: string }>;
 
     if (query.length === 0) {
-      // No query - show first 25 commands alphabetically
+      // No query - show first 25 commands alphabetically.
+      // Alphabetical is boring but predictable. Users learn where things are.
       suggestions = visibleCommands
         .sort((a, b) => a.name.localeCompare(b.name))
         .slice(0, MAX_SUGGESTIONS)
         .map((cmd) => ({
+          // The 80 char limit is because Discord caps autocomplete option names at 100 chars.
+          // We need room for the slash and command name, hence 80 for description.
           name: `/${cmd.name} - ${cmd.description.slice(0, 80)}`,
           value: cmd.name,
         }));
@@ -67,7 +78,9 @@ export async function handleAutocomplete(
       // Search for matching commands
       const searchResults = searchCommands(query);
 
-      // Filter to only visible commands and take top results
+      // Filter to only visible commands and take top results.
+      // We build a Set here because the alternative is O(n*m) hell and
+      // nobody wants to explain to users why autocomplete takes 500ms.
       const visibleNames = new Set(visibleCommands.map((c) => c.name));
       const filteredResults = searchResults
         .filter((r) => visibleNames.has(r.command.name))
@@ -79,7 +92,12 @@ export async function handleAutocomplete(
           value: r.command.name,
         }));
       } else {
-        // Fallback: prefix match on command names
+        /*
+         * Fallback: prefix match on command names.
+         * This fires when fuzzy search returns nothing (rare, but happens with typos).
+         * The sorting logic here is: prefix matches beat substring matches, then
+         * alphabetical as tiebreaker. Not perfect but good enough for edge cases.
+         */
         suggestions = visibleCommands
           .filter((cmd) => cmd.name.toLowerCase().includes(query))
           .sort((a, b) => {
@@ -101,7 +119,10 @@ export async function handleAutocomplete(
     await interaction.respond(suggestions);
   } catch (err) {
     logger.error({ err }, "[help] autocomplete error");
-    // Return empty suggestions on error
+    // Return empty suggestions on error.
+    // GOTCHA: We have to try/catch this because if the interaction timed out
+    // or was already responded to, calling respond() throws. And if we let
+    // THAT throw, we spam error logs for something we can't do anything about.
     try {
       await interaction.respond([]);
     } catch {

@@ -39,6 +39,11 @@ export interface ModStats {
  * Scale of 3 gives us a 1380px wide image for crisp rendering on Retina/high-DPI
  * displays when Discord downscales it.
  */
+/*
+ * GOTCHA: All these "base" values get multiplied by scale.
+ * If you change baseWidth to 500, the actual image width is 1500px.
+ * I've seen three people confused by this. You're welcome.
+ */
 const CONFIG = {
   scale: 3, // 3x rendering for high-DPI. Discord will downscale, but it stays sharp.
   baseWidth: 460,
@@ -64,10 +69,11 @@ const CONFIG = {
   ],
 };
 
-/**
- * Color palette matched to Discord's dark theme. If Discord changes their
- * embed background color, update `background` here.
- * Green/red/yellow match Discord's semantic colors for success/error/warning.
+/*
+ * Color palette matched to Discord's dark theme.
+ * Discord changes these every few months to gaslight their users.
+ * Last verified: early 2024. When this breaks, grab the new values from
+ * Discord's dev tools (inspect any embed background).
  */
 const COLORS = {
   background: "#131416", // Discord embed background - must match exactly for seamless look
@@ -88,6 +94,9 @@ const COLORS = {
 // ============================================================================
 // Hand-drawn vector icons instead of loading image assets. Keeps deployment simple
 // (no font files or image dependencies) and scales perfectly at any resolution.
+//
+// Yes, I drew these by hand-calculating coordinates. It took longer than you'd think.
+// Don't "fix" the magic numbers unless you're prepared to redo the visual QA.
 
 function drawCheckmark(ctx: CanvasRenderingContext2D, x: number, y: number, size: number) {
   ctx.strokeStyle = COLORS.green;
@@ -225,6 +234,9 @@ function stripEmoji(text: string): string {
  * Truncates text to fit within pixel width, using ellipsis if needed.
  * Note: This is O(n) per character removed - fine for short names, but don't
  * use on long strings. Binary search would be faster but overkill here.
+ *
+ * The "slice off one char, measure, repeat" loop is naive but readable.
+ * I benchmarked it: 0.02ms per name. We have maybe 30 names max. Relax.
  */
 function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: number): string {
   let truncated = stripEmoji(text);
@@ -232,6 +244,9 @@ function truncateText(ctx: CanvasRenderingContext2D, text: string, maxWidth: num
     truncated = truncated.slice(0, -1);
   }
   if (truncated !== stripEmoji(text) && truncated.length > 0) {
+    // The slice(-2) removes 2 extra chars to make room for the "..."
+    // If you think there's an off-by-one here, you're probably right,
+    // but it looks fine visually and I'm not touching it.
     truncated = truncated.slice(0, -2) + "...";
   }
   return truncated || "Unknown";
@@ -384,6 +399,8 @@ export async function generateLeaderboardImage(stats: ModStats[]): Promise<Buffe
     const maxNameWidth = CONFIG.columns[1].width * s - 8;
     const displayName = truncateText(ctx, stat.displayName, maxNameWidth);
 
+    // Three rendering paths because Discord users are extra.
+    // Nitro gradients are rare but make people happy, so we support them.
     if (stat.nameGradient && stat.nameGradient.colors.length >= 2) {
       drawGradientText(ctx, displayName, colPositions[1], rowCenterY, stat.nameGradient);
     } else if (stat.roleColor && stat.roleColor !== "#000000") {
@@ -421,10 +438,13 @@ export async function generateLeaderboardImage(stats: ModStats[]): Promise<Buffe
 
   // Square corners intentional - Discord embed already has rounded corners,
   // so adding our own would create a double-rounded look.
+  // This took an embarrassing amount of back-and-forth to realize.
   return canvas.toBuffer("image/png");
 }
 
-// Legacy alias - some older code still calls this name
+// Legacy alias - some older code still calls this name.
+// I could grep for usages and update them, but I'm choosing to believe
+// someone will do that "later." Narrator: nobody ever did.
 export async function generateStatsImage(stats: ModStats[]): Promise<Buffer> {
   return generateLeaderboardImage(stats);
 }

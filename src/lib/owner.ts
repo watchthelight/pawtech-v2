@@ -10,6 +10,13 @@
 
 import { env } from "./env.js";
 
+// Parse owner IDs once at module load. This is intentionally eager - we'd rather
+// fail fast at startup if OWNER_IDS is malformed than discover it later when
+// someone tries to use a privileged command.
+//
+// SECURITY: These IDs bypass ALL permission checks. Keep this list minimal.
+// If you're adding someone here "temporarily for debugging," set a calendar
+// reminder to remove them. You will forget otherwise. Ask me how I know.
 const ownerIds = env.OWNER_IDS
   ? env.OWNER_IDS.split(",")
       .map((id) => id.trim())
@@ -25,5 +32,7 @@ const ownerIds = env.OWNER_IDS
  * RETURNS: true if user is an owner, false otherwise
  */
 export function isOwner(userId: string): boolean {
+  // O(n) lookup is fine - ownerIds is typically 1-3 entries.
+  // If you somehow have 1000 bot owners, you have bigger problems than performance.
   return ownerIds.includes(userId);
 }

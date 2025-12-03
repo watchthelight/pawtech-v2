@@ -5,6 +5,8 @@
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
+// Barrel file. If you're looking for actual logic, you're in the wrong place.
+// Order matters here only for the sake of my sanity when reading imports.
 export * from "./constants.js";
 export * from "./types.js";
 export * from "./queue.js";

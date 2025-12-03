@@ -3,6 +3,10 @@
  * WHAT: Unix epoch timestamp utilities for deterministic test-friendly timestamps.
  * WHY: SQLite defaults can't be mocked in tests; explicit timestamps keep tests predictable.
  * time is a flat circle (also it's in seconds not milliseconds)
+ *
+ * GOTCHA: This entire file assumes seconds. If you're coming from browser-land where
+ * Date.now() gives you milliseconds, you will be off by a factor of 1000 and your
+ * timestamps will be from the year 51970. Ask me how I know.
  * FLOWS:
  *  - nowUtc() → current Unix seconds (INTEGER for SQLite)
  *  - tsToIso() → convert Unix seconds back to ISO8601 string
@@ -25,6 +29,8 @@
  */
 // Floor, not round, because we want "X seconds ago" to never show negative time
 // due to rounding up a sub-second timestamp.
+// WHY arrow function: no hidden `this` binding footguns, and it's tiny enough
+// that the arrow syntax makes the intent crystal clear.
 export const nowUtc = (): number => Math.floor(Date.now() / 1000);
 
 /**
@@ -38,6 +44,8 @@ export const nowUtc = (): number => Math.floor(Date.now() / 1000);
  */
 // Multiply by 1000 to convert to ms - Date constructor expects milliseconds.
 // If you accidentally pass ms to this function, you'll get dates in the year 50000+.
+// No validation here because (a) it's called in hot paths and (b) garbage in, garbage out.
+// If you pass NaN you get "Invalid Date" and that's on you.
 export const tsToIso = (seconds: number): string => new Date(seconds * 1000).toISOString();
 
 /**
@@ -55,6 +63,12 @@ export function formatUtc(tsSec: number): string {
   // ISO-ish but concise: YYYY-MM-DD HH:MM UTC (no seconds, no milliseconds)
   // Why not Intl.DateTimeFormat? This is faster and we control the exact format.
   // The regex strips ":SS.mmmZ" and replaces with " UTC".
+  /*
+   * Yes, chained string replaces are ugly. But they're fast, predictable, and
+   * the alternative is Intl.DateTimeFormat which is ~10x slower and still
+   * doesn't give you exactly this format without a bunch of options fiddling.
+   * Sometimes the ugly solution is the right one.
+   */
   return d
     .toISOString()
     .replace("T", " ")
@@ -74,6 +88,8 @@ export function formatUtc(tsSec: number): string {
  * formatRelative(nowUtc() - 30)  // "30s ago"
  * formatRelative(nowUtc())       // "just now"
  */
+// WHY the nowSec parameter exists: testability. You can inject a fixed "now"
+// and get deterministic output. The default is for production convenience.
 export function formatRelative(tsSec: number, nowSec = Math.floor(Date.now() / 1000)): string {
   // Clamp negative to zero - future timestamps show as "just now" rather than
   // negative time, which would confuse users. This can happen with clock skew.
@@ -82,6 +98,11 @@ export function formatRelative(tsSec: number, nowSec = Math.floor(Date.now() / 1
   // Unit conversion factors and labels
   // Each tuple: [threshold to advance to next unit, label for current unit]
   // 4.348 weeks/month is the average, not exact, but close enough for display.
+  /*
+   * GOTCHA: The 4.348 weeks/month approximation means months are ~30.44 days.
+   * Real months range from 28-31 days. For a "14mo ago" label, nobody cares
+   * if it's actually 13mo 3wk. For billing or compliance, use actual dates.
+   */
   const units: [number, string][] = [
     [60, "s"], // seconds
     [60, "m"], // minutes
@@ -92,6 +113,8 @@ export function formatRelative(tsSec: number, nowSec = Math.floor(Date.now() / 1
     [Number.POSITIVE_INFINITY, "y"], // years
   ];
 
+  // WHY duplicate labels array? The units array stores thresholds with labels,
+  // but we need the label for index i after the loop. Could refactor but this works.
   const labels = ["s", "m", "h", "d", "wk", "mo", "y"];
   let i = 0;
 
@@ -100,6 +123,7 @@ export function formatRelative(tsSec: number, nowSec = Math.floor(Date.now() / 1
     diff = diff / units[i][0];
   }
 
+  // Floor to avoid "3.7d ago" - humans expect whole numbers here
   const val = Math.floor(diff);
   return val === 0 ? "just now" : `${val}${labels[i]} ago`;
 }

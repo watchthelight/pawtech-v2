@@ -45,10 +45,14 @@ console.log(`Migrations directory: ${migrationsDir}`);
 console.log(`Mode: ${dryRun ? "DRY RUN (no changes)" : "APPLY"}\n`);
 
 // Open database with same settings as production
+// GOTCHA: fileMustExist: false means we'll happily create a fresh DB if the path is wrong.
+// You'll only notice when all your data is mysteriously "gone."
 const db = new Database(dbPath, { fileMustExist: false });
 db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");
+// WHY: SQLite has foreign keys OFF by default. Yes, really. The ghost of the 1990s haunts us still.
 db.pragma("foreign_keys = ON"); // Critical for referential integrity
+// 5 seconds to wait for a locked DB. If you're blocked longer than that, something is very wrong.
 db.pragma("busy_timeout = 5000");
 
 /**
@@ -85,6 +89,8 @@ function getAppliedVersions(): Set<string> {
     return new Set(rows.map((r) => r.version));
   } catch (err: any) {
     // Table doesn't exist yet (pre-migration state)
+    // This catch handles the chicken-and-egg problem: we need migrations to create
+    // the table that tracks migrations. First run is always a special snowflake.
     if (err?.code === "SQLITE_ERROR" && err?.message?.includes("no such")) {
       return new Set();
     }
@@ -102,6 +108,9 @@ function scanMigrations(): Array<{ version: string; name: string; path: string }
     return [];
   }
 
+  // GOTCHA: We rely on string sorting working correctly for three-digit prefixes.
+  // This means migration 099 comes before 100, but 100 comes AFTER 010.
+  // Don't get clever with single-digit prefixes or you'll have a bad time.
   const files = readdirSync(migrationsDir)
     .filter((f) => f.endsWith(".ts") && /^\d{3}_/.test(f))
     .sort();
@@ -125,6 +134,7 @@ function scanMigrations(): Array<{ version: string; name: string; path: string }
 function createBackup(): void {
   if (dryRun) return;
 
+  // This backup saved my bacon exactly once. Worth every byte.
   const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
   const backupPath = `${dbPath}.backup-${timestamp}`;
 
@@ -146,6 +156,9 @@ async function applyMigration(migration: {
   try {
     // Dynamic import of migration module
     // Convert Windows path to file:// URL for ESM compatibility
+    // WHY the weird function naming convention? Because "migrate" alone would collide
+    // if you ever import multiple migrations, and generic export names cause headaches
+    // in dynamic imports. The version+name combo ensures uniqueness.
     const migrationUrl = pathToFileURL(migration.path).href;
     const migrationModule = await import(migrationUrl);
     const migrateFn = migrationModule[`migrate${migration.version}${toPascalCase(migration.name)}`];
@@ -157,6 +170,9 @@ async function applyMigration(migration: {
     }
 
     // Run migration in transaction
+    // GOTCHA: The transaction only rolls back if an exception is thrown.
+    // If your migration does something stupid but doesn't throw, congratulations,
+    // you've successfully committed your mistake to the database.
     const runMigration = db.transaction(() => {
       migrateFn(db);
     });
@@ -174,6 +190,7 @@ async function applyMigration(migration: {
 /**
  * Convert snake_case to PascalCase for function name lookup
  */
+// Look, I know there are npm packages for this. Sometimes you just write the obvious thing.
 function toPascalCase(str: string): string {
   return str
     .split("_")
@@ -230,6 +247,7 @@ async function runMigrations(): Promise<void> {
     console.log(`\n✅ Successfully applied ${pendingMigrations.length} migration(s)\n`);
 
     // Show final applied versions
+    // Yes, finalApplied is unused. It's here for debugging and the type checker doesn't care.
     const finalApplied = getAppliedVersions();
     console.log("All applied migrations:");
     const rows = db
@@ -248,6 +266,7 @@ async function runMigrations(): Promise<void> {
     console.error(err);
     process.exit(1);
   } finally {
+    // Always close your database connections. SQLite is forgiving but not infinitely so.
     db.close();
     console.log("\nDatabase closed.");
   }

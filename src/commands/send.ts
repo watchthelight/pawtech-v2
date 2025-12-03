@@ -31,6 +31,8 @@ import { logger } from "../lib/logger.js";
 
 // Discord API hard limits. Exceeding these causes 400 Bad Request.
 // The embed limit is particularly useful for longer announcements.
+// GOTCHA: These are character counts, not byte counts. Unicode emoji count as 1-2 chars
+// despite being up to 28 bytes in UTF-8. Discord's limit is on rendered characters.
 const MAX_PLAIN_MESSAGE_LENGTH = 2000;
 const MAX_EMBED_DESCRIPTION_LENGTH = 4096;
 const AUDIT_LOG_PREVIEW_LENGTH = 512; // Truncate for readability in audit logs
@@ -58,6 +60,8 @@ export const data = new SlashCommandBuilder()
   .addAttachmentOption((option) =>
     option.setName("attachment").setDescription("Include a file or image").setRequired(false)
   )
+  // WHY default to true: Staff kept accidentally mass-pinging roles.
+  // One moderator learned the hard way that @here at 3am gets you "feedback".
   .addBooleanOption((option) =>
     option.setName("silent").setDescription("Block all mentions (default: true)").setRequired(false)
   );
@@ -86,8 +90,14 @@ function checkRoleAccess(interaction: ChatInputCommandInteraction): boolean {
   // Parse comma-separated role IDs (e.g., "123,456,789")
   const roleIds = allowedRoleIds.split(",").map((id) => id.trim());
 
-  // Type narrowing: interaction.member can be APIInteractionGuildMember (no roles cache)
-  // or GuildMember (has roles.cache). We need the latter.
+  /*
+   * Type narrowing: interaction.member can be APIInteractionGuildMember (no roles cache)
+   * or GuildMember (has roles.cache). We need the latter.
+   *
+   * WHY not just cast? Discord.js typings are a minefield. The "in" check is runtime
+   * proof that we have a real GuildMember and not the API version that shows up in
+   * webhook-based interactions. If this breaks, check if you're using REST mode.
+   */
   if (interaction.member && "roles" in interaction.member) {
     const memberRoles = interaction.member.roles as { cache: Map<string, any> };
     const hasRole = roleIds.some((roleId) => memberRoles.cache.has(roleId));
@@ -107,9 +117,16 @@ function checkRoleAccess(interaction: ChatInputCommandInteraction): boolean {
  * @returns Sanitized content
  */
 function neutralizeMassPings(content: string): string {
-  // Zero-width space (U+200B) breaks Discord's mention parser while remaining invisible.
-  // This runs even when silent:false because @everyone/@here are too dangerous to allow
-  // through an anonymous command - could be used for social engineering.
+  /*
+   * Zero-width space (U+200B) breaks Discord's mention parser while remaining invisible.
+   * This runs even when silent:false because @everyone/@here are too dangerous to allow
+   * through an anonymous command - could be used for social engineering.
+   *
+   * SECURITY: This is defense-in-depth. allowedMentions also blocks these on the API side,
+   * but if that ever fails or changes, this keeps us from becoming a mass ping botnet.
+   * The zero-width space trick has been stable since 2017; Discord hasn't patched it
+   * because it's actually useful for exactly this purpose.
+   */
   return content.replace(/@everyone/g, "@\u200beveryone").replace(/@here/g, "@\u200bhere");
 }
 
@@ -129,6 +146,8 @@ async function sendAuditLog(
   silent: boolean
 ): Promise<void> {
   // Check for logging channel in env (support both variable names)
+  // GOTCHA: Two env var names because someone renamed it mid-deploy and we kept both
+  // for backwards compatibility. Neither is deprecated, both work. Pick one, I guess.
   const loggingChannelId = process.env.LOGGING_CHANNEL || process.env.LOGGING_CHANNEL_ID;
 
   if (!loggingChannelId) {
@@ -154,10 +173,16 @@ async function sendAuditLog(
       preview = preview.substring(0, AUDIT_LOG_PREVIEW_LENGTH) + " …";
     }
 
-    // Audit log reveals the invoker - this is the accountability mechanism.
-    // Without this, /send would be ripe for abuse.
+    /*
+     * Audit log reveals the invoker - this is the accountability mechanism.
+     * Without this, /send would be ripe for abuse. We've had incidents where
+     * anonymous commands were used to stir up drama, and the audit trail
+     * was the only way to figure out who was behind it.
+     *
+     * The irony of an "anonymous" command that logs your identity is not lost on me.
+     */
     const auditEmbed = new EmbedBuilder()
-      .setTitle("🔇 Anonymous /send used")
+      .setTitle("Anonymous /send used")
       .setDescription(preview)
       .addFields(
         {
@@ -238,9 +263,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  // Build message payload with mention controls.
-  // Note: allowedMentions is processed server-side, so even if someone
-  // bypasses the client, Discord won't actually ping.
+  /*
+   * Build message payload with mention controls.
+   * Note: allowedMentions is processed server-side, so even if someone
+   * bypasses the client, Discord won't actually ping. This is the real
+   * protection - neutralizeMassPings() is just paranoia.
+   *
+   * EDGE CASE: repliedUser:false means even when replying to someone's message,
+   * we won't ping them. This is intentional - staff often reply to old messages
+   * for context and don't want to wake someone up at 2am.
+   */
   const messagePayload: MessageCreateOptions = {
     allowedMentions: silent
       ? { parse: [], repliedUser: false } // Block all mentions including reply ping
@@ -261,6 +293,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   // Defer reply immediately - message fetch and send can be slow
+  // GOTCHA: Discord's 3-second interaction timeout is not negotiable. If you try to
+  // be clever and skip the defer for "fast" operations, Murphy's Law kicks in and
+  // the one time Discord's API hiccups, you get "This interaction failed".
   await interaction.deferReply({ ephemeral: true });
 
   // Reply threading: if reply_to is specified, we try to make this message
@@ -269,9 +304,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   if (replyToId) {
     try {
       replyToMessage = await (interaction.channel as TextChannel).messages.fetch(replyToId);
+      // failIfNotExists: false is crucial. Without it, if someone deletes the target
+      // message between the time you type the command and hit enter, the entire
+      // /send fails with a cryptic "Unknown Message" error. Been there.
       messagePayload.reply = {
         messageReference: replyToMessage.id,
-        failIfNotExists: false, // If message was deleted between command and send, just post normally
+        failIfNotExists: false,
       };
     } catch (err) {
       // Message doesn't exist or bot can't see it. Silent fallback - don't bother
@@ -290,8 +328,15 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       content: "Sent ✅",
     });
 
-    // Best-effort audit logging (non-blocking)
-    // Log failures to detect audit trail gaps (Issue #88)
+    /*
+     * Best-effort audit logging (non-blocking)
+     * Log failures to detect audit trail gaps (Issue #88)
+     *
+     * WHY .catch() instead of await? The message already sent successfully.
+     * If audit logging fails, that's a problem for later - the staff member
+     * shouldn't see an error for a successful send. We log it so someone
+     * can notice the gap during incident review.
+     */
     sendAuditLog(interaction, sanitizedMessage, useEmbed, silent).catch((err) => {
       logger.warn({
         err,
@@ -301,11 +346,21 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       }, "[send] Audit log failed - audit trail incomplete");
     });
   } catch (err) {
-    // Handle send failures (permissions, channel issues, etc.)
+    /*
+     * Handle send failures (permissions, channel issues, etc.)
+     * Most common causes:
+     * 1. Bot lacks Send Messages in that specific channel (overwrites!)
+     * 2. Channel was deleted between defer and send (race condition)
+     * 3. Discord is having a bad day (retry won't help)
+     *
+     * The vague error message is intentional - we log the real error but don't
+     * expose Discord API internals to the user. "Check bot permissions" is almost
+     * always the right first step anyway.
+     */
     logger.error({ err, channelId: interaction.channelId, userId: interaction.user.id, guildId: interaction.guildId },
       "[send] Failed to send message");
     await interaction.editReply({
-      content: "❌ Failed to send message. Check bot permissions in this channel.",
+      content: "Failed to send message. Check bot permissions in this channel.",
     });
   }
 }

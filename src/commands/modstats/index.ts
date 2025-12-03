@@ -26,7 +26,11 @@ import {
 import type { CommandContext } from "../../lib/cmdWrap.js";
 import { requireStaff } from "../../lib/config.js";
 
-// Import handlers from decomposed modules
+/*
+ * GOTCHA: If you're wondering why this is split across 4 files for ~120 lines of routing,
+ * the answer is "the handlers used to live here and this file was 800 lines of pain."
+ * Now it's just a router. You're welcome.
+ */
 import { handleLeaderboard, handleExport } from "./leaderboard.js";
 import { handleUser } from "./userStats.js";
 import { handleReset, cleanupModstatsRateLimiter } from "./reset.js";
@@ -37,7 +41,12 @@ export { cleanupModstatsRateLimiter };
 export const data = new SlashCommandBuilder()
   .setName("modstats")
   .setDescription("View moderator analytics and leaderboards")
-  // Visible to all, enforced via requireStaff() which checks mod_roles config
+  /*
+   * WHY null permissions: Discord's permission system can't know about our mod_roles config.
+   * Setting this to null makes the command visible to everyone, then requireStaff() does
+   * the real check. Yes, it means non-mods see the command. No, they can't use it.
+   * It's annoying but it's how Discord works.
+   */
   .setDefaultMemberPermissions(null)
   .addSubcommand((sub) =>
     sub
@@ -84,6 +93,7 @@ export const data = new SlashCommandBuilder()
           .setRequired(false)
       )
   )
+  // The nuclear option. See reset.ts for the rate limiter that prevents abuse.
   .addSubcommand((sub) =>
     sub
       .setName("reset")
@@ -100,11 +110,16 @@ export const data = new SlashCommandBuilder()
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
   const { interaction } = ctx;
 
-  // Require staff permissions for all modstats subcommands
+  // GOTCHA: requireStaff() already sends an error reply if permission denied.
+  // The bare return is intentional - the user has already been told to go away.
   if (!requireStaff(interaction)) return;
 
   const subcommand = interaction.options.getSubcommand();
 
+  /*
+   * Yes, a switch statement would be cleaner. But if-else chains are easier to
+   * step through in a debugger, and I debug this more than I'd like to admit.
+   */
   if (subcommand === "leaderboard") {
     await handleLeaderboard(interaction);
   } else if (subcommand === "user") {
@@ -114,6 +129,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   } else if (subcommand === "reset") {
     await handleReset(interaction);
   } else {
+    /*
+     * This should be unreachable since Discord validates subcommands, but TypeScript
+     * doesn't know that. Also protects against future subcommands someone adds to the
+     * builder but forgets to handle here. Ask me how I know.
+     */
     await interaction.reply({
       content: "❌ Unknown subcommand.",
       ephemeral: true,

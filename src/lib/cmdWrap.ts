@@ -83,6 +83,8 @@ type CommandExecutor<I extends InstrumentedInteraction> = (ctx: CommandContext<I
  * leave a 500ms buffer for network latency. If your modal handlers are
  * consistently hitting this, they're too slow.
  */
+// GOTCHA: If you're seeing watchdog auto-defers frequently, your handlers are
+// too slow. Profile them - don't just bump this number.
 const WATCHDOG_MS = 2500;
 
 /**
@@ -186,7 +188,8 @@ export function armWatchdog(interaction: Interaction) {
     }
   }, WATCHDOG_MS);
   // unref() prevents this timer from keeping the Node.js process alive.
-  // Without it, a pending timer could block graceful shutdown.
+  // Without it, a pending timer could block graceful shutdown. This is a common
+  // footgun - if your bot hangs on shutdown, check for un-unref'd timers.
   if (typeof timer.unref === "function") timer.unref();
   return () => clearTimeout(timer);
 }
@@ -311,6 +314,8 @@ export function wrapCommand<I extends InstrumentedInteraction>(
         });
       }
 
+      // Show the user something useful. This is critical UX - silent failures
+      // leave users confused and spamming the command. At least tell them we noticed.
       try {
         const { postErrorCard } = await import("./errorCard.js");
         await postErrorCard(interaction, {
@@ -360,6 +365,8 @@ export async function withStep<T>(
  * using an async DB driver, you'd need an async variant of this function.
  */
 export function withSql<T>(ctx: SqlTrackingCtx, sql: string, run: () => T): T {
+  // Track the SQL so error cards show what query failed. Worth the small overhead
+  // because production debugging without it is miserable.
   ctx.setLastSql(sql);
   try {
     const result = run();
@@ -368,7 +375,8 @@ export function withSql<T>(ctx: SqlTrackingCtx, sql: string, run: () => T): T {
     ctx.setLastSql(null);
     return result;
   } catch (err) {
-    // Don't clear SQL on error - leave it for error handling/logging
+    // Don't clear SQL on error - leave it for error handling/logging.
+    // Yes, this means the SQL stays set until the next call. That's fine.
     throw err;
   }
 }
@@ -457,12 +465,17 @@ export async function replyOrEdit(
   const withFlags = { ...payload, flags: payload.flags ?? MessageFlags.Ephemeral };
   try {
     if (interaction.deferred) {
+      // Deferred = we've acknowledged but not sent content yet. editReply is the only valid option.
+      // Note: editReply doesn't accept flags, hence the destructure - you can't change ephemerality
+      // after deferring. The ephemeral-ness is locked in at deferReply time.
       const { flags, ...editPayload } = withFlags;
       return await interaction.editReply(editPayload);
     }
     if (interaction.replied) {
+      // Already replied = we need followUp to send additional messages in the same interaction
       return await interaction.followUp(withFlags);
     }
+    // Fresh interaction = use reply. This is the "normal" path for fast commands.
     return await interaction.reply(withFlags);
   } catch (err) {
     const meta = discordRestMeta(err);

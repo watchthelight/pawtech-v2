@@ -7,6 +7,8 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 // Re-export types
+// WHY: Using `export type` to make it crystal clear these are types-only.
+// This helps bundlers tree-shake properly and prevents "this import is a type" errors.
 export type {
   ApplicationStatus,
   ApplicationRow,
@@ -28,6 +30,9 @@ export type {
 } from "./types.js";
 
 // Re-export queries
+// GOTCHA: isClaimable is a read-only check - it does NOT acquire the claim.
+// If you call isClaimable then try to act, someone else could claim in between.
+// Use claimGuard from ./claims.js for atomic check-and-claim.
 export {
   getRecentActionsForApp,
   loadApplication,
@@ -47,6 +52,14 @@ export {
 } from "./claims.js";
 
 // Re-export flows
+/*
+ * The *Tx functions are database transactions only - they update state but don't
+ * touch Discord. The *Flow functions do the full dance: claim check, DB update,
+ * Discord API calls, DM delivery, the works.
+ *
+ * If you call approveTx but not the full flow, you'll have a database that says
+ * "approved" but a user who's still sitting in limbo wondering why nothing happened.
+ */
 export {
   // Transaction functions
   approveTx,
@@ -60,6 +73,8 @@ export {
 } from "./flows/index.js";
 
 // Re-export handlers
+// These are the Discord interaction handlers. They get wired up in the event router.
+// If you add a new button/modal, you'll need to add its handler here AND register it.
 export {
   handleReviewButton,
   handleRejectModal,
@@ -89,6 +104,11 @@ export {
   logWelcomeFailure,
 } from "./welcome.js";
 
-// Note: ALLOWED_ACTIONS is defined in ../review.ts and re-exports from here
-// Import it from the parent module to avoid circular dependencies:
-// import { ALLOWED_ACTIONS } from "../review.js";
+/*
+ * Note: ALLOWED_ACTIONS is defined in ../review.ts and re-exports from here.
+ * Import it from the parent module to avoid circular dependencies:
+ *   import { ALLOWED_ACTIONS } from "../review.js";
+ *
+ * Yes, the circular dependency situation is annoying. No, I don't have a better
+ * solution that doesn't involve restructuring half the codebase. We live with it.
+ */

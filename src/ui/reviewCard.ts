@@ -90,6 +90,9 @@ const COLORS = {
  * Supports: Unix timestamps (numeric strings), SQLite datetime, ISO 8601
  * Note: Database stores TEXT, but may contain numeric strings from nowUtc()
  */
+// WHY SO MANY FORMATS? Early code used nowUtc() which returns Unix seconds as a string.
+// Then someone "fixed" it to use SQLite datetime(). Then we briefly used ISO 8601.
+// Now we live with the consequences. Migration to fix this would be more pain than this parser.
 function parseClaimedAt(value: string): number | null {
 
   const trimmed = value.trim();
@@ -98,6 +101,7 @@ function parseClaimedAt(value: string): number | null {
   const numeric = Number(trimmed);
   if (!Number.isNaN(numeric) && Number.isFinite(numeric)) {
     // Heuristic: > 1e12 is milliseconds, otherwise seconds
+    // GOTCHA: This heuristic breaks in the year 33658. Add a reminder to your calendar.
     return numeric > 1e12 ? Math.floor(numeric / 1000) : Math.floor(numeric);
   }
 
@@ -160,6 +164,8 @@ export function buildActionRowsV2(
 
   // If member has left server, disable all review actions
   // They must re-apply when they rejoin
+  // WHY STILL ALLOW REJECT? To clean up the queue. A pending app from someone who left
+  // just clutters things up. We reject with "(Member Left)" so it's clear why.
   if (memberHasLeft && !terminal) {
     const row = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder()
@@ -233,8 +239,12 @@ function estimateEmbedSize(embed: EmbedBuilder): number {
 // ============================================================================
 
 // Use heavy box-drawing character to avoid Discord hyphen rendering bug
+// WHY THIS SPECIFIC CHARACTER? Discord renders three consecutive hyphens (---) as an em-dash.
+// It also renders underscores as italics triggers. Box-drawing chars are immune to Discord's
+// "helpful" formatting. This was discovered at 2am after an hour of "why does my divider look weird".
 const DIVIDER = "━━━━━━━━━━━━━━━━━━━━━━━━━━━━";
 // Zero-width space for empty lines (prevents Discord auto-hyphen)
+// GOTCHA: Empty strings in embed fields cause API errors. ZWSP looks like nothing but isn't nothing.
 const EMPTY = "\u200b";
 
 // ============================================================================
@@ -242,6 +252,9 @@ const EMPTY = "\u200b";
 // ============================================================================
 
 // Section priority for truncation (lower = remove first)
+// ARCHITECTURE: When embeds get too long (looking at you, repeat applicants with essay answers),
+// we drop sections in priority order. The logic is: answers are why you're here, member info
+// tells you who, avatar risk tells you if you should panic. History is nice-to-have.
 const SECTION_PRIORITY = {
   ACTION_HISTORY: 1,      // Remove first - moderator actions are in logs
   APP_HISTORY: 2,         // Remove second - visible in database
@@ -252,6 +265,9 @@ const SECTION_PRIORITY = {
 
 // Discord embed description limit
 const _DISCORD_MAX_LENGTH = 4096; // eslint-disable-line -- documented constant
+// WHY 4000 and not 4096? Because we add content dynamically and I don't trust our length
+// estimation to be byte-perfect for every Unicode character. 96 bytes of buffer has saved
+// us from embarrassing truncation errors more than once.
 const TARGET_LENGTH = 4000; // Buffer for safety
 
 interface EmbedSection {
@@ -317,6 +333,9 @@ function formatActionWithIcon(action: string): string {
 /**
  * Get ordinal suffix for a number (1st, 2nd, 3rd, 4th, etc.)
  */
+// EDGE CASE: 11th, 12th, 13th don't follow the pattern (not 11st, 12nd, 13rd).
+// The (v - 20) % 10 handles this by making 11-13 fall through to "th".
+// Yes, we tested up to 113th. Yes, someone has applied that many times. No, I don't want to talk about it.
 function getOrdinal(n: number): string {
   const s = ["th", "st", "nd", "rd"];
   const v = n % 100;
@@ -346,6 +365,8 @@ export function buildReviewEmbedV3(
   } = opts;
 
   const code = shortCode(app.id);
+  // GOTCHA: The @ replacement prevents Discord from treating usernames as mentions.
+  // Without the ZWSP, "@everyone" in a username would ping everyone. Ask how we found out.
   const username = app.userTag.replace(/@/g, "@\u200b");
   const submittedDate = app.submitted_at ? new Date(app.submitted_at) : new Date(app.created_at);
 
@@ -456,6 +477,9 @@ export function buildReviewEmbedV3(
     const reverse = app.avatarUrl ? googleReverseImageUrl(app.avatarUrl) : "#";
     const riskBadge = getRiskBadge(pct);
     lines.push(`🖼️ **Avatar risk:** ${riskBadge} • [Reverse Search](${reverse})`);
+    // HONESTY: 75% sounds bad, but it catches the obvious stuff. The 25% it misses is usually
+    // edge cases like suggestive but SFW art. False positives are worse than false negatives here
+    // because rejecting someone for their PFP of a fully-clothed anime character is embarrassing.
     lines.push("-# *NSFW Detection API is ~75% Accurate. Always manually verify.*");
   }
 
@@ -611,6 +635,8 @@ export function buildReviewEmbedV3(
   let description = finalParts.join("\n");
 
   // Clean up excessive newlines
+  // GOTCHA: The section builders each add their own trailing newlines. Without this cleanup,
+  // you get weird gaps that look like formatting bugs. Three or more newlines become two.
   description = description.replace(/\n{3,}/g, "\n\n");
 
   // Log truncation events for monitoring
@@ -629,6 +655,8 @@ export function buildReviewEmbedV3(
   }
 
   // Final safety check with hard truncation (only if answers section alone is too large)
+  // EDGE CASE: Someone once wrote a 3000-character essay for "What does a furry mean to you?"
+  // Even with all optional sections removed, we can still overflow. This is the nuclear option.
   if (description.length > TARGET_LENGTH) {
     logger.warn(
       {

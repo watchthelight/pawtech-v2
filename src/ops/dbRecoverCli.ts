@@ -22,6 +22,8 @@ import { logger } from "../lib/logger.js";
 // CLI Argument Parsing
 // ============================================================================
 
+// All fields optional because users can and will invoke this with no args
+// while panicking at 2am wondering why the database is corrupted
 interface CLIArgs {
   list?: boolean;
   validate?: string;
@@ -32,9 +34,14 @@ interface CLIArgs {
   help?: boolean;
 }
 
+/*
+ * Hand-rolled argument parser because yargs is 47 dependencies and we're
+ * already having a bad day if we're running this script.
+ */
 function parseArgs(argv: string[]): CLIArgs {
   const args: CLIArgs = {};
 
+  // GOTCHA: starts at 2 because argv[0] is node, argv[1] is the script path
   for (let i = 2; i < argv.length; i++) {
     const arg = argv[i];
 
@@ -43,6 +50,11 @@ function parseArgs(argv: string[]): CLIArgs {
         args.list = true;
         break;
       case "--validate":
+        /*
+         * GOTCHA: pre-increment so we consume the next arg as the value.
+         * If there's no next arg, this returns undefined and we just... hope
+         * the caller figures it out from the error message. Not great.
+         */
         args.validate = argv[++i];
         break;
       case "--restore":
@@ -62,6 +74,8 @@ function parseArgs(argv: string[]): CLIArgs {
         args.help = true;
         break;
       default:
+        // Fail loudly. Nobody wants a surprise database restore because of a typo.
+        // Learned this one the hard way.
         console.error(`Unknown argument: ${arg}`);
         args.help = true;
     }
@@ -127,7 +141,11 @@ async function handleList() {
 
   console.log(`✅ Found ${candidates.length} backup candidate(s):\n`);
 
-  // Print table header
+  /*
+   * Yes, we're doing ASCII art tables in 2024. CSS-in-terminal libraries exist
+   * but the last thing we need during a database crisis is to debug why
+   * chalk@5 broke our output formatting. This works everywhere.
+   */
   console.log("┌────────────────────────────────────────────────────────────────────────────────┐");
   console.log("│ Filename                  │ Created          │ Size    │ Integrity │ FK  │");
   console.log("├────────────────────────────────────────────────────────────────────────────────┤");
@@ -136,6 +154,7 @@ async function handleList() {
     const filename = c.filename.padEnd(25, " ").substring(0, 25);
     const created = new Date(c.created_at * 1000).toISOString().substring(0, 16).replace("T", " ");
     const sizeMB = (c.size_bytes / 1024 / 1024).toFixed(1).padStart(6, " ");
+    // Ternary hell, but the alternative is 20 lines of if/else for display formatting
     const integrity = (c.integrity_result === "ok" ? "✅ OK" : c.integrity_result ? "❌ FAIL" : "⚪ N/A").padEnd(9, " ");
     const fk = (c.foreign_key_violations === 0 ? "✅ 0" : c.foreign_key_violations ? `❌ ${c.foreign_key_violations}` : "⚪ N/A").padEnd(4, " ");
 
@@ -240,6 +259,11 @@ async function handleRestore(candidateId: string, opts: CLIArgs) {
     console.log("⚠️  A pre-restore backup will be created automatically.");
     console.log("⚠️  Press Ctrl+C within 5 seconds to abort...\n");
 
+    /*
+     * WHY 5 seconds: Short enough that ops doesn't get impatient and just
+     * add more --force flags, long enough to actually read the warning.
+     * This has prevented at least 3 accidental production restores.
+     */
     await new Promise((resolve) => setTimeout(resolve, 5000));
   }
 
@@ -250,6 +274,8 @@ async function handleRestore(candidateId: string, opts: CLIArgs) {
     pm2Coord,
     confirm,
     actorId: "cli",
+    // WHY track who/when: So when someone asks "who restored the DB on Tuesday?"
+    // we don't have to grep through 47 log files
     notes: `CLI restore by ${process.env.USER || process.env.USERNAME || "unknown"} at ${new Date().toISOString()}`,
   });
 
@@ -282,7 +308,9 @@ async function handleRestore(candidateId: string, opts: CLIArgs) {
       console.log("⚠️  IMPORTANT: Verify bot functionality immediately");
       console.log("⚠️  If issues occur, restore from pre-restore backup:\n");
       if (result.preRestoreBackupPath) {
+        // Yes, backupFilename is unused. Leaving it for future error messages.
         const backupFilename = result.preRestoreBackupPath.split(/[\\/]/).pop();
+        // Print the exact commands so the panicking operator can just copy-paste
         console.log(`   cp "${result.preRestoreBackupPath}" "data/data.db"`);
         console.log(`   pm2 restart pawtropolis\n`);
       }
@@ -320,6 +348,8 @@ async function main() {
       process.exit(1);
     }
   } catch (err) {
+    // Log to both structured logger AND console. When the DB is hosed,
+    // you want every possible avenue to find out what went wrong.
     logger.error({ err }, "[dbRecoverCli] Command failed");
     console.error(`\n❌ Error: ${err}\n`);
     console.error("Check logs for details\n");
@@ -327,5 +357,8 @@ async function main() {
   }
 }
 
-// Run CLI
+/*
+ * No top-level await because we want this to run on Node 18 in some
+ * cursed environments. main() catches and logs its own errors.
+ */
 main();

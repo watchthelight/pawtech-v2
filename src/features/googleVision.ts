@@ -36,6 +36,8 @@ type VisionAPIResponse = {
 
 // Feature flag - disabled if no API key configured. This is intentional:
 // running without Vision API just means we skip this detection layer.
+// GOTCHA: This is evaluated at module load time. If you set the env var after
+// the module loads, it won't pick it up. Restart the bot.
 const GOOGLE_VISION_ENABLED = process.env.GOOGLE_VISION_API_KEY ? true : false;
 
 /**
@@ -46,6 +48,8 @@ const GOOGLE_VISION_ENABLED = process.env.GOOGLE_VISION_API_KEY ? true : false;
  * POSSIBLE at 0.5 is the "maybe" threshold - warrants human review.
  */
 function likelihoodToScore(likelihood: SafeSearchLikelihood): number {
+  // These numbers are vibes. Google won't tell us what they actually mean.
+  // If you're wondering why POSSIBLE is 0.5: coin flip. That's the logic.
   switch (likelihood) {
     case "VERY_UNLIKELY": return 0.0;
     case "UNLIKELY": return 0.2;
@@ -122,6 +126,7 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
     // We request both SAFE_SEARCH_DETECTION and LABEL_DETECTION.
     // This is a pricing optimization: SafeSearch is FREE when bundled with
     // any other detection type. Label detection is the cheapest add-on.
+    // Yes, we're paying for labels we throw away. Google's pricing is weird.
     const requestBody = {
       requests: [
         {
@@ -233,6 +238,8 @@ export async function detectNsfwVision(imageUrl: string): Promise<VisionResult |
  * @returns Combined score 0-1, where >0.5 typically warrants review
  */
 export function calculateVisionScore(result: VisionResult): number {
+  // If you're thinking "why not use weighted average?" - read the docblock.
+  // We tried that. It made obviously-NSFW images look borderline. Bad times.
   const adultWeight = result.adultScore;
   const racyWeight = result.racyScore * 0.6;
   const violenceWeight = result.violenceScore * 0.3;

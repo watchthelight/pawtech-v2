@@ -33,6 +33,10 @@ import { createNetworkError } from "../utils/discordMocks.js";
 
 /**
  * Creates a function that fails N times then succeeds.
+ *
+ * This pattern is common in retry testing - you want to verify that retry logic
+ * doesn't give up too early. The closure tracks call count so we can assert
+ * exactly how many times retry() tried before succeeding or failing.
  */
 function createFailingThenSucceeding<T>(
   failCount: number,
@@ -99,6 +103,9 @@ describe("withRetry", () => {
       expect(fn).toHaveBeenCalledTimes(3);
     });
 
+    // WHY: Not all errors should be retried. A 400 Bad Request won't magically
+    // become a 200 OK on the fifth attempt. Wasting retries on deterministic
+    // failures just delays the inevitable and burns API quota.
     it("throws immediately for non-recoverable errors", async () => {
       // Non-recoverable error (validation-like)
       const error = new Error("Invalid input");
@@ -127,6 +134,11 @@ describe("withRetry", () => {
     });
   });
 
+  /*
+   * Testing backoff with real timers is a trade-off. Fake timers would be faster,
+   * but they introduce complexity around Promise scheduling that has bitten us before.
+   * These small delays (5ms, 10ms) keep tests fast while still exercising real timing.
+   */
   describe("backoff behavior", () => {
     it("applies backoff multiplier", async () => {
       const fn = vi.fn().mockRejectedValue(createNetworkError("ECONNRESET"));
@@ -150,6 +162,8 @@ describe("withRetry", () => {
     });
   });
 
+  // Fail fast on obviously wrong config. If you set maxAttempts to 0,
+  // you probably meant 1 or made a calculation error upstream.
   describe("validation", () => {
     it("throws for maxAttempts < 1", async () => {
       await expect(
@@ -164,6 +178,8 @@ describe("withRetry", () => {
     });
   });
 
+  // Logging tests verify observability. When Discord is having a bad day at 3am,
+  // these logs are how you figure out what's happening without adding console.log.
   describe("logging", () => {
     it("logs retry attempts", async () => {
       const { fn } = createFailingThenSucceeding(1, "success");

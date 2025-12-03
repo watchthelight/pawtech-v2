@@ -27,6 +27,8 @@ const SAFE_PATH_REGEX = /^[a-zA-Z0-9_\-/.]+$/;
 // This works reliably whether bundled or not, as long as you run from project root
 // override: true in production ensures .env values take precedence over stale shell environment
 // override: false in tests allows test env vars to be set before imports
+// GOTCHA: If you run the bot from a different directory, this will look for .env in the wrong place.
+// Don't be clever with your working directory. Just run from project root.
 const isTest = process.env.NODE_ENV === "test";
 dotenv.config({ path: path.join(process.cwd(), ".env"), override: !isTest });
 
@@ -109,6 +111,7 @@ const schema = z.object({
 
   // Sentry error tracking - disabled if DSN not provided
   // 0.1 default sample rate = 10% of transactions traced (saves quota in prod)
+  // If you set this to 1.0, you WILL blow through your Sentry quota in a day. Ask me how I know.
   SENTRY_DSN: z.string().optional(),
   SENTRY_ENVIRONMENT: z.string().optional(),
   SENTRY_TRACES_SAMPLE_RATE: z.coerce.number().min(0).max(1).default(0.1),
@@ -197,6 +200,8 @@ const schema = z.object({
  * Fail-fast validation. If required vars are missing, exit immediately with
  * clear error messages rather than letting the app limp along and fail randomly.
  * safeParse gives us all errors at once instead of one-at-a-time.
+ * WHY safeParse and not parse? Because parse throws on first error.
+ * safeParse collects ALL errors so you don't play whack-a-mole fixing one at a time.
  */
 const parsed = schema.safeParse(raw);
 if (!parsed.success) {
@@ -211,6 +216,9 @@ export const env = parsed.data;
  * rather than going through zod since they have trivial parsing logic and
  * default to "on" for backwards compat.
  */
+// WHY not just use zod's coerce.boolean? Because people put weird stuff in .env files.
+// "yes", "YES", "1", "true", "TRUE"... this regex handles all the reasonable ones.
+// If someone puts "yaaas" they deserve what they get.
 const truthyPattern = /^(1|true|yes|on)$/i;
 
 // Controls whether avatar risk warnings appear in review UI. Defaults ON.

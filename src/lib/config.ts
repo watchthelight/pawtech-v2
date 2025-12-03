@@ -22,6 +22,9 @@ import { touchSyncMarker } from "./syncMarker.js";
 import { isGuildMember } from "./typeGuards.js";
 import { LRUCache } from "./lruCache.js";
 
+// GOTCHA: This type is essentially a SQL row disguised as TypeScript.
+// Half these fields are optional-nullable because SQLite doesn't know the difference.
+// If you add a column to the DB, you MUST add it here too or it vanishes into the void.
 export type GuildConfig = {
   guild_id: string;
   review_channel_id?: string | null;
@@ -88,11 +91,15 @@ export type GuildConfig = {
   flag_cooldown_ttl_ms?: number | null; // TTL for flag cooldown cache (default: 3600000)
   // Banner sync toggle
   banner_sync_enabled?: number | null; // 1=enabled, 0=disabled (default: 1)
+  // These fields are NOT optional. Ask me how I know.
+  // (Hint: it involved a production outage and a missing COALESCE)
   image_search_url_template: string;
   reapply_cooldown_hours: number;
   min_account_age_hours: number;
   min_join_age_hours: number;
-  avatar_scan_enabled: number;
+  avatar_scan_enabled: number; // 1 = on, 0 = off. Yes, SQLite booleans. Yes, I hate it too.
+  // WHY floats in SQLite? Because vision APIs return confidence scores and we store them raw.
+  // If you're wondering why 0.6 sometimes becomes 0.6000000001, now you know.
   avatar_scan_nsfw_threshold: number;
   avatar_scan_skin_edge_threshold: number;
   avatar_scan_weight_model: number;
@@ -106,21 +113,28 @@ export type GuildConfig = {
   };
 };
 
-// LRU cache with TTL and bounded size to prevent unbounded memory growth.
-// Max 1000 guilds cached; excess guilds evicted LRU-style.
-//
-// CACHE CONSISTENCY NOTES:
-// - TTL-based invalidation means stale data can be served during concurrent updates
-// - Maximum staleness window: CACHE_TTL_MS (5 minutes)
-// - This is ACCEPTABLE for guild config because:
-//   * Updates are infrequent (typically one-time setup)
-//   * Config fields are non-critical convenience settings
-//   * SQLite handles concurrent writes (no data corruption)
-//   * Single-node deployment reduces actual concurrency
-// - If you need stronger consistency, see Option B in docs/roadmap/043-document-cache-behavior.md
+/*
+ * LRU cache with TTL and bounded size to prevent unbounded memory growth.
+ * Max 1000 guilds cached; excess guilds evicted LRU-style.
+ *
+ * CACHE CONSISTENCY NOTES:
+ * - TTL-based invalidation means stale data can be served during concurrent updates
+ * - Maximum staleness window: CACHE_TTL_MS (5 minutes)
+ * - This is ACCEPTABLE for guild config because:
+ *   * Updates are infrequent (typically one-time setup)
+ *   * Config fields are non-critical convenience settings
+ *   * SQLite handles concurrent writes (no data corruption)
+ *   * Single-node deployment reduces actual concurrency
+ * - If you need stronger consistency, see Option B in docs/roadmap/043-document-cache-behavior.md
+ *
+ * WHY 1000 guilds? Because if you're somehow running this bot on more servers,
+ * you probably have bigger problems than cache eviction to worry about.
+ */
 const CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes - short enough to pick up config changes reasonably fast
 const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory growth
 const configCache = new LRUCache<string, GuildConfig>(CACHE_MAX_SIZE, CACHE_TTL_MS);
+// If someone changes config and wonders why it's not applying: it's the cache.
+// It's always the cache.
 
 /**
  * Track which schema migrations have been applied during this runtime.
@@ -137,6 +151,8 @@ const ensuredMigrations = new Set<string>();
 // Allowlist of valid column names for ALTER TABLE migration operations.
 // This prevents SQL injection if column name sources ever become dynamic.
 // Pattern follows metricsEpoch.ts:101 and config.ts:317 validation approach.
+// Yes, we have hardcoded column names in a Set. No, we won't apologize.
+// Parameterized queries don't work for column names. This is the way.
 const ALLOWED_MIGRATION_COLUMNS = new Set([
   // Welcome channel columns
   "info_channel_id",
@@ -173,6 +189,10 @@ function validateMigrationColumnName(columnName: string): void {
   }
 }
 
+// These ensure*Column functions are startup migrations that run once per boot.
+// They exist because proper migration files are apparently too scary.
+// The pattern: check if column exists via PRAGMA, add if missing, remember we did it.
+// It's ugly but it's battle-tested. Don't fix what isn't broken.
 export function ensureUnverifiedChannelColumn() {
   if (ensuredMigrations.has("guild_config_unverified_channel")) return;
   try {
@@ -421,6 +441,7 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
    */
   // Prevent test/mock guild IDs from being saved to production database
   // This guards against leftover test data causing stale alert errors (Issue #67)
+  // Someone (definitely not me) once shipped test data to prod. Never again.
   if (guildId.startsWith("test-") || guildId.startsWith("mock-")) {
     logger.warn(
       { guildId, partial },
@@ -432,6 +453,9 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
   // NOTE: Schema ensure functions moved to startup (src/index.ts) for performance
   // Manual upsert pattern because SQLite's INSERT OR REPLACE would nuke columns
   // we didn't specify. This way partial updates actually work as expected.
+  // GOTCHA: We SELECT * first even though it's a write path. If you're thinking
+  // "that's wasteful," you're right. But SQLite is local and fast, and the
+  // alternative is conditional SQL that's even uglier. Pick your battles.
   const existing = db.prepare("SELECT * FROM guild_config WHERE guild_id = ?").get(guildId);
   if (!existing) {
     // INSERT with COALESCE defaults; schema columns documented near GuildConfig type
@@ -475,6 +499,8 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
 
     // Allowlist of valid guild_config columns to prevent SQL injection via column names.
     // Even though keys come from typed partial, we add explicit validation for defense in depth.
+    // "But TypeScript already validates this!" Sure, until someone does an `as any` cast.
+    // Trust no one. Not even yourself from six months ago.
     const ALLOWED_CONFIG_COLUMNS = new Set([
       "review_channel_id", "gate_channel_id", "general_channel_id", "unverified_channel_id",
       "accepted_role_id", "reviewer_role_id", "welcome_template", "info_channel_id",
@@ -505,8 +531,11 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
     if (validKeys.length === 0) return;
 
     // Dynamic SQL construction with validated column names. Values are parameterized.
+    // This is the rare case where string interpolation in SQL is actually okay.
+    // We validated the column names above, and values go through ? placeholders.
     const sets = validKeys.map((k) => `${k} = ?`).join(", ") + ", updated_at = datetime('now')";
     // SQLite doesn't have boolean type - store as 0/1 integers.
+    // Every time I write this conversion, I die a little inside.
     const vals = validKeys.map((k) => {
       const val = partial[k];
       return typeof val === "boolean" ? (val ? 1 : 0) : val;
@@ -602,6 +631,9 @@ export function isReviewer(guildId: string, member: GuildMember | null): boolean
 
   // Channel-based reviewer detection: if you can see the review channel, you're staff.
   // This works well when review channel is locked to @Staff role - no extra config needed.
+  // SECURITY NOTE: This means anyone with ViewChannel on the review channel is "staff."
+  // Make sure your channel perms are locked down or randos get mod powers.
+  // Yes, a misconfigured channel could make your entire server mods. You've been warned.
   if (!reviewChannelId) return false;
 
   const channel = member.guild.channels.cache.get(reviewChannelId);
@@ -667,6 +699,8 @@ export function canRunAllCommands(member: GuildMember | null, guildId: string): 
   // mod_role_ids is stored as comma-separated string in DB. Not ideal for queries
   // but simple and works fine for the typical 1-3 mod roles per server.
   // If you're adding 50 mod roles, maybe reconsider your role hierarchy.
+  // Also: no, we won't switch to a JSON array. CSV is readable in sqlite3 CLI.
+  // EDGE CASE: trailing/leading commas or double commas are handled by the filter below.
   const modRoleIdList = modRoleIds
     .split(",")
     .map((id) => id.trim())
@@ -718,6 +752,8 @@ export function requireStaff(interaction: ChatInputCommandInteraction): boolean 
   // Permission hierarchy: owner > mod roles > ManageGuild > reviewer role.
   // This layered check ensures bot owners always work, configured mod roles
   // work without needing server permissions, and falls back gracefully.
+  // Why so many layers? Because every Discord server has a different idea of
+  // what "staff" means, and we've had to accommodate all of them.
   const canRun = canRunAllCommands(member, guildId);
   if (canRun) {
     return true;
@@ -727,6 +763,7 @@ export function requireStaff(interaction: ChatInputCommandInteraction): boolean 
   const ok = hasStaffPermissions(member, guildId);
   if (!ok) {
     // Ephemeral reply avoids leaking permission info publicly.
+    // Also prevents embarrassing "you're not staff" messages in general chat.
     interaction
       .reply({
         flags: MessageFlags.Ephemeral,
@@ -903,6 +940,9 @@ export async function requireAdminOrLeadership(
   }
 
   // Member validation
+  // WHY the string check? Discord's API sometimes returns permissions as a bitfield string
+  // instead of a Permissions object. This happens in webhook contexts and cached payloads.
+  // If you're seeing false negatives in permission checks, this is probably why.
   const member = interaction.member;
   if (!member || typeof member.permissions === "string") {
     return false;

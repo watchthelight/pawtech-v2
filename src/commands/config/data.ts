@@ -2,11 +2,37 @@
  * Pawtropolis Tech -- src/commands/config/data.ts
  * WHAT: SlashCommandBuilder definition for /config command.
  * WHY: Separates command definition from handler implementations.
+ *
+ * WARNING: This file is a beast. Discord limits commands to 25 subcommands per
+ * group and 4000 total characters in descriptions. We're close to both.
+ *
+ * If you need to add more config options, consider:
+ * 1. Grouping related options into a single subcommand with multiple params
+ * 2. Creating a new /config-advanced command (ugh)
+ * 3. Using modals for rarely-changed settings
+ *
+ * STRUCTURE:
+ * - "set": Core settings most admins use weekly (roles, channels, toggles)
+ * - "set-advanced": Timing/tuning settings most admins never touch
+ * - "get": Read-only views of current config
+ * - "poke": Category/channel config for the /poke command
+ * - "view": Full config dump
+ * - "isitreal": AI detection API keys (owner only)
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 import { SlashCommandBuilder } from "discord.js";
 
+/*
+ * Discord slash command limits as of 2024:
+ * - Max 25 subcommands per group
+ * - Max 25 options per subcommand
+ * - Max 4000 chars total for all descriptions combined
+ * - Max 100 characters per description
+ *
+ * We're currently running 24 subcommands in "set" and 13 in "set-advanced".
+ * Room for one more in each before we hit the wall.
+ */
 export const data = new SlashCommandBuilder()
   .setName("config")
   .setDescription("Guild configuration management")
@@ -134,7 +160,11 @@ export const data = new SlashCommandBuilder()
           .addIntegerOption((o) => o.setName("minutes").setDescription("Minutes required (5-180)").setRequired(true).setMinValue(5).setMaxValue(180))
       )
   )
-  // GROUP 2: "set-advanced" - Advanced/timing settings (13 subcommands)
+  /*
+   * GROUP 2: "set-advanced" - Settings that most admins should never touch.
+   * If something breaks after changing these, that's a "you" problem.
+   * Timing values here were tuned through trial and error on production.
+   */
   .addSubcommandGroup((group) =>
     group
       .setName("set-advanced")
@@ -169,6 +199,9 @@ export const data = new SlashCommandBuilder()
           .addIntegerOption((o) => o.setName("size").setDescription("Max entries (1000-100000)").setRequired(true).setMinValue(1000).setMaxValue(100000))
       )
       // Rate limiting & resilience
+      // These settings control how aggressive the bot is with retries.
+      // Dial these wrong and you'll either hammer Discord's API (bad)
+      // or give up too easily on transient failures (also bad).
       .addSubcommand((sc) =>
         sc.setName("retry_config").setDescription("Configure retry settings for API calls")
           .addIntegerOption((o) => o.setName("max_attempts").setDescription("Max attempts (1-10)").setRequired(false).setMinValue(1).setMaxValue(10))
@@ -191,6 +224,9 @@ export const data = new SlashCommandBuilder()
           .addIntegerOption((o) => o.setName("max_per_hour").setDescription("Max per hour (1-100)").setRequired(false).setMinValue(1).setMaxValue(100))
       )
       // Avatar scan thresholds
+      // These control false positive vs false negative tradeoffs for NSFW detection.
+      // Lower = more alerts (annoying but safe). Higher = fewer alerts (risky).
+      // The defaults were tuned to minimize staff complaints while catching obvious stuff.
       .addSubcommand((sc) =>
         sc.setName("avatar_thresholds").setDescription("Configure avatar scan NSFW thresholds")
           .addNumberOption((o) => o.setName("hard").setDescription("Hard threshold (0.5-1.0)").setRequired(false).setMinValue(0.5).setMaxValue(1.0))

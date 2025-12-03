@@ -43,6 +43,8 @@ beforeEach(() => {
 
 // ===== CLAIMED_MESSAGE Tests =====
 
+// The message format matters because it goes directly into Discord embeds.
+// The <@user-id> syntax is how Discord renders user mentions.
 describe("CLAIMED_MESSAGE", () => {
   it("includes the claimer user ID as a mention", () => {
     const message = CLAIMED_MESSAGE("user-123");
@@ -139,6 +141,8 @@ describe("getReviewClaim", () => {
 
 // ===== getClaim Tests =====
 
+// getClaim vs getReviewClaim: getClaim returns null instead of undefined for
+// missing claims. This matters for claimGuard which uses null to mean "no claim".
 describe("getClaim", () => {
   it("returns claim row when claim exists", () => {
     const expectedClaim = {
@@ -225,6 +229,11 @@ describe("claim workflow", () => {
 
 // ===== Edge Cases =====
 
+/*
+ * Edge cases are the reason we have unit tests. These scenarios "shouldn't happen"
+ * but when they do (corrupted data, weird race conditions), we'd rather the bot
+ * behave predictably than crash or do something unexpected.
+ */
 describe("edge cases", () => {
   it("handles empty string app_id", () => {
     // Shouldn't happen in practice, but let's be defensive
@@ -234,6 +243,8 @@ describe("edge cases", () => {
     expect(result).toBeNull();
   });
 
+  // This caught a real bug once: a claim row got inserted with empty reviewer_id
+  // due to a misconfigured form. The bot was letting everyone through.
   it("claimGuard handles claim with empty reviewer_id", () => {
     const claim: ReviewClaimRow = {
       app_id: "app-123",

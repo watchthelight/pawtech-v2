@@ -16,7 +16,11 @@ import { detectOptic } from "./optic.js";
 import type { AIDetectionResult, AIDetectionService, ServiceResult } from "./types.js";
 import { logger } from "../../lib/logger.js";
 
-/** Service display names for embed output */
+/*
+ * We obfuscate the actual service names in the UI so users don't game the
+ * system by learning which specific detectors are weak against their
+ * particular flavor of AI slop. Yes, people actually do this.
+ */
 const SERVICE_NAMES: Record<AIDetectionService, string> = {
   hive: "Engine 1",
   illuminarty: "Engine 2",
@@ -57,7 +61,11 @@ function processResult(
 export async function detectAIForImage(imageUrl: string, imageName: string): Promise<AIDetectionResult> {
   logger.info({ imageUrl, imageName }, "[aiDetection] Starting detection for image");
 
-  // Call all services in parallel with Promise.allSettled
+  /*
+   * GOTCHA: We use allSettled, not all. If one janky API is down (happens
+   * more than you'd think), we still get results from the others instead
+   * of the whole thing exploding. The averaging math handles missing scores.
+   */
   const results = await Promise.allSettled([
     detectHive(imageUrl),
     detectIlluminarty(imageUrl),
@@ -72,7 +80,11 @@ export async function detectAIForImage(imageUrl: string, imageName: string): Pro
     processResult(results[3], "optic"),
   ];
 
-  // Calculate average of successful results only (excludes null scores)
+  /*
+   * Only average the services that actually responded. A null score means
+   * either "not configured" or "API threw up". Either way, we pretend it
+   * doesn't exist rather than tanking the average with zeros.
+   */
   const successfulScores = services.filter((s) => s.score !== null).map((s) => s.score!);
 
   const averageScore =
@@ -99,6 +111,8 @@ export async function detectAIForImages(
 ): Promise<AIDetectionResult[]> {
   const results: AIDetectionResult[] = [];
 
+  // Sequential on purpose. Each image already fires 4 parallel API calls,
+  // so doing images in parallel = 4 * N simultaneous requests = rate limits.
   for (const img of images) {
     const result = await detectAIForImage(img.url, img.name);
     results.push(result);
@@ -115,6 +129,7 @@ export async function detectAIForImages(
 function renderScoreBar(score: number): string {
   const filled = Math.round(score * 10);
   const empty = 10 - filled;
+  // Unicode block characters. Looks pretty in Discord, horrifying in logs.
   return "\u2588".repeat(filled) + "\u2591".repeat(empty);
 }
 

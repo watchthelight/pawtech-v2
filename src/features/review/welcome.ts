@@ -31,6 +31,10 @@ import type {
 // ===== Constants =====
 
 export const DEFAULT_WELCOME_TEMPLATE = "Welcome {applicant.mention} to {guild.name}! wave";
+
+// These Sets act as in-memory deduplication to avoid log spam. The tradeoff is they
+// grow unbounded for the lifetime of the process. In practice, the number of guilds
+// is small enough that this is fine. If you're running this on 10,000 servers, reconsider.
 const invalidWelcomeTemplateWarned = new Set<string>();
 const emojiCacheFetched = new Set<string>();
 
@@ -41,6 +45,9 @@ const WELCOME_TEMPLATE_TOKEN_RE = /\{(applicant\.(?:mention|tag|display)|guild\.
 
 // ===== Helper Functions =====
 
+// Discord error code 50013 is "Missing Permissions". We check this specifically because
+// permission errors are recoverable (tell the admin to fix perms) vs. other errors
+// which might be transient network issues or something more sinister.
 function isMissingPermissionError(err: unknown): boolean {
   return (err as { code?: unknown })?.code === 50013;
 }
@@ -51,6 +58,13 @@ function warnInvalidTemplateOnce(guildId: string, detail: string) {
   logger.warn({ guildId, detail }, "[welcome] invalid custom template; using default embed");
 }
 
+/*
+ * Tries to find a custom guild emoji by name, falling back to a standard emoji.
+ * WHY: Custom emojis look better and give servers personality. But we can't assume
+ * they exist, so we need graceful degradation to Unicode emoji.
+ * GOTCHA: The emoji cache is fetched once per guild per process lifetime. If someone
+ * adds an emoji after the bot starts, it won't be found until restart.
+ */
 async function resolveGuildEmoji(
   guild: Guild,
   candidateNames: string[],
@@ -63,10 +77,14 @@ async function resolveGuildEmoji(
       emojiCacheFetched.add(guild.id);
     }
   } catch (err) {
+    // Mark as fetched anyway to avoid retrying on every welcome message.
+    // Better to use the fallback than hammer the API.
     emojiCacheFetched.add(guild.id);
     logger.debug({ err, guildId: guild.id }, "[welcome] emoji fetch failed; using fallback");
   }
 
+  // The type assertion here is ugly, but discord.js's Collection typing is a pain.
+  // We know .find exists, but TypeScript doesn't always agree depending on version.
   const cache = guild.emojis.cache as { find?: (fn: (emoji: any) => boolean) => any };
   if (cache?.find) {
     const match = cache.find((emoji) => {
@@ -74,6 +92,7 @@ async function resolveGuildEmoji(
       return lowerCandidates.includes(name);
     });
     if (match && match.id && match.name) {
+      // Animated emojis need the 'a' prefix or they render as static images.
       const prefix = match.animated ? "a" : "";
       return `<${prefix}:${match.name}:${match.id}>`;
     }
@@ -106,6 +125,8 @@ async function buildDefaultWelcomeMessage(
     ? await resolveGuildEmoji(guild, ["sociallink", "social_link", "pawlink"], "link")
     : null;
 
+  // 0x22ccaa is a teal/aqua. Different from the 0x00c2ff in the other welcome file.
+  // I'm not sure if that's intentional branding or copy-paste drift. Worth checking.
   const embed = new EmbedBuilder()
     .setColor(0x22ccaa)
     .setTitle("Welcome to Pawtropolis 🐾")
@@ -142,6 +163,11 @@ async function buildDefaultWelcomeMessage(
   return { content, embeds: [embed] };
 }
 
+/*
+ * Creates a minimal JSON representation of embeds for debug logging.
+ * WHY not just log the full embed? Because embed.toJSON() includes a ton of null/undefined
+ * fields that clutter the logs. This only captures what's actually set.
+ */
 function snapshotEmbeds(embeds: EmbedBuilder[]): Array<Record<string, unknown>> {
   return embeds.map((embed) => {
     const json = embed.toJSON();
@@ -183,11 +209,15 @@ function snapshotEmbeds(embeds: EmbedBuilder[]): Array<Record<string, unknown>> 
  * Unknown tokens are left as-is (not replaced with empty string).
  */
 export function renderWelcomeTemplate(options: RenderWelcomeTemplateOptions): string {
+  // Fall back to default if template is missing or whitespace-only.
+  // We've had servers set their template to just spaces. People are creative.
   const base =
     typeof options.template === "string" && options.template.trim().length > 0
       ? options.template
       : DEFAULT_WELCOME_TEMPLATE;
 
+  // Cascade of fallbacks: display name -> tag -> raw snowflake ID
+  // The ID fallback is mostly theoretical but better safe than "[object Object]"
   const applicantTag =
     options.applicant.tag && options.applicant.tag.trim().length > 0
       ? options.applicant.tag
@@ -251,6 +281,9 @@ export async function postWelcomeMessage(options: {
     }
   }
 
+  // This block is doing a lot of defensive validation because templates come from
+  // user input (config). We've seen everything: undefined, null, empty strings,
+  // and once, somehow, a number. Trust nothing.
   const templateIsString = typeof template === "string";
   const trimmedTemplate = templateIsString ? template.trim() : "";
   const hasCustomTemplate = templateIsString && trimmedTemplate.length > 0;
@@ -308,6 +341,9 @@ export async function postWelcomeMessage(options: {
     logger.debug({ ...meta, embeds: snapshots }, "[welcome] embed snapshot");
     return { ok: true, messageId: message.id };
   } catch (err) {
+    // Fallback strategy: if embed fails, try again without it. This handles cases
+    // where the bot has SendMessages but not EmbedLinks. A plain text welcome is
+    // better than no welcome at all.
     if (embeds.length > 0) {
       try {
         const message = await channel.send(basePayload);

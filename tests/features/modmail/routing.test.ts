@@ -60,6 +60,12 @@ import {
 
 // ===== Size-Based Eviction Tests =====
 
+/*
+ * forwardedMessages is a Map that tracks which messages we've already forwarded
+ * from DMs to mod threads (and vice versa). Without size limits, a busy server
+ * could grow this Map forever until the bot OOMs. The eviction tests verify we
+ * don't let that happen.
+ */
 describe("forwardedMessages size-based eviction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
@@ -94,6 +100,9 @@ describe("forwardedMessages size-based eviction", () => {
     });
   });
 
+  // The eviction strategy is "delete oldest half when we hit the limit".
+  // This is simpler and faster than true LRU for our use case since we don't
+  // need to track access order, just insertion order (which Map gives us free).
   describe("size limit enforcement", () => {
     it("should evict oldest entries when size exceeds threshold", () => {
       const evictionSize = _testing.FORWARDED_EVICTION_SIZE;
@@ -200,6 +209,8 @@ describe("forwardedMessages size-based eviction", () => {
     });
   });
 
+  // Raid scenario: server gets hit with hundreds of DMs at once.
+  // The eviction logic should kick in repeatedly and keep memory bounded.
   describe("rapid message bursts", () => {
     it("should handle 1000+ messages added quickly", () => {
       const burstSize = 1500;
@@ -218,6 +229,8 @@ describe("forwardedMessages size-based eviction", () => {
 
 // ===== Performance Tests =====
 
+// These tests exist because we got bitten by slow eviction in prod once.
+// The old implementation used Array.from() which is O(n) for large Maps.
 describe("forwardedMessages performance", () => {
   beforeEach(() => {
     _testing.clearForwardedMessages();
@@ -245,6 +258,9 @@ describe("forwardedMessages performance", () => {
     );
   });
 
+  // WHY 100ms: CI machines are slow and inconsistent. We originally had 50ms
+  // but it flaked on GitHub Actions under load. 100ms is still fast enough
+  // to not cause noticeable lag during message handling.
   it("should complete eviction operation quickly", () => {
     const evictionSize = _testing.FORWARDED_EVICTION_SIZE;
 

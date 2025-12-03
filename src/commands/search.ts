@@ -209,7 +209,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
           displayName = `User ${trimmedQuery}`;
         }
       } else {
-        // Search by username - try to find in guild members first
+        // Search by username - try to find in guild members first.
+        // This is slower than ID lookup but more user-friendly for staff
+        // who don't have the user ID memorized.
+        // GOTCHA: limit:10 means if there are 50 "John"s, we only check 10.
         const members = await interaction.guild!.members.fetch({ query: trimmedQuery, limit: 10 });
         const exactMatch = members.find(
           (m) =>
@@ -229,8 +232,17 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
           displayName = firstMatch.user.tag;
           avatarUrl = firstMatch.user.displayAvatarURL({ size: 128 });
         } else {
-          // No member found - search DB for applications by users with matching username pattern
-          // This finds applications from users who may have left the server
+          /*
+           * No member found in guild - last resort: search DB for applications.
+           * This handles users who applied and then left (or were kicked).
+           *
+           * PERFORMANCE WARNING: This fetches up to 100 user IDs from DB, then
+           * hits Discord API for each one to check usernames. In a server with
+           * thousands of applications, this could take 10+ seconds. The LIMIT 100
+           * is a safety valve, not a feature.
+           *
+           * If this becomes a problem, we could cache username->user_id mappings.
+           */
           const usernameSearchQuery = `
             SELECT DISTINCT a.user_id
             FROM application a

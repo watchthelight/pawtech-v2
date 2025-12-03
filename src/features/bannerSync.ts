@@ -19,17 +19,28 @@ import { env } from "../lib/env.js";
 // In-memory cache of current banner URL
 // These are module-level singletons - fine for a single-process bot, but would need
 // rethinking if we ever shard across processes (use Redis or similar).
+//
+// GOTCHA: These will reset on PM2 restart. The bot startup logic re-populates
+// cachedBannerURL immediately, so it's fine for production, but don't rely on
+// these values being present before initializeBannerSync() completes.
 let cachedBannerURL: string | null = null;
 let cachedGuildBannerHash: string | null = null;
 let lastSyncTime: number | null = null;
 
 // Store reference to guildUpdate listener for cleanup
+// WHY typed as `any`: discord.js Guild types are large, and we only need .banner and .id.
+// This avoids importing the full Guild type just to satisfy TypeScript for an event handler
+// that's stored in a module-level variable.
 let guildUpdateListener: ((oldGuild: any, newGuild: any) => Promise<void>) | null = null;
 let periodicCheckInterval: NodeJS.Timeout | null = null;
 
 // Rate limiting: don't update bot banner more than once per 10 minutes
 // Discord's API has stricter limits on profile updates, but 10 min is conservative
 // and prevents hammering the API if someone rapidly changes the server banner.
+//
+// Fun fact: Discord rate limits on setBanner are actually 2 requests per 10 min,
+// but we play it safe. If you hit the limit, you get a 429 and pino logs an error,
+// but the world doesn't end. Next periodic sync will pick it up.
 const MIN_UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
 
 /**
@@ -38,6 +49,9 @@ const MIN_UPDATE_INTERVAL_MS = 10 * 60 * 1000; // 10 minutes
  * WHY: Allows website API to serve current banner without Discord API calls
  * RETURNS: Banner URL string or null if no banner set
  */
+// Called by the API endpoint. Returns immediately from cache, no awaiting needed.
+// If you're seeing null here after startup, wait a few seconds - initializeBannerSync
+// runs asynchronously.
 export function getCurrentBannerURL(): string | null {
   return cachedBannerURL;
 }
@@ -61,6 +75,10 @@ export async function syncBannerFromGuild(
     // Get guild banner URL (highest quality)
     // size: 4096 is the max Discord supports. We want highest quality for the bot profile.
     // extension: png for lossless quality (Discord CDN handles the conversion).
+    //
+    // EDGE CASE: If the guild's banner is animated (gif), requesting png returns a static frame.
+    // For animated banners, you'd need to check guild.banner?.startsWith("a_") and use gif.
+    // We don't bother because animated bot profile banners require Nitro, which bots don't have.
     const guildBannerURL = guild.bannerURL({
       size: 4096,
       extension: "png",
@@ -104,6 +122,8 @@ export async function syncBannerFromGuild(
       return;
     }
 
+    // WHY: This can throw if the image is too large, the URL is stale, or Discord
+    // is having a bad day. The try/catch at the top of this function handles it.
     await client.user.setBanner(guildBannerURL);
 
     // Update cache and tracking
@@ -132,6 +152,8 @@ export async function initializeBannerSync(client: Client): Promise<void> {
   logger.info("Initializing banner sync feature");
 
   // Clean up existing listeners to prevent duplicates if called multiple times
+  // GOTCHA: Without this cleanup, a hot-reload or reconnect could register multiple
+  // listeners, causing the same banner update to fire N times. Ask me how I know.
   if (guildUpdateListener) {
     client.off("guildUpdate", guildUpdateListener);
     logger.debug("[bannerSync] removed old guildUpdate listener");
@@ -176,7 +198,9 @@ export async function initializeBannerSync(client: Client): Promise<void> {
     }
   }, PERIODIC_CHECK_MS);
   // .unref() allows Node.js to exit even if this interval is still pending
-  // This prevents the interval from keeping the process alive during shutdown
+  // This prevents the interval from keeping the process alive during shutdown.
+  // Without this, `npm run dev` would hang forever waiting for the interval.
+  // The interval still fires normally while the process is alive.
   periodicCheckInterval.unref();
 
   logger.info({ intervalHours: 6 }, "Periodic banner sync check scheduled");
@@ -185,8 +209,11 @@ export async function initializeBannerSync(client: Client): Promise<void> {
   // This is the primary sync mechanism - guildUpdate fires whenever guild settings change.
   // We compare banner hashes rather than URLs because the hash is the canonical identifier
   // and URLs can vary (different CDN subdomains, query params, etc.).
+  // This async arrow function is stored so we can unregister it later.
+  // WHY async: syncBannerFromGuild is async, and we want errors to be caught.
   guildUpdateListener = async (oldGuild, newGuild) => {
     // Only sync for the configured guild
+    // In theory we're only in one guild, but defense-in-depth never hurt anyone.
     if (newGuild.id !== env.GUILD_ID) return;
 
     // Check if banner changed
@@ -215,6 +242,9 @@ export async function initializeBannerSync(client: Client): Promise<void> {
  * PARAMS:
  *  - client: Discord.js Client instance
  */
+// This cleanup function is called during graceful shutdown.
+// Without it, hot-reloads would stack up duplicate listeners.
+// If you're adding new listeners or timers, remember to clean them up here too.
 export function cleanupBannerSync(client: Client): void {
   if (guildUpdateListener) {
     client.off("guildUpdate", guildUpdateListener);

@@ -917,6 +917,10 @@ client.on("voiceStateUpdate", wrapEvent("voiceStateUpdate", async (oldState, new
   }
 }));
 
+// GOTCHA: This handler is ~700 lines of pure routing logic. If you're adding a new
+// button/modal, scroll to the bottom of the isButton() block and add it there.
+// The order matters less than you'd think because we early-return on every match,
+// but good luck finding your handler in six months.
 client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction) => {
   // Global owner override: allow owners to bypass permission checks
   if (isOwner(interaction.user.id)) {
@@ -941,7 +945,9 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
     );
   }
 
-  // router map: slash → button → modal → select → autocomplete → contextMenu; anything else early‑return
+  // router map: slash -> button -> modal -> select -> autocomplete -> contextMenu; anything else early-return
+  // WHY the ternary chain instead of a switch? TypeScript's type narrowing actually works
+  // better this way - each branch preserves the interaction type for later checks.
   const kind = interaction.isChatInputCommand()
     ? "slash"
     : interaction.isButton()
@@ -1046,11 +1052,15 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
         );
       }
 
+      // The watchdog barks (logs a warning) if we don't respond within Discord's 3-second SLA.
+      // It doesn't actually cancel anything - just yells at you in the logs. Worth it.
       const cancelWatchdog = armWatchdog(interaction);
       let succeeded = false;
 
       try {
-        // Autocomplete interactions
+        // Autocomplete interactions - these have a different timeout (no 3s SLA) but still
+        // need to be fast or Discord shows "no results found" to the user. Currently only
+        // help uses this. If you add more, consider a command->handler map like slash commands.
         if (interaction.isAutocomplete()) {
           const { commandName } = interaction;
           if (commandName === "help") {
@@ -1106,6 +1116,14 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
 
         if (interaction.isButton()) {
           const { customId } = interaction;
+
+          /*
+           * Button routing: the regex gauntlet begins.
+           * Each button type has a customId format like "v1:action:code" or "action:hash:extra".
+           * We match against regex patterns defined in lib/modalPatterns.js.
+           * If your button isn't firing, check: (1) customId format, (2) regex escape issues,
+           * (3) whether you're returning early before your handler. Ask me how I know.
+           */
 
           // Check if this is a sample card button (non-functional preview)
           if (customId.includes("SAMPLE")) {
@@ -1188,6 +1206,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             return;
           }
 
+          // Gate flow buttons - the v1: prefix is legacy but we're stuck with it now.
+          // "done" finishes verification, "start" begins the multi-page questionnaire.
           if (customId === "v1:done") {
             await handleDoneButton(interaction);
             succeeded = true;
@@ -1237,6 +1257,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
           }
 
           // Listopen pagination buttons (with optional view mode: :all or :drafts)
+          // That 8-char hex is a session ID to prevent button hijacking across users.
+          // Yes, someone tried clicking someone else's pagination buttons. No, it didn't end well.
           if (customId.match(/^listopen:[a-f0-9]{8}:(prev|next):\d+(:(all|drafts))?$/)) {
             logger.info(
               {
@@ -1355,7 +1377,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             return;
           }
 
-          // Help navigation buttons
+          // Help navigation buttons - catch-all for the help system.
+          // GOTCHA: This must come AFTER more specific help: patterns if we add any.
           if (customId.startsWith("help:")) {
             logger.info(
               {
@@ -1375,7 +1398,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
           return;
         }
 
-        // Select menu interactions
+        // Select menu interactions - only two of these exist currently.
+        // If you're adding a third, maybe consider a routing map?
         if (interaction.isStringSelectMenu()) {
           const { customId } = interaction;
 
@@ -1420,6 +1444,10 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
         if (interaction.isModalSubmit()) {
           const { customId } = interaction;
 
+          // Modal routing is where things get spicy. Modals can come from buttons OR
+          // from showModal() calls, so the customId has to encode enough state to know
+          // what to do. The identifyModalRoute() helper parses these - don't roll your own.
+
           // Help search modal
           if (customId === "help:modal:search") {
             logger.info(
@@ -1438,6 +1466,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
           }
 
           // yes, HEX6 on purpose (humans > uuids)
+          // The 6-char hex codes are used for application codes - short enough to read aloud
+          // during debugging calls, long enough to be unique within a reasonable timeframe.
           if (customId.startsWith("v1:modal:") || customId.startsWith("v1:avatar:confirm18:")) {
             const route = identifyModalRoute(customId);
 
@@ -1533,6 +1563,9 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
               return;
             }
 
+            // If we got here, someone submitted a modal we don't recognize.
+            // This usually means a new modal was added but the route wasn't registered,
+            // or there's a typo in the customId. Either way, the user sees an error card.
             logger.error(
               {
                 evt: "ix_route_miss",
@@ -1599,6 +1632,9 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
           }
         }
       } catch (err) {
+        // The catch-all safety net. If any handler throws and doesn't catch its own error,
+        // we land here. The user gets an error card, Sentry gets notified, and the traceId
+        // lets us correlate everything in the logs. Not elegant, but effective.
         const error = err instanceof Error ? err : new Error(String(err));
         logger.error(
           {
@@ -1621,6 +1657,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
           traceId,
         });
         try {
+          // ensureDeferred prevents "interaction has already been acknowledged" errors
+          // when we try to send the error card after a partial failure.
           await ensureDeferred(interaction as never);
           const { postErrorCard } = await import("./lib/errorCard.js");
           await postErrorCard(interaction as never, {
@@ -1643,6 +1681,8 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
         }
       } finally {
         cancelWatchdog();
+        // Only log success metrics if we actually succeeded. Failed interactions
+        // already logged their errors above, and we don't want to pollute ix_ok stats.
         if (succeeded) {
           const duration = Date.now() - startedAt;
           logger.info({ evt: "ix_ok", kind, id: cmdId, ms: duration, traceId }, "interaction ok");

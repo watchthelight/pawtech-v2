@@ -28,7 +28,14 @@ import {
 
 // ===== classifyError Tests =====
 
+/*
+ * classifyError is the first thing that runs when something goes wrong.
+ * It takes whatever mess gets thrown at it (Error, string, null, random objects)
+ * and produces a normalized structure the rest of the error system can work with.
+ * If this function is wrong, everything downstream is wrong.
+ */
 describe("classifyError", () => {
+  // Defensive coding 101: people throw null and undefined, we've seen it in prod.
   describe("null/undefined handling", () => {
     it("classifies null as unknown", () => {
       const result = classifyError(null);
@@ -43,6 +50,11 @@ describe("classifyError", () => {
     });
   });
 
+  /*
+   * SQLite errors come from better-sqlite3 and have a distinctive shape.
+   * The tricky part is they use name="SqliteError" not a custom class,
+   * so instanceof checks don't work. We check name and code prefix instead.
+   */
   describe("SQLite error classification", () => {
     it("classifies SqliteError by name", () => {
       const err = createSqliteError("SQLITE_CONSTRAINT", "UNIQUE constraint failed");
@@ -301,7 +313,14 @@ describe("isRecoverable", () => {
 
 // ===== shouldReportToSentry Tests =====
 
+/*
+ * Sentry billing is based on event count. Flooding it with expected errors
+ * (interaction expired, network hiccups) makes the signal-to-noise ratio terrible
+ * and costs money. These tests verify we only report things worth investigating.
+ */
 describe("shouldReportToSentry", () => {
+  // Discord error codes we explicitly ignore. These are "expected" in the sense
+  // that they happen during normal operation and aren't bugs in our code.
   describe("Discord API errors", () => {
     it("filters out 10062 (Unknown interaction)", () => {
       const err = classifyError(createDiscordAPIError(10062, "Unknown interaction"));
@@ -334,6 +353,8 @@ describe("shouldReportToSentry", () => {
     });
   });
 
+  // Network errors are Discord's problem, not ours. ECONNRESET happens when
+  // their load balancer hiccups. Nothing we can do except retry.
   describe("Network errors", () => {
     it("does not report network errors", () => {
       const err = classifyError(createNetworkError("ECONNRESET"));
@@ -434,6 +455,9 @@ describe("errorContext", () => {
     expect(ctx.table).toBe("foo");
   });
 
+  // GOTCHA: Long SQL can blow up log aggregation. We truncate to 100 chars.
+  // If you need the full query for debugging, it's probably in better-sqlite3's
+  // own error message anyway.
   it("truncates long SQL in context", () => {
     const longSql = "SELECT " + "a".repeat(200) + " FROM table";
     const err = classifyError(createSqliteError("SQLITE_ERROR", "error", longSql));
@@ -486,6 +510,8 @@ describe("errorContext", () => {
 
 // ===== userFriendlyMessage Tests =====
 
+// These messages go into Discord embeds for users and mods. They should be
+// helpful without leaking internal details (no SQL, no stack traces).
 describe("userFriendlyMessage", () => {
   describe("database errors", () => {
     it("returns busy message for SQLITE_BUSY", () => {

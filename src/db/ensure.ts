@@ -15,7 +15,17 @@
 import { db } from "./db.js";
 import { logger } from "../lib/logger.js";
 
-// schema self-heal: run once on startup
+/*
+ * Schema self-heal: runs once on startup.
+ *
+ * WHY not use migrations? These are "ensure" functions - they check if something
+ * exists and add it if not. Migrations run once and mark themselves complete.
+ * Ensures are idempotent: you can run them a thousand times, same result.
+ *
+ * The tradeoff: migrations give you a clear history of schema changes, ensures
+ * give you "it just works" on any database state. We use both - migrations for
+ * intentional changes, ensures for "make sure this exists" patterns.
+ */
 export function ensureAvatarScanSchema() {
   try {
     // check if table exists
@@ -61,7 +71,11 @@ export function ensureAvatarScanSchema() {
     const cols = db.prepare(`PRAGMA table_info(avatar_scan)`).all() as Array<{ name: string }>;
     const colNames = cols.map((c) => c.name);
 
-    // if legacy app_id exists and application_id does not, rename
+    // GOTCHA: Legacy column rename. This was from an early refactor where we
+    // couldn't decide if the FK should be app_id or application_id. We settled
+    // on application_id, but old databases might still have app_id.
+    // RENAME COLUMN requires SQLite 3.25+ (2018). If you're on something older,
+    // you have bigger problems than this column rename.
     if (colNames.includes("app_id") && !colNames.includes("application_id")) {
       logger.info("[ensure] renaming app_id to application_id");
       // NOTE: Potential migration footgun — RENAME COLUMN requires SQLite 3.25+.
@@ -255,6 +269,11 @@ export function ensureApplicationStatusIndex() {
  * WHAT: Performs backup/drop/recreate migration to remove CHECK constraint and convert created_at to INTEGER.
  * WHY: Avoids ALTER TABLE RENAME which triggers legacy SQL guard; uses backup table pattern instead.
  * HOW: Backup existing data → drop old table → create final schema → restore data → drop backup.
+ *
+ * GOTCHA: This runs inside a transaction, so if anything goes wrong, the whole thing rolls back.
+ * That's great for data safety, but it means the migration is all-or-nothing. If it fails on step 4,
+ * steps 1-3 are also undone. Check the logs for the actual error - it's usually an FK violation
+ * during the INSERT because someone added data that violates a constraint we're now enforcing.
  */
 function runReviewActionMigration(db: any) {
   const migrate = db.transaction(() => {
@@ -460,6 +479,9 @@ export function ensureReviewActionFreeText() {
  * @returns true if column exists, false otherwise
  * @throws Error if table or column name is invalid
  */
+// WHY the regex validation? Paranoia, mostly. PRAGMA table_info() doesn't interpolate
+// values the same way as a normal query, but I've seen weirder SQLite edge cases.
+// The cost of checking is negligible; the cost of a SQL injection in schema code is... not.
 const SQL_IDENTIFIER_RE = /^[a-zA-Z_][a-zA-Z0-9_]*$/;
 
 function hasColumn(table: string, column: string): boolean {

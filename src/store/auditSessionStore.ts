@@ -20,11 +20,21 @@ import { logger } from "../lib/logger.js";
 // Prepared Statements (cached at module load for performance)
 // ============================================================================
 
+/*
+ * GOTCHA: Prepared statements are cached at import time. If you're seeing
+ * "database is locked" or statement handle errors after db reconnection,
+ * this is why. The app assumes one db handle for the lifetime of the process.
+ * Don't overthink it - just restart the bot.
+ */
+
 const createSessionStmt = db.prepare(
   `INSERT INTO audit_sessions (guild_id, audit_type, scope, started_by, total_to_scan, channel_id)
    VALUES (?, ?, ?, ?, ?, ?)`
 );
 
+// ORDER BY + LIMIT 1 means we only care about the most recent in-progress session.
+// If somehow two sessions got started (shouldn't happen, but Discord is chaos),
+// we'll grab the newest one and the old one will rot in the database forever.
 const getActiveSessionStmt = db.prepare(
   `SELECT * FROM audit_sessions
    WHERE guild_id = ? AND audit_type = ? AND status = 'in_progress'
@@ -32,6 +42,8 @@ const getActiveSessionStmt = db.prepare(
    LIMIT 1`
 );
 
+// INSERT OR IGNORE: If we try to mark the same user twice (e.g., resumed audit
+// hitting overlap), just silently do nothing. Better than crashing mid-scan.
 const markUserScannedStmt = db.prepare(
   `INSERT OR IGNORE INTO audit_scanned_users (session_id, user_id) VALUES (?, ?)`
 );
@@ -46,6 +58,8 @@ const updateProgressStmt = db.prepare(
    WHERE id = ?`
 );
 
+// Both complete and cancel set completed_at. Yes, "completed_at" for a cancelled
+// session is weird naming. Think of it as "ended_at" but we were too lazy to rename.
 const completeSessionStmt = db.prepare(
   `UPDATE audit_sessions
    SET status = 'completed', completed_at = datetime('now')
@@ -58,6 +72,11 @@ const cancelSessionStmt = db.prepare(
    WHERE id = ?`
 );
 
+/*
+ * These fields mirror the audit_sessions table schema exactly.
+ * If you change the table, change this. If you change this, change the table.
+ * SQLite doesn't enforce types anyway, but at least TypeScript can yell at you.
+ */
 export interface AuditSession {
   id: number;
   guild_id: string;
@@ -65,17 +84,20 @@ export interface AuditSession {
   scope: string | null;
   status: "in_progress" | "completed" | "cancelled";
   started_by: string;
-  started_at: string;
+  started_at: string; // ISO 8601 from SQLite's datetime()
   completed_at: string | null;
   total_to_scan: number;
   scanned_count: number;
   flagged_count: number;
-  api_calls: number;
-  channel_id: string;
+  api_calls: number; // Tracks Google Vision API calls - useful for billing awareness since Vision ain't free
+  channel_id: string; // Where to send progress updates; needed for resume when the original interaction is long dead
 }
 
 /**
- * Create a new audit session
+ * Create a new audit session.
+ *
+ * WHY return the session ID: Callers need it to mark users as scanned and
+ * update progress. Returning it saves a round-trip query.
  */
 export function createSession(params: {
   guildId: string;
@@ -83,12 +105,14 @@ export function createSession(params: {
   scope: string | null;
   startedBy: string;
   totalToScan: number;
-  channelId: string;
+  channelId: string; // Where to send progress updates and final results
 }): number {
   const { guildId, auditType, scope, startedBy, totalToScan, channelId } = params;
 
   try {
     const result = createSessionStmt.run(guildId, auditType, scope, startedBy, totalToScan, channelId);
+    // GOTCHA: lastInsertRowid is typed as number | bigint, but our IDs never exceed
+    // Number.MAX_SAFE_INTEGER (we'd need 9 quadrillion audits). Safe to cast.
     const sessionId = result.lastInsertRowid as number;
 
     logger.info(
@@ -104,7 +128,11 @@ export function createSession(params: {
 }
 
 /**
- * Get active (in_progress) session for a guild and audit type
+ * Get active (in_progress) session for a guild and audit type.
+ *
+ * Returns null on error instead of throwing. The caller typically uses this
+ * to check "should I resume?" and null means "no, start fresh" which is
+ * a safe fallback even if the real answer was "database exploded."
  */
 export function getActiveSession(
   guildId: string,
@@ -120,7 +148,10 @@ export function getActiveSession(
 }
 
 /**
- * Mark a user as scanned in the current session
+ * Mark a user as scanned in the current session.
+ *
+ * Swallows errors intentionally. If we can't record that someone was scanned,
+ * the worst case is they get scanned again on resume. Not great, not fatal.
  */
 export function markUserScanned(sessionId: number, userId: string): void {
   try {
@@ -131,20 +162,29 @@ export function markUserScanned(sessionId: number, userId: string): void {
 }
 
 /**
- * Get all scanned user IDs for a session (for efficient resume)
+ * Get all scanned user IDs for a session (for efficient resume).
+ *
+ * Returns a Set for O(1) lookup when filtering out already-scanned users.
+ * For a 10k member server, array.includes() would be noticeably slower.
  */
 export function getScannedUserIds(sessionId: number): Set<string> {
   try {
     const rows = getScannedUserIdsStmt.all(sessionId) as Array<{ user_id: string }>;
     return new Set(rows.map((r) => r.user_id));
   } catch (err) {
+    // Return empty set on error - resume will just re-scan some users.
+    // Not ideal but better than failing the entire audit.
     logger.error({ err, sessionId }, "[auditSessionStore] Failed to get scanned user IDs");
     return new Set();
   }
 }
 
 /**
- * Update progress counters for a session
+ * Update progress counters for a session.
+ *
+ * PERF: This gets called after every batch, not every user. Batching reduces
+ * write amplification and keeps SQLite happy. Caller is responsible for
+ * deciding batch frequency (currently every 10 users or so).
  */
 export function updateProgress(
   sessionId: number,
@@ -160,7 +200,11 @@ export function updateProgress(
 }
 
 /**
- * Mark session as completed
+ * Mark session as completed.
+ *
+ * NOTE: We don't delete audit_scanned_users rows here. They're orphaned but
+ * harmless, and deleting during completion could slow down large audits.
+ * If the table grows huge, add a periodic cleanup job later.
  */
 export function completeSession(sessionId: number): void {
   try {

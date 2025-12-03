@@ -20,6 +20,13 @@ import { type CommandContext } from "../lib/cmdWrap.js";
 import { requireStaff } from "../lib/config.js";
 import { detectAIForImages, buildAIDetectionEmbed } from "../features/aiDetection/index.js";
 
+/*
+ * No subcommands here - just a single message option. The command is designed
+ * for quick spot-checks during review, not batch processing.
+ *
+ * GOTCHA: API rate limits apply. Running this on every submission would burn
+ * through quotas fast. Reserved for suspicious cases only.
+ */
 export const data = new SlashCommandBuilder()
   .setName("isitreal")
   .setDescription("Detect AI-generated images in a message")
@@ -49,6 +56,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   await interaction.deferReply({ ephemeral: true });
 
   // Parse message ID/link from option
+  // Accepts either raw snowflake ID or full Discord message URL
+  // (the latter is what you get when you right-click -> Copy Message Link)
   const messageInput = interaction.options.getString("message", true);
   const messageId = parseMessageId(messageInput);
 
@@ -80,6 +89,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
+  // 10 image limit prevents accidental API bill explosions. Each image hits
+  // 4 external services. 10 images = 40 API calls. Someone pastes a 50-image
+  // gallery and suddenly we're broke. Ask me how I know.
   if (imageUrls.length > 10) {
     await interaction.editReply({
       content: "Too many images (max 10). Please select a message with fewer images.",
@@ -102,6 +114,10 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
 /**
  * Parse a message ID from direct ID or Discord message link.
+ *
+ * WHY two formats: Users copy-paste message links from Discord's context menu,
+ * but power users might just type the ID directly. Supporting both costs us
+ * one regex and saves support tickets.
  */
 function parseMessageId(input: string): string | null {
   // Handle direct ID (17-20 digit snowflake)
@@ -121,6 +137,12 @@ function parseMessageId(input: string): string | null {
 
 /**
  * Extract image URLs from a message's attachments and embeds.
+ *
+ * Two sources because Discord handles images differently:
+ * - Attachments: Direct uploads via the paperclip button
+ * - Embeds: URLs pasted in chat that Discord auto-previews
+ *
+ * We grab both because AI art shows up either way.
  */
 function extractImages(message: Message): Array<{ url: string; name: string }> {
   const images: Array<{ url: string; name: string }> = [];

@@ -136,6 +136,7 @@ export function checkDatabaseHealth(): HealthCheckResult {
 
     // Step 4: Sanity check file size. A production DB with real data should be
     // at least 100KB. Smaller usually means empty/test DB or pointing at wrong file.
+    // This check has caught "oops deployed with empty database" twice now.
     try {
       // better-sqlite3 exposes the file path as .name (undocumented but stable)
       const dbPath = (db as any).name;
@@ -201,6 +202,9 @@ export function requireHealthyDatabase(): void {
     "[healthcheck] ✗ DATABASE HEALTH CHECK FAILED - BOT CANNOT START"
   );
 
+  // Yes, we use console.error here instead of logger. The ASCII art box is
+  // intentionally loud - this is a "wake up the on-call" situation. Structured
+  // logs are great until your database is toast and you need someone to notice.
   console.error("\n╔═══════════════════════════════════════════════════════════════╗");
   console.error("║  FATAL: DATABASE HEALTH CHECK FAILED                          ║");
   console.error("║  The database is corrupted or has critical issues.            ║");

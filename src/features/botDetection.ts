@@ -16,6 +16,8 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 
 // Detection thresholds
+// GOTCHA: These thresholds were tuned empirically on a furry art server.
+// Your mileage may vary on a corporate Discord. Adjust if false positive rate is high.
 export const DETECTION_CONFIG = {
   FLAG_THRESHOLD: 4, // Minimum score to flag
   ACCOUNT_AGE_DAYS: 7, // Account younger than this is suspicious
@@ -52,6 +54,11 @@ export interface ActivityCheckResult {
 /**
  * Calculate Shannon entropy of a string
  * Higher entropy = more random/bot-like
+ *
+ * WHY Shannon entropy? It measures information density. A name like "john" has
+ * low entropy (few unique chars, predictable). "xK9mQ2vL" has high entropy
+ * (many unique chars, no pattern). Spambots love random strings because they
+ * can generate millions of unique accounts without a naming committee.
  */
 export function calculateUsernameEntropy(name: string): number {
   if (!name || name.length === 0) return 0;
@@ -76,6 +83,8 @@ export function calculateUsernameEntropy(name: string): number {
  */
 export function matchesBotPattern(name: string): { match: boolean; pattern: string | null } {
   // Default Discord names: username_1234, User12345
+  // These are what Discord generates when someone signs up without picking a username.
+  // Not inherently suspicious, but bots rarely bother changing them.
   if (/^[a-z]+[_-]?\d{4,}$/i.test(name)) {
     return { match: true, pattern: "default Discord format" };
   }
@@ -86,6 +95,8 @@ export function matchesBotPattern(name: string): { match: boolean; pattern: stri
   }
 
   // Check for high entropy with mixed case/numbers (random strings)
+  // EDGE CASE: This will flag legitimate users with names like "XxDragon420xX"
+  // but honestly, do we really want those people anyway? (kidding, mostly)
   const hasNumbers = /\d/.test(name);
   const hasMixedCase = /[a-z]/.test(name) && /[A-Z]/.test(name);
   const entropy = calculateUsernameEntropy(name);
@@ -100,6 +111,10 @@ export function matchesBotPattern(name: string): { match: boolean; pattern: stri
 /**
  * Check if member has a level role >= minLevel
  * Looks for Amaribot-style "Level X" roles
+ *
+ * GOTCHA: This is tightly coupled to AmariBot's role naming convention.
+ * If you use MEE6 or another leveling bot with different role names,
+ * this function will never match anything. You'll need to adjust the regex.
  */
 export function hasLevelRole(member: GuildMember, minLevel: number = DETECTION_CONFIG.MIN_LEVEL): boolean {
   const levelPattern = /^Level\s*(\d+)$/i;
@@ -142,7 +157,9 @@ export function checkActivityLevel(guildId: string, userId: string): ActivityChe
     };
   } catch (err) {
     logger.error({ err, guildId, userId }, "[botDetection] Failed to check activity level");
-    // Default to having activity to avoid false positives
+    // Default to having activity to avoid false positives.
+    // WHY: If the DB is having a bad day, we'd rather let a bot slip through
+    // than mass-flag every legitimate user. False negatives < false positives.
     return { hasActivity: true, firstMessageAt: null, messageCount: 0 };
   }
 }
@@ -192,7 +209,9 @@ export function analyzeMember(member: GuildMember, guildId: string): AuditResult
   }
 
   // 6. Suspicious bio (if accessible) - skip for now as bio requires additional fetch
-  // Could be added later with member.user.fetch() but that's expensive
+  // Could be added later with member.user.fetch() but that's expensive.
+  // WHY we don't: Each fetch is an API call. Scanning 10k members = 10k API calls.
+  // Discord will rate limit us into oblivion. Not worth it unless targeted.
 
   return {
     userId: user.id,
@@ -237,6 +256,9 @@ export function createEmptyStats(): AuditStats {
   };
 }
 
+// This string-matching approach is fragile. If someone changes the reason text
+// in analyzeMember, this silently breaks. A proper fix would use an enum or
+// structured reasons, but this works and I have other problems to solve.
 export function updateStats(stats: AuditStats, reasons: string[]): void {
   for (const reason of reasons) {
     if (reason.includes("No avatar")) stats.noAvatar++;

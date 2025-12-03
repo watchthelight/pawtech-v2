@@ -24,10 +24,13 @@ import {
 } from "./index.js";
 import { createJob } from "../artJobs/index.js";
 
-/**
+/*
  * Parse redeemreward button customId
  * Format: redeemreward:{confirmId}:confirm:{recipientId}:{artType}:{artistId}:{isOverride}
  * Or: redeemreward:{confirmId}:cancel
+ *
+ * GOTCHA: This format is packed tight because Discord customIds have a 100-char limit.
+ * Don't add more fields without checking you haven't blown past it.
  */
 function parseCustomId(customId: string) {
   const parts = customId.split(":");
@@ -63,6 +66,8 @@ export async function handleRedeemRewardButton(interaction: ButtonInteraction): 
   const parsed = parseCustomId(interaction.customId);
 
   if (!parsed) {
+    // Someone is either tampering with requests or we deployed a breaking change.
+    // Either way, the user gets a cryptic error. Such is life.
     logger.warn({ customId: interaction.customId }, "[redeemreward] Invalid button customId");
     await interaction.reply({ content: "Invalid button.", ephemeral: false });
     return;
@@ -109,6 +114,8 @@ async function handleConfirm(
     return;
   }
 
+  // deferUpdate buys us 15 minutes instead of 3 seconds. We need it because
+  // Discord API calls for role removal and message sends add up.
   await interaction.deferUpdate();
 
   const results: string[] = [];
@@ -136,7 +143,12 @@ async function handleConfirm(
     results.push(`*No ticket role defined for ${data.artType}*`);
   }
 
-  // Step 2: Send $add command to add artist to ticket (Ticket Tool bot)
+  /*
+   * Step 2: Send $add command to add artist to ticket (Ticket Tool bot)
+   *
+   * WHY a raw message instead of an API call? Ticket Tool is a third-party bot.
+   * We're puppeting commands like it's 2019. It works. Don't touch it.
+   */
   const channel = interaction.channel as TextChannel | null;
   if (channel && "send" in channel) {
     try {
@@ -152,7 +164,13 @@ async function handleConfirm(
     success = false;
   }
 
-  // Step 3: Update queue (if not override, move artist to end)
+  /*
+   * Step 3: Update queue (if not override, move artist to end)
+   *
+   * WHY is override different? Sometimes staff manually picks an artist
+   * out of turn. We still want to log it, but we shouldn't penalize
+   * the artist's queue position for being popular.
+   */
   const artistInfo = getArtist(guild.id, data.artistId);
   const oldPosition = artistInfo?.position ?? null;
 
@@ -167,7 +185,8 @@ async function handleConfirm(
       success = false;
     }
   } else if (data.isOverride) {
-    // Still increment assignments for override artist
+    // Still count toward their total even if we didn't rotate them.
+    // Stats are stats, even when the rules are bent.
     incrementAssignments(guild.id, data.artistId);
     results.push(`*Override - queue position unchanged*`);
   }
@@ -185,7 +204,7 @@ async function handleConfirm(
   });
   results.push(`Assignment logged`);
 
-  // Step 5: Create art job for tracking
+  // Step 5: Create art job for tracking (separate from queue - this is for WIP tracking)
   const job = createJob({
     guildId: guild.id,
     artistId: data.artistId,
@@ -228,9 +247,8 @@ async function handleConfirm(
   );
 }
 
-/**
- * Check if a customId belongs to redeemreward
- */
+// Quick prefix check to route button interactions. Used in the event handler
+// to avoid parsing every single button click on the server.
 export function isRedeemRewardButton(customId: string): boolean {
   return customId.startsWith("redeemreward:");
 }

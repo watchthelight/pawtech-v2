@@ -18,8 +18,13 @@ import { logger } from "../lib/logger.js";
 import { shortCode } from "../lib/ids.js";
 import { recordSchedulerRun } from "../lib/schedulerHealth.js";
 
+// WHY 30 minutes? Frequent enough to catch stale apps quickly, infrequent enough
+// to not hammer the database. At 30 min intervals, the worst-case detection delay
+// is 30 min past the 24hr mark - acceptable for a "hey, this is old" alert.
 const STALE_CHECK_INTERVAL_MS = 30 * 60 * 1000; // 30 minutes
 const STALE_THRESHOLD_HOURS = 24;
+// GOTCHA: 10 is also the field limit for Discord embeds looking sane.
+// More than 10 and you're basically scrolling through a spreadsheet.
 const MAX_APPS_PER_ALERT = 10;
 
 let _activeInterval: NodeJS.Timeout | null = null;
@@ -46,11 +51,18 @@ type StaleApplication = {
 function getStaleApplications(): StaleApplication[] {
   const cutoffSeconds = Math.floor(Date.now() / 1000) - (STALE_THRESHOLD_HOURS * 60 * 60);
 
-  // Query for applications that:
-  // 1. Status is 'submitted' (pending)
-  // 2. Not currently claimed (no row in review_claim)
-  // 3. Submitted more than 24 hours ago
-  // 4. No alert has been sent yet (stale_alert_sent = 0)
+  /*
+   * Query for applications that:
+   * 1. Status is 'submitted' (pending)
+   * 2. Not currently claimed (no row in review_claim)
+   * 3. Submitted more than 24 hours ago
+   * 4. No alert has been sent yet (stale_alert_sent = 0)
+   *
+   * PERFORMANCE: The LEFT JOINs here are necessary to check "not claimed" and
+   * "has review card". On a busy server with thousands of applications, this
+   * could be slow - but we only run it every 30 min and it's filtered to
+   * status='submitted' which is usually a small subset. Monitor if this becomes an issue.
+   */
   const stmt = db.prepare(`
     SELECT
       a.id,
@@ -184,7 +196,10 @@ async function sendAlertForGuild(
       { guildId, appCount: staleApps.length },
       "[stale-alert] No review_channel_id configured, skipping alert"
     );
-    // Still mark as alerted to prevent repeated warnings
+    // GOTCHA: We still mark as alerted even when we can't send the alert.
+    // Otherwise, every 30 minutes we'd log "No review_channel_id" for the same
+    // apps forever. Once the channel is configured, new stale apps will alert.
+    // Old ones are a lost cause - the mods need to manually find them.
     for (const app of staleApps) {
       markAlertSent(app.id);
     }
@@ -207,6 +222,11 @@ async function sendAlertForGuild(
 
     const message = buildAlertMessage(gatekeeperRoleId, staleApps);
 
+    // SECURITY: allowedMentions is critical here. The message contains
+    // <@user_id> mentions for applicants, but we DON'T want to actually ping them.
+    // We only want to ping the gatekeeper role. Without this restriction,
+    // we'd be notifying users "hey, your application is still pending" which
+    // could be confusing or anxiety-inducing.
     await (channel as TextChannel).send({
       content: message,
       allowedMentions: {

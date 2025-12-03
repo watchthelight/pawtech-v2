@@ -17,13 +17,18 @@ export type ServiceResult = {
   error?: string;
 };
 
-/** Aggregated detection result for a single image */
+/**
+ * Aggregated detection result for a single image.
+ * Contains results from all 4 services, even if some failed.
+ */
 export type AIDetectionResult = {
   imageUrl: string;
   imageName: string;
   services: ServiceResult[];
-  /** Average of successful service scores, null if all failed */
+  // null here means every single service failed or is misconfigured.
+  // At that point, something is deeply wrong with the setup.
   averageScore: number | null;
   successCount: number;
+  // Failures happen. A lot. APIs have bad days. Plan accordingly.
   failureCount: number;
 };

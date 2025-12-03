@@ -118,6 +118,10 @@ export async function scanAvatar(
   // Use high-res avatar for Google Vision
   // Force size=1024 even if a different size was in the URL. Vision API accuracy
   // improves with larger images, and 1024 is a good balance of quality vs. bandwidth.
+  //
+  // GOTCHA: This regex is fragile. If Discord changes their CDN query params format,
+  // this will silently stop working. We've been burned before. Check the Discord docs
+  // if avatars suddenly look low-res in the review UI.
   const highResUrl = avatarUrl.replace(/\?size=\d+/, "?size=1024");
   baseResult.avatarUrl = highResUrl;
 
@@ -206,6 +210,9 @@ export async function scanAvatar(
 
 type StoredEvidence = RiskSummary["evidence"];
 
+// Evidence is stored as JSON strings in SQLite because SQLite doesn't have real arrays.
+// If you're tempted to normalize this into a separate table: don't.
+// The query overhead isn't worth it for data we always fetch together.
 function deserializeEvidence(
   hard: string | null,
   soft: string | null,
@@ -289,6 +296,9 @@ export function googleReverseImageUrl(imageUrl: string): string {
    *  - imageUrl: A publicly accessible image URL
    * RETURNS: A Google Lens uploadbyurl link
    * THROWS: Never throws
+   *
+   * Note: Google Lens is better than the old images.google.com/searchbyimage
+   * for furry art. It actually finds similar art styles, not just exact matches.
    */
   const encoded = encodeURIComponent(imageUrl);
   return `https://lens.google.com/uploadbyurl?url=${encoded}`;

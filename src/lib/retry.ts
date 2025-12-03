@@ -69,14 +69,21 @@ export async function withRetry<T>(
     label = "operation",
   } = options;
 
-  // Validate maxAttempts to prevent undefined behavior
+  // Validate maxAttempts to prevent undefined behavior.
+  // Someone will eventually pass 0 or -1. When they do, fail loudly instead of
+  // silently returning undefined or looping forever.
   if (maxAttempts < 1) {
     throw new Error(`withRetry: maxAttempts must be >= 1, got ${maxAttempts}`);
   }
 
+  // lastError is typed as unknown because we genuinely don't know what fn() throws.
+  // Could be an Error, could be a string, could be a number someone threw as a joke.
   let lastError: unknown;
   let delayMs = initialDelayMs;
 
+  // The classic retry loop. Attempt 1 is immediate, subsequent attempts have delay.
+  // If you're here debugging a production issue at 2am, the log lines include
+  // attempt number and delay - check your log aggregator for "retry_attempt".
   for (let attempt = 1; attempt <= maxAttempts; attempt++) {
     try {
       return await fn();
@@ -84,7 +91,11 @@ export async function withRetry<T>(
       lastError = err;
       const classified = classifyError(err);
 
-      // Check if we should retry
+      /*
+       * Decision time: should we retry?
+       * Order matters here - check maxAttempts first so we don't call shouldRetry
+       * unnecessarily on the final attempt. Micro-optimization? Sure. But also clearer.
+       */
       if (attempt === maxAttempts || !shouldRetry(classified, attempt)) {
         logger.warn(
           {
@@ -100,7 +111,10 @@ export async function withRetry<T>(
         throw err;
       }
 
-      // Add jitter to prevent thundering herd (0.5x to 1.5x of base delay)
+      // Add jitter to prevent thundering herd (0.5x to 1.5x of base delay).
+      // Without jitter, if 100 requests all fail at once, they'd all retry
+      // at exactly the same time, hammering the already-struggling service.
+      // Randomizing spreads them out. This is standard practice but often forgotten.
       const jitteredDelayMs = Math.floor(delayMs * (0.5 + Math.random()));
 
       // Log retry attempt
@@ -131,7 +145,9 @@ export async function withRetry<T>(
 }
 
 /**
- * Simple sleep helper
+ * Simple sleep helper.
+ * Not exported because it's trivial enough that every project has its own version.
+ * If you need sleep() elsewhere, just copy this or use timers/promises.
  */
 function sleep(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));

@@ -17,6 +17,13 @@ import type { Database } from "better-sqlite3";
 import { logger } from "../src/lib/logger.js";
 import { tableExists, recordMigration, enableForeignKeys } from "./lib/helpers.js";
 
+/*
+ * CONTEXT: Auditing member avatars for NSFW content can take a while on large guilds.
+ * We've had cases where the bot crashed mid-audit (OOM, cloud hiccups, someone tripped
+ * over a cable in the datacenter). This migration adds persistence so we can resume
+ * instead of starting over and burning Google Vision API credits twice.
+ */
+
 /**
  * Migration: Create audit session tracking tables
  *
@@ -33,6 +40,14 @@ export function migrate033AuditSessions(db: Database): void {
   if (!tableExists(db, "audit_sessions")) {
     logger.info("[migration 033] Creating audit_sessions table");
 
+    /*
+     * api_calls tracks Vision API usage for cost monitoring. It's not strictly
+     * necessary for resumption logic, but when the monthly bill arrives, you'll
+     * want to know why it's $400 instead of $40.
+     *
+     * channel_id is where progress updates go. Required because the person who
+     * started the audit will definitely close Discord and then ask "is it done yet?"
+     */
     db.exec(`
       CREATE TABLE audit_sessions (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -60,6 +75,14 @@ export function migrate033AuditSessions(db: Database): void {
   }
 
   // Create audit_scanned_users table
+  /*
+   * DESIGN CHOICE: We only store user_id, not the scan result. The result lives
+   * in nsfw_flags table. This table's only job is answering "did we already scan
+   * this person in this session?" to avoid duplicate API calls on resume.
+   *
+   * ON DELETE CASCADE means when we purge old audit sessions, the scanned user
+   * records go with them. Less orphaned data to haunt us.
+   */
   if (!tableExists(db, "audit_scanned_users")) {
     logger.info("[migration 033] Creating audit_scanned_users table");
 
@@ -73,7 +96,8 @@ export function migrate033AuditSessions(db: Database): void {
       )
     `);
 
-    // Index for fast lookup
+    // Index for fast lookup. Technically redundant with the PK, but SQLite doesn't
+    // always use composite PK indexes efficiently for single-column lookups.
     db.exec(`CREATE INDEX idx_audit_scanned_session ON audit_scanned_users(session_id)`);
 
     logger.info("[migration 033] audit_scanned_users table created");

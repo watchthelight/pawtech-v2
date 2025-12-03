@@ -39,14 +39,18 @@ export async function detectIlluminarty(imageUrl: string): Promise<number | null
       throw new Error(`HTTP ${response.status}`);
     }
 
+    /*
+     * Illuminarty can't decide what to call the score field. We've seen
+     * ai_probability, probability, and score in the wild. Check all three
+     * and pray one of them exists.
+     */
     const data = (await response.json()) as {
       ai_probability?: number;
       probability?: number;
       score?: number;
     };
 
-    // Illuminarty response structure:
-    // { ai_probability: 0.95, ... } or { probability: 0.95, ... }
+    // Nullish coalesce through all the possible field names
     const score = data?.ai_probability ?? data?.probability ?? data?.score;
 
     if (typeof score !== "number") {

@@ -53,7 +53,8 @@ export function hintFor(err: unknown): string {
     typeof error?.code === "number" || typeof error?.code === "string" ? error.code : undefined;
 
   // Historical note: __old tables were a migration artifact that caused grief.
-  // If you see this error, someone probably restored from a bad backup.
+  // If you see this error, someone probably restored from a bad backup, or
+  // forgot to run migrations after pulling. Check npm run migrate.
   if (name === "SqliteError" && /no such table/i.test(message)) {
     return "Schema mismatch; avoid legacy __old; use truncate-only reset.";
   }
@@ -172,7 +173,7 @@ type ErrorCardDetails = {
   lastSql?: string | null;
 };
 
-// please work. please work.
+// If this function fails, the user gets nothing. No pressure.
 /**
  * postErrorCard
  * WHAT: Sends an ephemeral embed with error details and a human hint.
@@ -221,8 +222,9 @@ export async function postErrorCard(
     .setFooter({ text: new Date().toISOString() });
 
   try {
-    // Ephemeral so only the actor sees it; avoids channel spam and doesn't
-    // expose internal details (trace IDs, SQL) to other users.
+    // flags: 0 means public (not ephemeral). We want error cards visible so staff
+    // can see them if the user asks for help. Trace IDs are safe to expose -
+    // they're just correlation IDs, not secrets.
     await replyOrEdit(interaction, { embeds: [embed], flags: 0 });
   } catch (err) {
     const code = (err as { code?: unknown })?.code;

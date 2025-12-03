@@ -9,6 +9,7 @@ import { logger } from "../../lib/logger.js";
 import { env } from "../../lib/env.js";
 
 const ENABLED = !!env.HIVE_API_KEY;
+// 15 seconds is generous, but Hive sometimes takes a nap mid-request.
 const TIMEOUT_MS = 15000;
 
 /**
@@ -40,6 +41,10 @@ export async function detectHive(imageUrl: string): Promise<number | null> {
       throw new Error(`HTTP ${response.status}`);
     }
 
+    /*
+     * Hive's response nesting is... something. Buckle up.
+     * status[0].response.output[N].classes[] is where the goods live.
+     */
     const data = (await response.json()) as {
       status?: Array<{
         response?: {
@@ -58,7 +63,8 @@ export async function detectHive(imageUrl: string): Promise<number | null> {
       return null;
     }
 
-    // Find the ai_generated class score
+    // Hunt through the nested arrays for the "ai_generated" class.
+    // Returns on first match, which is fine since there's only ever one.
     for (const item of output) {
       if (!item.classes || !Array.isArray(item.classes)) continue;
       for (const cls of item.classes) {

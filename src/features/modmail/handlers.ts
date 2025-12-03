@@ -14,6 +14,8 @@ import {
   type MessageContextMenuCommandInteraction,
 } from "discord.js";
 import { logger } from "../../lib/logger.js";
+// WHY: Discord's default mention behavior will happily ping @everyone if you let it.
+// SAFE_ALLOWED_MENTIONS is our "trust no one" policy for user-controlled content.
 import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
 
 // ===== Button Handlers =====
@@ -32,6 +34,12 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
   if (!match) return;
 
   const [, payload] = match;
+  /*
+   * WHY this weird payload format: Discord button customIds have a 100 char limit.
+   * We're cramming app code + message ID into a structured string that survives
+   * bot restarts (no in-memory state). Yes, we could use a DB lookup key instead,
+   * but this way the button is self-contained and works even if the DB is on fire.
+   */
   // Payload format: "code{HEX6}:msg{messageId}"
   const codeMatch = /code([A-F0-9]{6})/.exec(payload);
   const msgMatch = /msg([0-9]+)/.exec(payload);
@@ -42,7 +50,9 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
   // Extract userId from review card or button context
   // For now, we need to look up the application by code
   if (!appCode || !interaction.guildId) {
-    // Ensure the clicker gets immediate feedback (ephemeral)
+    // GOTCHA: Discord gets angry if you don't respond to interactions within 3 seconds.
+    // The .catch(() => undefined) pattern swallows errors because at this point,
+    // we're already in an error state and there's nothing useful to do if this also fails.
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferUpdate().catch(() => undefined);
     }
@@ -57,6 +67,8 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
   }
 
   // Find application by short code
+  // WHY dynamic import: Avoids circular dependency hell. Yes, it's slightly slower.
+  // No, I don't want to refactor the entire import graph right now.
   const { findAppByShortCode } = await import("../appLookup.js");
   const app = findAppByShortCode(interaction.guildId, appCode) as
     | { id: string; user_id: string }
@@ -93,6 +105,8 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
   // Always provide visible feedback:
   if (result.success) {
     // Public confirmation in the review channel if available
+    // GOTCHA: "send" in interaction.channel is a type guard. Some channel types
+    // (like DMs or voice channels) don't have send(). TypeScript won't save you here.
     if (interaction.channel && "send" in interaction.channel) {
       try {
         await interaction.channel.send({
@@ -105,6 +119,8 @@ export async function handleModmailOpenButton(interaction: ButtonInteraction) {
     }
   } else {
     // Ephemeral explanation to the clicking moderator
+    // Only the mod who clicked sees this failure. Other staff won't know the button
+    // was clicked and failed, which is... probably fine? They can just click it again.
     const msg = result.message || "Failed to create modmail thread. Check bot permissions.";
     await interaction
       .followUp({
@@ -133,6 +149,8 @@ export async function handleModmailCloseButton(interaction: ButtonInteraction) {
   // https://discord.js.org/#/docs/discord.js/main/class/Interaction?scrollTo=deferUpdate
   await interaction.deferUpdate();
 
+  // EDGE CASE: If someone manually edits the button payload to a non-numeric ticketId,
+  // parseInt returns NaN and the query just returns nothing. Not a security hole, just weird.
   const ticketId = parseInt(match[1], 10);
 
   // Import from threads module
@@ -167,9 +185,14 @@ export async function handleModmailCloseButton(interaction: ButtonInteraction) {
 export async function handleModmailContextMenu(
   interaction: MessageContextMenuCommandInteraction
 ) {
+  // Context menus don't support deferUpdate, so we use deferReply.
+  // This WILL show the "Bot is thinking..." message for a moment.
   await interaction.deferReply();
 
   const targetMessage = interaction.targetMessage;
+  // WHY author.id and not looking up by app code first: Staff might right-click
+  // on a random message from a user, not just review cards. We want modmail
+  // to work for general user support, not just application-related issues.
   const userId = targetMessage.author.id;
 
   // Try to find app code from the message content or embeds
@@ -180,6 +203,12 @@ export async function handleModmailContextMenu(
   const content = targetMessage.content;
   const embeds = targetMessage.embeds;
 
+  /*
+   * This regex-based app code extraction is brittle but works. If someone changes
+   * the review card format to say "Application ID:" instead of "App Code:", this
+   * breaks silently and modmail just won't link to the app. Not catastrophic,
+   * just mildly annoying to debug three months from now.
+   */
   // Look for app code in content (e.g., "App Code: ABC123")
   const contentMatch = /App Code:\s*([A-F0-9]{6})/i.exec(content);
   if (contentMatch) {
@@ -205,5 +234,7 @@ export async function handleModmailContextMenu(
     reviewMessageId: targetMessage.id,
   });
 
+  // No fancy success/failure branching here like the button handler.
+  // Context menu always gets a visible reply, so we just dump the result.
   await interaction.editReply({ content: result.message ?? "Unknown error." });
 }

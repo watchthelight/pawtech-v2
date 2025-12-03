@@ -32,6 +32,11 @@ import {
   type ApplicationRow,
 } from "./shared.js";
 
+/*
+ * Three ways to identify an application: short code, user mention, or raw user ID.
+ * None are required, but exactly one must be provided. We validate this in execute().
+ * The "uid" option exists for ghost members who left before you could process them.
+ */
 export const acceptData = new SlashCommandBuilder()
   .setName("accept")
   .setDescription("Approve an application by short code, user mention, or user ID")
@@ -68,7 +73,8 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
   const userOption = interaction.options.getUser("user", false);
   const uidRaw = interaction.options.getString("uid", false);
 
-  // Count how many options were provided
+  // GOTCHA: Discord doesn't support mutually exclusive options natively.
+  // We get to enforce "exactly one" ourselves. Welcome to slash command hell.
   const providedCount = [codeRaw, userOption, uidRaw].filter(Boolean).length;
   if (providedCount === 0) {
     await replyOrEdit(interaction, {
@@ -103,7 +109,8 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
     }
   } else if (uidRaw) {
     const uid = uidRaw.trim();
-    // Validate UID format
+    // Validate UID format. Snowflakes are actually 17-20 digits these days, but we're
+    // generous with the lower bound because who knows what cursed old accounts lurk.
     if (!/^[0-9]{5,20}$/.test(uid)) {
       await replyOrEdit(interaction, { content: "Invalid user ID. Must be 5-20 digits." });
       return;
@@ -117,11 +124,15 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
     }
   }
 
-  // At this point app is guaranteed to be non-null due to early return above
+  // At this point app is guaranteed to be non-null due to early return above.
+  // The non-null assertion is ugly but TypeScript can't follow the control flow
+  // through three separate if/else branches with early returns. I've tried.
   const resolvedApp = app!;
 
   ctx.step("claim_check");
-  // deny politely; chaos later is worse
+  // WHY: Claims prevent two mods from approving/rejecting simultaneously.
+  // Without this, you get fun race conditions where someone gets approved
+  // then rejected, or vice versa. Deny politely; chaos later is worse.
   const claim = getClaim(resolvedApp.id);
   const claimError = claimGuard(claim, interaction.user.id);
   if (claimError) {
@@ -130,6 +141,9 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
   }
 
   ctx.step("approve_tx");
+  // This is a database transaction. If it succeeds, the app is marked approved
+  // regardless of what happens next. We can fail to assign roles, fail to DM,
+  // fail to post welcome - the approval still stands. Design choice, not a bug.
   const result = approveTx(resolvedApp.id, interaction.user.id);
   if (result.kind === "already") {
     await replyOrEdit(interaction, { content: "Already approved." });
@@ -168,6 +182,8 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
 
   ctx.step("close_modmail");
   const code = shortCode(resolvedApp.id);
+  // If there's an open modmail thread, close it. Not fatal if this fails -
+  // worst case the mod has to close it manually. Swallow the error and move on.
   try {
     await closeModmailForApplication(interaction.guildId, resolvedApp.user_id, code, {
       reason: "approved",
@@ -193,6 +209,10 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
 
   let welcomeNote: string | null = null;
   let roleNote: string | null = null;
+  // This condition is gnarly: post welcome only if we have config, have a member,
+  // AND (either no role is configured, OR the role was successfully applied).
+  // We skip welcome if role assignment failed because showing up in general
+  // without the verified role looks weird and confuses everyone.
   if (cfg && approvedMember && (cfg.accepted_role_id ? roleApplied : true)) {
     try {
       await postWelcomeCard({
@@ -222,6 +242,8 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
     welcomeNote = "Welcome message not posted: general channel not configured.";
   }
 
+  // Store metadata about how this approval happened for analytics later.
+  // The "via" field helps track whether mods prefer short codes or user IDs.
   updateReviewActionMeta(result.reviewActionId, {
     roleApplied,
     dmDelivered,
@@ -230,9 +252,14 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
   });
 
   ctx.step("reply");
+  // Build the response message. We always say "approved" even if subsequent
+  // steps failed, because the database approval is what matters. Everything
+  // else is just nice-to-have that we surface as warnings.
   const messages = ["Application approved."];
   if (cfg?.accepted_role_id && roleError) {
     const roleMention = `<@&${cfg.accepted_role_id}>`;
+    // 50013 is Discord's "Missing Permissions" error code. We get this when
+    // the bot role is lower than the target role in the hierarchy.
     if (roleError.code === 50013) {
       roleNote = `Failed to grant verification role ${roleMention} (missing permissions).`;
     } else {

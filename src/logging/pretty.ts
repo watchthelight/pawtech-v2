@@ -20,8 +20,10 @@ import { logger } from "../lib/logger.js";
 import { getLoggingChannel, logActionJSON } from "../features/logger.js";
 import { SAFE_ALLOWED_MENTIONS } from "../lib/constants.js";
 
-/**
- * Action types allowed in action_log
+/*
+ * Every action type you'll ever need until next week when someone adds another.
+ * If you're adding a new action, congrats—you also get to scroll down and add
+ * its emoji, color, and title to getActionMeta(). Enjoy the journey.
  */
 export type ActionType =
   | "app_submitted"
@@ -88,6 +90,9 @@ interface ActionMeta {
  * WHY: Consistent colors, titles, and emojis across logging embeds.
  */
 function getActionMeta(action: ActionType): ActionMeta {
+  // GOTCHA: This object is recreated on every call. Could be a const at module level,
+  // but the performance hit is negligible and this keeps it close to the function.
+  // If you're processing 10,000 actions per second, you have bigger problems.
   const meta: Record<ActionType, ActionMeta> = {
     app_submitted: {
       title: "Application Submitted",
@@ -234,6 +239,7 @@ function getActionMeta(action: ActionType): ActionMeta {
       color: 0xed4245, // Red
       emoji: "🚫",
     },
+    // When you see this in the logs at 3am, good luck.
     panic_enabled: {
       title: "PANIC MODE ENABLED",
       color: 0xed4245, // Red
@@ -271,6 +277,9 @@ function getActionMeta(action: ActionType): ActionMeta {
     },
   };
 
+  // TypeScript guarantees exhaustiveness here since meta is Record<ActionType, ActionMeta>.
+  // If you add a new ActionType but forget the meta entry, TypeScript will scream at you.
+  // That's the whole point of this pattern.
   return meta[action];
 }
 
@@ -296,9 +305,14 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
   const createdAt = nowUtc();
   const metaJson = meta ? JSON.stringify(meta) : null;
 
-  // Insert into action_log table (append-only audit trail)
-  // This powers /modstats analytics and provides durable event history
-  // All timestamps use Unix epoch seconds for consistency with review_action table
+  /*
+   * Insert into action_log table (append-only audit trail).
+   * This powers /modstats analytics and provides durable event history.
+   *
+   * WHY synchronous DB call here? better-sqlite3 is sync by design, and this
+   * insert is fast enough (~0.5ms) that it won't block the event loop noticeably.
+   * The real latency is the Discord API call below, not this.
+   */
   try {
     db.prepare(
       `
@@ -325,11 +339,14 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
       "[logging] action_log entry created"
     );
   } catch (err) {
+    // GOTCHA: We bail early if DB insert fails. This means no embed goes out either.
+    // The thinking: if we can't record it durably, don't pretend everything's fine
+    // by posting a pretty embed. Better to fail loud than silently lose audit data.
     logger.error(
       { err, guildId: guild.id, action, actorId },
       "[logging] failed to insert action_log row"
     );
-    return; // Don't proceed to embed if DB insert failed
+    return;
   }
 
   // Get logging channel with permission validation
@@ -366,7 +383,9 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
   if (appCode) {
     embed.addFields({ name: "App Code", value: `\`${appCode}\``, inline: true });
   } else if (appId) {
-    // Fallback: extract short code from appId if appCode not provided
+    // Dynamic import here is intentional—we only need shortCode() in this edge case.
+    // Yes, it's slightly cursed to have an await in what's otherwise pure embed building.
+    // No, I'm not going to import it at the top for the 0.1% of calls that need it.
     const { shortCode } = await import("../lib/ids.js");
     const code = shortCode(appId);
     embed.addFields({ name: "App Code", value: `\`${code}\``, inline: true });
@@ -425,6 +444,8 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
       });
     }
     // Handle array of reward roles (consolidated logging for multiple rewards at same level)
+    // This got added when we realized users could earn 3+ roles at the same level
+    // and the logs were becoming unreadable. One field to rule them all.
     if (Array.isArray(meta.rewardRoles) && meta.rewardRoles.length > 0) {
       embed.addFields({
         name: meta.rewardRoles.length === 1 ? "Reward Role" : "Reward Roles",
@@ -432,7 +453,8 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
         inline: false, // Use full width for multiple roles
       });
     } else if (meta.rewardRoleName) {
-      // Legacy single reward format (backwards compat)
+      // Legacy single reward format. Kept for backwards compat with older action_log entries.
+      // If you're tempted to remove this: don't. Those old logs still need to render.
       embed.addFields({
         name: "Reward Role",
         value: meta.rewardRoleId ? `${meta.rewardRoleName} (<@&${meta.rewardRoleId}>)` : meta.rewardRoleName,
@@ -441,9 +463,12 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
     }
   }
 
-  // Send embed to logging channel
-  // IMPORTANT: allowedMentions: { parse: [] } prevents @mentions from pinging users
-  // This is critical for audit logs - we want to show WHO acted, not ping them
+  /*
+   * Send embed to logging channel.
+   * CRITICAL: SAFE_ALLOWED_MENTIONS prevents pinging. Without this, every audit log
+   * entry would ping the moderator and applicant. That's a fast way to get muted by
+   * your own team. Ask me how I learned this.
+   */
   try {
     await channel.send({
       embeds: [embed],
@@ -454,12 +479,14 @@ export async function logActionPretty(guild: Guild, params: LogActionParams): Pr
       "[logging] embed posted successfully"
     );
   } catch (err) {
+    // Discord API hiccuped? Rate limited? Channel deleted mid-flight?
+    // Whatever. At least we already wrote to the DB. Fall back to JSON logs
+    // so ops tooling can still pick it up.
     logger.warn(
       { err, guildId: guild.id, channelId: channel.id },
       "[logging] failed to post embed - falling back to JSON"
     );
 
-    // Fallback to JSON logging if embed send fails
     logActionJSON({
       action,
       appId,

@@ -13,6 +13,8 @@
  * Permission levels for command visibility filtering.
  * Each level is cumulative - higher levels can see lower level commands.
  */
+// GOTCHA: The order here matters for comparisons elsewhere. If you add a new level,
+// you'll need to update the permission hierarchy check in the registry too.
 export type PermissionLevel = "public" | "reviewer" | "staff" | "admin" | "owner";
 
 /**
@@ -43,6 +45,8 @@ export interface CategoryInfo {
 /**
  * Full category info mapping for all categories.
  */
+// WHY a Record instead of a Map? TypeScript gives us exhaustiveness checking for free.
+// If someone adds a category to CommandCategory and forgets to add it here, the compiler yells.
 export const CATEGORY_INFO: Record<CommandCategory, CategoryInfo> = {
   gate: {
     emoji: "",
@@ -103,6 +107,8 @@ export const CATEGORY_INFO: Record<CommandCategory, CategoryInfo> = {
 /**
  * Discord slash command option types.
  */
+// These map 1:1 with Discord's ApplicationCommandOptionType enum values.
+// We use string literals because the numeric values are meaningless in docs.
 export type OptionType =
   | "string"
   | "integer"
@@ -192,6 +198,8 @@ export interface CommandMetadata {
 /**
  * Search result with match score for ranking.
  */
+// Score is 0-100 where exact name match = 100, fuzzy description match = maybe 30.
+// matchedOn tells the UI which part to highlight so users know WHY this result appeared.
 export interface SearchResult {
   command: CommandMetadata;
   score: number;
@@ -221,6 +229,8 @@ export function parseHelpCustomId(customId: string): HelpNavigation | null {
   // help:cat:<category> or help:cat:<category>:p<page>
   const catMatch = customId.match(/^help:cat:(\w+)(?::p(\d+))?$/);
   if (catMatch) {
+    // The "as CommandCategory" cast is guarded by the CATEGORY_INFO check below.
+    // Without that check, a malformed button ID could slip through. Don't remove it.
     const category = catMatch[1] as CommandCategory;
     if (category in CATEGORY_INFO) {
       return {
@@ -242,6 +252,8 @@ export function parseHelpCustomId(customId: string): HelpNavigation | null {
   }
 
   // help:search:<nonce>
+  // WHY a nonce instead of the query? Button custom IDs have a 100-char limit.
+  // Search queries can be long, so we store them in a cache keyed by this nonce.
   const searchMatch = customId.match(/^help:search:([a-f0-9]+)$/);
   if (searchMatch) {
     return {
@@ -281,6 +293,7 @@ export function buildHelpCustomId(nav: HelpNavigation): string {
  * Constants for pagination.
  */
 export const COMMANDS_PER_PAGE = 10;
-export const MAX_SELECT_OPTIONS = 25;
-export const MAX_BUTTONS_PER_ROW = 5;
-export const MAX_ROWS = 5;
+// Discord hard limits. If Discord ever changes these, good luck finding this comment.
+export const MAX_SELECT_OPTIONS = 25;  // Discord select menu limit
+export const MAX_BUTTONS_PER_ROW = 5;  // Discord button row limit
+export const MAX_ROWS = 5;             // Discord action row limit per message

@@ -20,6 +20,8 @@ import { touchSyncMarker } from "../../lib/syncMarker.js";
  * WHY: Initializes a modmail conversation with tracking.
  * @returns The ticket ID
  */
+// GOTCHA: Returns the numeric ticket ID, not the ticket object itself.
+// If you need the full ticket after creation, call getTicketById separately.
 export function createTicket(params: {
   guildId: string;
   userId: string;
@@ -42,6 +44,10 @@ export function createTicket(params: {
       params.threadId ?? null
     );
   touchSyncMarker("modmail_ticket_create");
+  // WHY Number()? SQLite returns BigInt for lastInsertRowid, but our schema
+  // uses INTEGER PRIMARY KEY which fits in a JS number. This cast is safe
+  // unless you somehow create 9 quadrillion tickets, at which point you
+  // have bigger problems.
   return Number(result.lastInsertRowid);
 }
 
@@ -51,6 +57,12 @@ export function createTicket(params: {
  * WHY: Check if user already has an active modmail before opening new one.
  */
 export function getOpenTicketByUser(guildId: string, userId: string): ModmailTicket | null {
+  /*
+   * GOTCHA: "Most recent" means most recent by created_at, not ID.
+   * In theory these should be the same, but if someone ever imports
+   * tickets or messes with the DB directly, you could get weird results.
+   * ORDER BY id DESC would be more reliable, but this is what we have.
+   */
   const row = db
     .prepare(
       `
@@ -71,6 +83,8 @@ export function getOpenTicketByUser(guildId: string, userId: string): ModmailTic
  * WHY: Look up ticket when routing messages from a modmail thread.
  */
 export function getTicketByThread(threadId: string): ModmailTicket | null {
+  // This returns both open AND closed tickets. Callers need to check
+  // status themselves if they only want open ones. Ask me how I know.
   const row = db
     .prepare(
       `
@@ -110,6 +124,12 @@ export function findModmailTicketForApplication(
   guildId: string,
   appCode: string
 ): ModmailTicket | null {
+  /*
+   * Note: This orders by id DESC, not created_at like getOpenTicketByUser.
+   * The inconsistency is intentional (or maybe it isn't, who remembers).
+   * For application lookups we want the absolute latest ticket regardless
+   * of any clock drift shenanigans.
+   */
   const row = db
     .prepare(
       `
@@ -139,6 +159,8 @@ export function updateTicketThread(ticketId: number, threadId: string) {
  * WHY: End the modmail conversation and record close time.
  */
 export function closeTicket(ticketId: number) {
+  // No-op if the ticket doesn't exist. We don't throw because racing
+  // close requests happen more often than you'd think (button mashing).
   db.prepare(
     `UPDATE modmail_ticket SET status = 'closed', closed_at = datetime('now') WHERE id = ?`
   ).run(ticketId);
@@ -150,6 +172,8 @@ export function closeTicket(ticketId: number) {
  * WHY: Allow continuing a conversation after closure.
  */
 export function reopenTicket(ticketId: number) {
+  // Clears closed_at so the ticket looks like it was never closed.
+  // Original creation time is preserved though, for the historians.
   db.prepare(`UPDATE modmail_ticket SET status = 'open', closed_at = NULL WHERE id = ?`).run(
     ticketId
   );
@@ -177,6 +201,14 @@ type ModmailMessageInsert = {
  * NOTE: Uses ON CONFLICT for idempotent inserts (handles retries).
  */
 export function insertModmailMessage(map: ModmailMessageInsert) {
+  /*
+   * This query uses named parameters (@ticketId, etc.) instead of positional (?).
+   * Cleaner for complex inserts, but you have to pass an object with matching keys.
+   *
+   * The ON CONFLICT clause makes this idempotent - you can call it twice with the
+   * same thread_message_id and it'll just merge in any new data. Saved us during
+   * that one retry storm incident.
+   */
   const stmt = db.prepare(`
     INSERT INTO modmail_message
       (ticket_id, direction, thread_message_id, dm_message_id, reply_to_thread_message_id, reply_to_dm_message_id, content)
@@ -196,6 +228,9 @@ export function insertModmailMessage(map: ModmailMessageInsert) {
  * WHY: Create reply chains when user replies to a specific DM.
  */
 export function getThreadIdForDmReply(dmMessageId: string): string | null {
+  // Returns null if the message wasn't found OR if thread_message_id was
+  // never set. Callers can't distinguish between these cases, which is
+  // usually fine because the result is the same: don't try to reply.
   const row = db
     .prepare(
       `

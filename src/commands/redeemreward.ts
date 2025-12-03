@@ -33,6 +33,15 @@ import {
   getArtist,
 } from "../features/artistRotation/index.js";
 
+/*
+ * Command design: two-step confirmation flow to prevent accidents.
+ * Step 1: Show preview with user's ticket roles and next artist
+ * Step 2: Staff clicks Confirm to actually execute the assignment
+ *
+ * The 'artist' override exists for situations where queue rotation
+ * doesn't fit (e.g., user requested a specific artist, or an artist
+ * offered to take an extra piece).
+ */
 export const data = new SlashCommandBuilder()
   .setName("redeemreward")
   .setDescription("Assign an art reward to a user from the artist rotation queue")
@@ -63,7 +72,15 @@ export const data = new SlashCommandBuilder()
   );
 
 /**
- * Inspect a user's ticket roles
+ * Inspect a user's ticket roles.
+ *
+ * Ticket roles = special roles the user earns for various achievements.
+ * Each role grants one art piece of that type. When they redeem, we remove
+ * the role so they can't double-dip.
+ *
+ * GOTCHA: If ticket roles aren't configured for this guild, all the
+ * "has" checks return false. The command still works; it just won't
+ * remove any roles (because there are none to remove).
  */
 function inspectTicketRoles(member: GuildMember, requestedType: ArtType, ticketRoles: TicketRolesConfig) {
   const hasHeadshot = ticketRoles.headshot ? member.roles.cache.has(ticketRoles.headshot) : false;
@@ -132,7 +149,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
   ctx.step("get_artist");
 
-  // Determine which artist to use
+  // Determine which artist to use.
+  // Two paths: queue rotation (fair, round-robin) or manual override.
+  // Override is tracked separately so the confirmation UI can flag it.
   let artistId: string;
   let artistPosition: number | null = null;
   let isOverride = false;
@@ -170,7 +189,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
   ctx.step("build_confirmation");
 
-  // Generate unique ID for this confirmation flow
+  // Generate unique ID for this confirmation flow.
+  // Truncated UUID is enough - we only need to match buttons for ~15 minutes
+  // until Discord's component interaction expires. Collisions are astronomical.
   const confirmId = randomUUID().slice(0, 8);
 
   // Build confirmation embed
@@ -229,7 +250,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     });
   }
 
-  // Build buttons
+  // Build buttons.
+  // Custom ID encodes all state needed to execute the action later.
+  // Format: redeemreward:CONFIRM_ID:ACTION:TARGET:TYPE:ARTIST:OVERRIDE
+  // Yes, this is cramped - Discord has a 100-char customId limit.
+  // The button handler parses this back out when clicked.
   const buttons = new ActionRowBuilder<ButtonBuilder>().addComponents(
     new ButtonBuilder()
       .setCustomId(`redeemreward:${confirmId}:confirm:${targetUser.id}:${artType}:${artistId}:${isOverride ? "1" : "0"}`)

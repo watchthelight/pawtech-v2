@@ -10,11 +10,19 @@
 // Each import pulls in a SlashCommandBuilder instance. We call .toJSON() to serialize
 // them into the format Discord's REST API expects.
 
+/*
+ * WHY so many imports? Discord.js forces each command to be its own export.
+ * We could dynamically scan the commands folder, but explicit imports mean
+ * the bundler can tree-shake and we get compile-time errors if a command breaks.
+ * The verbose pain here saves debugging pain later.
+ */
 import { data as gateData, acceptData, rejectData, kickData, unclaimData } from "./gate.js";
 import { data as healthData } from "./health.js";
 import { data as updateData } from "./update.js";
 import { data as configData } from "./config.js";
 import { data as databaseData } from "./database.js";
+// This one lives in features/ because modmail is both a command AND a feature module.
+// Not ideal, but refactoring it would be a three-hour yak shave.
 import { modmailCommand, modmailContextMenu } from "../features/modmail.js";
 import { analyticsData, analyticsExportData } from "./analytics.js";
 import { data as modstatsData } from "./modstats.js";
@@ -34,6 +42,7 @@ import { data as backfillData } from "./backfill.js";
 import { data as reviewSetListopenOutputData } from "./review-set-listopen-output.js";
 import { data as movieData } from "./movie.js";
 import { data as rolesData } from "./roles.js";
+// Yes, there's a panic button. No, you don't want to find out what it does the hard way.
 import { data as panicData } from "./panic.js";
 import { data as searchData } from "./search.js";
 import { data as approvalRateData } from "./approvalRate.js";
@@ -47,6 +56,9 @@ import { data as helpData } from "./help/index.js";
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
 // If you hit that limit, consider using subcommands to consolidate related commands.
+//
+// GOTCHA: Adding a command here does nothing until you run `npm run deploy:cmds`.
+// Forgetting this step is a rite of passage. You will do it at least once.
 export function buildCommands() {
   return [
     // Gate workflow commands - these are the core moderation actions
@@ -87,7 +99,7 @@ export function buildCommands() {
     searchData.toJSON(),
     approvalRateData.toJSON(),
 
-    // Artist rotation commands
+    // Artist rotation commands - the art queue feature nobody asked for but everyone uses
     artistqueueData.toJSON(),
     redeemrewardData.toJSON(),
     artData.toJSON(),
@@ -99,7 +111,11 @@ export function buildCommands() {
     // Help system
     helpData.toJSON(),
 
-    // Context menu commands are registered alongside slash commands in Discord.js v14
+    /*
+     * Context menu commands are registered alongside slash commands in Discord.js v14.
+     * These show up when you right-click a user or message. Only 5 of each type allowed.
+     * The modmail one lets you DM someone without leaving the Discord client.
+     */
     modmailContextMenu.toJSON(),
   ];
 }

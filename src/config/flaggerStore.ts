@@ -19,6 +19,8 @@ import { LRUCache } from "../lib/lruCache.js";
 // ============================================================================
 // Prepared Statements (cached at module load for performance)
 // ============================================================================
+// These run on module load, which means a broken DB path will crash the bot
+// before it even says hello. This is intentional. Fail fast, fail loud.
 
 const getFlaggerConfigStmt = db.prepare(
   `SELECT flags_channel_id, silent_first_msg_days FROM guild_config WHERE guild_id = ?`
@@ -40,6 +42,8 @@ const upsertSilentDaysStmt = db.prepare(
      updated_at_s = excluded.updated_at_s`
 );
 
+// GOTCHA: channelId being null is valid (feature disabled), but silentDays
+// is never null - it defaults to 7. This asymmetry will bite someone someday.
 export interface FlaggerConfig {
   channelId: string | null;
   silentDays: number;
@@ -54,6 +58,8 @@ export interface FlaggerConfig {
 const CACHE_TTL_MS = 60 * 1000; // 1 minute TTL - balances freshness vs DB load
 const CACHE_MAX_SIZE = 1000; // Max guilds to cache - prevents unbounded memory growth
 const flaggerConfigCache = new LRUCache<string, FlaggerConfig>(CACHE_MAX_SIZE, CACHE_TTL_MS);
+// Fun fact: this cache can hold configs for guilds the bot isn't even in.
+// The guildDelete handler cleans up, but if you're debugging memory, start here.
 
 /**
  * Get from cache if not expired
@@ -153,6 +159,9 @@ export function getFlaggerConfig(guildId: string): FlaggerConfig {
   // Only use env fallback for silentDays if DB didn't provide a value.
   // We already checked DB above, so just check if we still have the default value
   // and if the env var is set. This avoids a redundant DB query.
+  // GOTCHA: This logic assumes 7 is the default. If you change the default above,
+  // update this check or env fallback will silently break. Been there.
+  // WHY not use undefined as a sentinel? Because TypeScript + SQLite nulls are pain.
   const envDays = process.env.SILENT_FIRST_MSG_DAYS;
   if (envDays && !isNaN(Number(envDays)) && silentDays === 7) {
     // silentDays === 7 means DB either didn't have a row or had null for this field
@@ -221,6 +230,9 @@ export function setFlagsChannelId(guildId: string, channelId: string): void {
  */
 export function setSilentFirstMsgDays(guildId: string, days: number): void {
   // Validate range
+  // Why 7 minimum? Because flagging someone who joined yesterday for "not talking"
+  // is a bit aggressive. Give people time to find the snacks channel.
+  // Why 365 max? If they haven't talked in a year, they're not lurking, they're gone.
   if (days < 7 || days > 365) {
     throw new Error("Silent days threshold must be between 7 and 365 days");
   }

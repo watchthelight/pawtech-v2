@@ -37,6 +37,10 @@ import {
   type JobStatus,
 } from "../features/artJobs/index.js";
 
+// The slash command builder graveyard: where dreams of a simple API go to die.
+// This thing has 8 subcommands, each with their own option soup. The user-or-id
+// pattern repeats 4 times because Discord doesn't have option groups.
+// If you're adding another subcommand, maybe ask yourself: "do I really need this?"
 export const data = new SlashCommandBuilder()
   .setName("art")
   .setDescription("Manage your art jobs as a Server Artist")
@@ -169,6 +173,10 @@ export const data = new SlashCommandBuilder()
 
 /**
  * Execute /art command
+ *
+ * The classic "router switch statement" pattern. Some people would say
+ * this should be a lookup table. Those people have never debugged a
+ * lookup table at 2am. Switch statements are honest about their ugliness.
  */
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
   const { interaction } = ctx;
@@ -202,12 +210,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       await handleGetStatus(interaction, ctx);
       break;
     default:
+      // This should be unreachable if Discord is doing its job, but Discord
+      // has a habit of delivering options that don't match what you registered.
       await interaction.reply({ content: "Unknown subcommand.", ephemeral: true });
   }
 }
 
 /**
  * Check if user is a Server Artist
+ *
+ * GOTCHA: This relies on the artist role being configured per-guild.
+ * If artistRoleId is undefined/empty, this returns false for everyone,
+ * which is probably fine but might confuse staff debugging "why can't
+ * this artist use /art jobs?"
  */
 function isServerArtist(member: GuildMember, guildId: string): boolean {
   const config = getArtistConfig(guildId);
@@ -216,6 +231,13 @@ function isServerArtist(member: GuildMember, guildId: string): boolean {
 
 /**
  * Find a job by ID or user+type
+ *
+ * Two ways to identify a job: by the artist's local job number, or by
+ * recipient + art type combo. The latter exists because artists kept asking
+ * "what's the ID for so-and-so's headshot?" Just let them use the user.
+ *
+ * EDGE CASE: If someone provides BOTH id AND user+type, we prefer the id.
+ * Not documented anywhere. Discovery is left as an exercise for the user.
  */
 function findJob(
   guildId: string,
@@ -239,17 +261,27 @@ function findJob(
 
 /**
  * Format ticket type for display
+ *
+ * Special tasks get their description stored as "special:whatever" in the DB.
+ * This is a bit cursed but means we don't need a separate column.
  */
 function formatTicketType(type: string): string {
   // Handle special tasks
   if (type.startsWith("special:")) {
     return type.substring(8); // Remove "special:" prefix
   }
+  // Falls back to the raw string if the type isn't in ART_TYPE_DISPLAY.
+  // This is intentional: if someone adds a new art type and forgets to
+  // update the display map, at least they'll see something instead of undefined.
   return ART_TYPE_DISPLAY[type as keyof typeof ART_TYPE_DISPLAY] ?? type;
 }
 
 /**
  * Check if job is a special task
+ *
+ * Belt and suspenders: we check both the recipient_id sentinel value AND
+ * the ticket_type prefix. In theory they should always agree. In practice,
+ * data migrations happen, and paranoia has saved us before.
  */
 function isSpecialJob(job: ArtJobRow): boolean {
   return job.recipient_id === "special" || job.ticket_type.startsWith("special:");
@@ -267,6 +299,10 @@ function formatJobDescription(job: ArtJobRow): string {
 
 /**
  * Format status with emoji
+ *
+ * Discord users love emojis. Who are we to judge.
+ * The statusEmoji record is reconstructed every call which is wasteful,
+ * but we call this maybe 50 times on a busy day. Not worth a module-level const.
  */
 function formatStatus(status: JobStatus): string {
   const statusEmoji: Record<JobStatus, string> = {
@@ -281,12 +317,17 @@ function formatStatus(status: JobStatus): string {
 
 /**
  * /art jobs - View active jobs
+ *
+ * Public reply (not ephemeral) so artists can flex their workload.
+ * This is intentional: transparency builds trust with the community.
  */
 async function handleJobs(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext
 ): Promise<void> {
   const guildId = interaction.guildId;
+  // GuildMember cast: Discord.js types are conservative. In a guild command,
+  // member is always GuildMember, but TS doesn't know that.
   const member = interaction.member as GuildMember;
 
   if (!guildId) {
@@ -302,6 +343,8 @@ async function handleJobs(
     return;
   }
 
+  // deferReply because getActiveJobsForArtist hits the DB and we want to
+  // stay under Discord's 3-second interaction deadline.
   await interaction.deferReply({ ephemeral: false });
 
   const jobs = getActiveJobsForArtist(guildId, member.id);
@@ -316,8 +359,12 @@ async function handleJobs(
     return;
   }
 
+  // Build the job list. The empty string at the end of each job creates
+  // visual spacing between entries. Yes, there's probably a cleaner way.
   const lines: string[] = [];
   for (const job of jobs) {
+    // Discord timestamp magic: divide by 1000 to convert ms to seconds,
+    // then use <t:TIMESTAMP:R> for relative time ("3 days ago").
     const assignedAt = Math.floor(new Date(job.assigned_at).getTime() / 1000);
 
     lines.push(
@@ -341,6 +388,10 @@ async function handleJobs(
 
 /**
  * /art bump - Update job status
+ *
+ * Lets artists move a job through the pipeline: sketching -> lining -> coloring.
+ * They can also just add notes without changing the stage.
+ * Called "bump" because "update" was taken and "progress" felt too corporate.
  */
 async function handleBump(
   interaction: ChatInputCommandInteraction,
@@ -379,6 +430,9 @@ async function handleBump(
     return;
   }
 
+  // Fun fact: TypeScript doesn't know that getString returns one of the
+  // choices we specified. Hence the cast. Discord guarantees this, we trust them.
+  // (Famous last words.)
   const stage = interaction.options.getString("stage") as JobStatus | null;
   const notes = interaction.options.getString("notes");
 
@@ -390,6 +444,8 @@ async function handleBump(
     return;
   }
 
+  // Note: nullish coalescing to undefined because the store function uses
+  // undefined to mean "don't update this field" vs null meaning "clear it".
   updateJobStatus(job.id, { status: stage ?? undefined, notes: notes ?? undefined });
 
   const embed = new EmbedBuilder()
@@ -406,6 +462,10 @@ async function handleBump(
 
 /**
  * /art finish - Mark job complete
+ *
+ * The money shot. Artist calls this when they're done. Sets status to "done"
+ * and records completion timestamp. No confirmation dialog because we trust
+ * our artists not to fat-finger this. (And if they do, staff can reassign.)
  */
 async function handleFinish(
   interaction: ChatInputCommandInteraction,
@@ -446,7 +506,9 @@ async function handleFinish(
 
   finishJob(job.id);
 
-  // Calculate time taken
+  // Calculate time taken. We show this as a fun stat, not to shame anyone.
+  // Art takes as long as art takes. Though if it's 0 days, someone might
+  // be speedrunning, and that's pretty impressive.
   const assignedAt = new Date(job.assigned_at).getTime();
   const now = Date.now();
   const daysToComplete = Math.floor((now - assignedAt) / (1000 * 60 * 60 * 24));
@@ -529,6 +591,10 @@ async function handleView(
 
 /**
  * /art leaderboard - View stats
+ *
+ * Gamification 101: put a number next to people's names and watch productivity
+ * go up. Monthly + all-time gives both sprinters and marathon runners something
+ * to aim for.
  */
 async function handleLeaderboard(
   interaction: ChatInputCommandInteraction,
@@ -543,6 +609,7 @@ async function handleLeaderboard(
 
   await interaction.deferReply({ ephemeral: false });
 
+  // Top 10 for both. Could be configurable but nobody's asked.
   const monthlyStats = getMonthlyLeaderboard(guildId, 10);
   const allTimeStats = getAllTimeLeaderboard(guildId, 10);
 
@@ -550,6 +617,8 @@ async function handleLeaderboard(
 
   let description = "";
 
+  // The medal logic: first three get shiny medals, everyone else gets numbers.
+  // Ternary chain of shame, but it reads fine.
   if (monthlyStats.length > 0) {
     description += `**This Month (${monthName})**\n`;
     for (let i = 0; i < monthlyStats.length; i++) {
@@ -584,6 +653,10 @@ async function handleLeaderboard(
 
 /**
  * /art all - Staff view all jobs
+ *
+ * Staff dashboard view. Shows ALL active jobs across ALL artists.
+ * Not ephemeral because staff sometimes paste this in staff channels
+ * to discuss workload distribution.
  */
 async function handleAll(
   interaction: ChatInputCommandInteraction,
@@ -596,7 +669,8 @@ async function handleAll(
     return;
   }
 
-  // Staff only
+  // requireStaff handles the "nope" reply internally and returns false.
+  // Pattern borrowed from the config commands. Slightly magical but consistent.
   if (!requireStaff(interaction)) {
     return;
   }
@@ -640,6 +714,12 @@ async function handleAll(
 
 /**
  * /art assign - Staff manually assign job
+ *
+ * Escape hatch for when the normal /redeemreward flow doesn't cut it.
+ * Two modes: "user" for art-for-a-person, "special" for one-off tasks
+ * like "make us a new server banner". The "special" jobs store their
+ * description in the ticket_type field with a "special:" prefix, which
+ * is janky but works.
  */
 async function handleAssign(
   interaction: ChatInputCommandInteraction,
@@ -652,7 +732,6 @@ async function handleAssign(
     return;
   }
 
-  // Staff only
   if (!requireStaff(interaction)) {
     return;
   }
@@ -682,9 +761,13 @@ async function handleAssign(
     }
   }
 
-  // Create the job
+  // Dynamic import here to avoid a circular dependency nightmare.
+  // artJobs/index.js imports config stuff that imports... you get the idea.
+  // TODO: Might be worth refactoring this out, but it works for now.
   const { createJob } = await import("../features/artJobs/index.js");
 
+  // The ! assertions are safe here because we validated above. TypeScript
+  // doesn't track control flow across if-return patterns perfectly.
   const job = createJob({
     guildId,
     artistId: artist.id,
@@ -716,6 +799,14 @@ async function handleAssign(
 
 /**
  * /art getstatus - Recipient checks their art progress
+ *
+ * The "where's my art" command. For people who redeemed a reward and want
+ * to know if their artist has started yet. Ephemeral because the recipient's
+ * art queue is nobody else's business.
+ *
+ * This is the only subcommand that doesn't require the artist role - it's
+ * for recipients, not artists. Easy to forget when you're copy-pasting
+ * permission checks from other handlers.
  */
 async function handleGetStatus(
   interaction: ChatInputCommandInteraction,
@@ -737,6 +828,9 @@ async function handleGetStatus(
     return;
   }
 
+  // Same line-building pattern as handleJobs. Could be extracted but
+  // the formatting is slightly different (shows artist instead of recipient),
+  // and the DRY police have bigger fish to fry.
   const lines: string[] = [];
   for (const job of jobs) {
     const assignedAt = Math.floor(new Date(job.assigned_at).getTime() / 1000);
@@ -744,6 +838,8 @@ async function handleGetStatus(
     lines.push(`**${formatTicketType(job.ticket_type)}** by <@${job.artist_id}>`);
     lines.push(`${formatStatus(job.status)} • Assigned <t:${assignedAt}:R>`);
     if (job.notes) {
+      // Artist notes are public to the recipient. Artists know this.
+      // If they want to vent, they should do it in the staff channel.
       lines.push(`📝 Artist notes: "${job.notes}"`);
     }
     lines.push("");

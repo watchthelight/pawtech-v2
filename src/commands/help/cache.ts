@@ -26,6 +26,8 @@ import { randomBytes } from "node:crypto";
  * Inverted search index mapping keywords to command names.
  * Built once at module load time.
  */
+// WHY: Module-level Map instead of class - this runs once at startup and never
+// gets rebuilt. If you add commands at runtime, you'll need to rebuild this.
 const SEARCH_INDEX = new Map<string, Set<string>>();
 
 /**
@@ -44,6 +46,8 @@ function buildSearchIndex(): void {
     keywords.add(cmd.category.toLowerCase());
 
     // Words from description (length > 2 to skip articles)
+    // GOTCHA: "2" was chosen by gut feeling. "an", "to", "or" get filtered,
+    // but so does "AI" and "ID". If users can't search "AI commands", now you know why.
     const descWords = cmd.description.toLowerCase().split(/\s+/);
     for (const word of descWords) {
       // Strip punctuation and check length
@@ -103,7 +107,11 @@ export function searchCommands(query: string): SearchResult[] {
   for (const term of terms) {
     const termMatches = new Set<string>();
 
-    // Check for partial matches in index
+    /*
+     * Check for partial matches in index. Yes, we iterate the entire index
+     * for every search term. For the ~50 commands we have, this is fine.
+     * If you add 1000 commands, maybe build a proper trie or something.
+     */
     for (const [keyword, cmdNames] of SEARCH_INDEX) {
       if (keyword.includes(term) || term.includes(keyword)) {
         for (const name of cmdNames) {
@@ -133,6 +141,8 @@ export function searchCommands(query: string): SearchResult[] {
   }
 
   // Score and sort results
+  // These magic numbers (100, 90, 80, etc.) were calibrated by running
+  // searches and seeing if the results felt right. Very scientific.
   const results: SearchResult[] = [];
   for (const name of matchingNames) {
     const cmd = getCommand(name);
@@ -193,6 +203,8 @@ export function searchCommands(query: string): SearchResult[] {
  * Cache for permission-filtered command lists.
  * Key: `${guildId}:${userId}`, Value: filtered command names
  */
+// 500 entries, 5 min TTL. If someone's roles change, call invalidatePermissionCache().
+// Otherwise they'll see stale command lists for up to 5 minutes.
 const PERMISSION_CACHE = new LRUCache<string, string[]>(500, 5 * 60 * 1000); // 5 min TTL
 
 /**
@@ -209,6 +221,8 @@ function hasPermissionLevel(
     return true;
   }
 
+  // The permission hierarchy is: owner > admin > staff > reviewer > public
+  // Each level includes all levels below it (admin can do staff things, etc.)
   switch (level) {
     case "public":
       return true;
@@ -264,6 +278,8 @@ export function filterCommandsByPermission(
   );
 
   // Cache the result (just names to save memory)
+  // WHY: Storing full CommandMetadata objects would bloat memory. Names are
+  // ~20 bytes each; full objects are ~500+ bytes. We re-lookup on cache hit.
   PERMISSION_CACHE.set(
     cacheKey,
     filtered.map((cmd) => cmd.name)
@@ -318,6 +334,11 @@ export function invalidatePermissionCache(guildId: string, userId: string): void
  * Temporary storage for search results (keyed by nonce).
  * Allows button navigation to search results.
  */
+/*
+ * 15 min TTL matches Discord's component interaction timeout. After that,
+ * buttons die anyway, so there's no point keeping the session around.
+ * 100 entries should handle concurrent users fine unless this bot goes viral.
+ */
 const SEARCH_SESSIONS = new LRUCache<string, { query: string; results: string[] }>(
   100,
   15 * 60 * 1000 // 15 min TTL matches Discord component timeout
@@ -326,6 +347,8 @@ const SEARCH_SESSIONS = new LRUCache<string, { query: string; results: string[] 
 /**
  * Generate a random nonce for search sessions.
  */
+// 4 bytes = 8 hex chars = 4 billion possible values. Not cryptographically
+// important, just needs to be unique enough that users can't guess each other's sessions.
 export function generateNonce(): string {
   return randomBytes(4).toString("hex");
 }
@@ -353,6 +376,9 @@ export function getSearchSession(
   const session = SEARCH_SESSIONS.get(nonce);
   if (!session) return null;
 
+  // EDGE CASE: If commands were unregistered between storing and retrieving,
+  // we silently drop them from results. Could confuse users if a command
+  // vanishes mid-session, but it's better than crashing.
   return {
     query: session.query,
     results: session.results

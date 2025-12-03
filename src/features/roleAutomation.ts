@@ -19,6 +19,11 @@ import { logger } from "../lib/logger.js";
 // Types
 // ============================================================================
 
+// The "skipped" action is doing a lot of heavy lifting here. It means:
+// 1. User already had/didn't have the role (no-op)
+// 2. Permission error (couldn't do it)
+// 3. Member/role not found (target doesn't exist)
+// Callers need to check the error field to know which one happened.
 export interface RoleAssignmentResult {
   success: boolean;
   roleId: string;
@@ -125,11 +130,15 @@ export function canManageRoleSync(guild: Guild, role: Role): {
   }
 
   // Check for @everyone role (position 0)
+  // Fun fact: @everyone is technically a role with the same ID as the guild.
+  // Discord's API will let you try to assign it, then laugh at you with a 400.
   if (role.id === guild.id) {
     return { canManage: false, reason: "@everyone role cannot be assigned" };
   }
 
   // Check for managed roles (bot/integration roles)
+  // These are the colored roles that bots get automatically (e.g., "MEE6", "Dyno").
+  // Discord manages these internally. Trying to assign them is a fool's errand.
   if (role.managed) {
     return { canManage: false, reason: "This is a managed role (bot/integration) and cannot be assigned manually" };
   }
@@ -284,6 +293,8 @@ export async function assignRole(
     }
 
     // Assign role
+    // The reason string shows up in Discord's audit log. Useful for figuring out
+    // "why does this user have 47 roles" six months from now.
     await member.roles.add(roleId, `${reason} (triggered by: ${triggeredBy})`);
     logRoleAssignment(guild.id, userId, roleId, role.name, "add", reason, triggeredBy);
 
@@ -453,6 +464,10 @@ export function getLevelRewards(guildId: string, level: number): LevelReward[] {
 
 /**
  * Get assignment history for a user
+ *
+ * Useful for debugging "why do I have this role?" questions.
+ * Default limit of 50 is usually enough - if a user has more than 50 role
+ * changes, they're either a mod being tested on or something is very wrong.
  */
 export function getAssignmentHistory(
   guildId: string,

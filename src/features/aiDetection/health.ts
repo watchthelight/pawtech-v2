@@ -7,6 +7,11 @@
 import { logger } from "../../lib/logger.js";
 import { env } from "../../lib/env.js";
 
+/*
+ * Wikipedia's PNG transparency demo image. Chosen because it's stable,
+ * CORS-friendly, and definitely not AI-generated (it's just colored boxes).
+ * If Wikipedia goes down, we have bigger problems.
+ */
 const TEST_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png";
 const TIMEOUT_MS = 15000;
 
@@ -14,7 +19,9 @@ export interface ServiceHealth {
   service: "hive" | "illuminarty" | "sightengine" | "optic";
   displayName: string;
   configured: boolean;
-  healthy: boolean | null; // null = not tested yet
+  // null means we haven't tested yet, not that we're philosophically
+  // uncertain about whether the service exists
+  healthy: boolean | null;
   error?: string;
   docsUrl: string;
   envVars: string[];
@@ -76,6 +83,7 @@ export async function testHive(apiKey: string): Promise<{ success: boolean; erro
     });
 
     if (!response.ok) {
+      // 401 is "bad key", anything else is "weird server problem"
       if (response.status === 401) {
         return { success: false, error: "Invalid API key (401 Unauthorized)" };
       }
@@ -83,6 +91,8 @@ export async function testHive(apiKey: string): Promise<{ success: boolean; erro
     }
 
     const data = await response.json();
+    // We don't care about the actual result, just that the response shape
+    // looks right. If output exists, the API is working.
     if (data?.status?.[0]?.response?.output) {
       return { success: true };
     }
@@ -147,6 +157,10 @@ export async function testSightEngine(apiUser: string, apiSecret: string): Promi
       return { success: false, error: `HTTP ${response.status}` };
     }
 
+    /*
+     * GOTCHA: SightEngine can return 200 OK with an error in the body.
+     * Always check the status field. Classic API design.
+     */
     const data = (await response.json()) as { status?: string; error?: { message?: string } };
     if (data.status === "success") {
       return { success: true };
@@ -194,11 +208,15 @@ export async function testOptic(apiKey: string): Promise<{ success: boolean; err
 
 /**
  * Test all currently configured services.
+ * Runs tests in parallel because life's too short to wait for 4 sequential
+ * health checks at 15 seconds each.
  */
 export async function testAllConfigured(): Promise<ServiceHealth[]> {
   const services = getServiceStatus();
 
   const tests = services.map(async (svc) => {
+    // Skip testing services that aren't even configured. No point
+    // in asking "is this key valid" when the key is empty string.
     if (!svc.configured) {
       return svc;
     }

@@ -38,13 +38,20 @@ import type { Message } from "discord.js";
  * - Handles send failures (promise rejection)
  */
 export function autoDelete(messageOrPromise: Promise<Message> | Message, ms = 30_000): void {
-  // Wrap in async IIFE to avoid unhandled rejection
+  // Wrap in async IIFE to avoid unhandled rejection.
+  // This is the "fire-and-forget" pattern - we don't return a promise because
+  // callers shouldn't wait for deletion. If you need to know when it's deleted,
+  // you're using this function wrong.
   (async () => {
     try {
       // Await message if it's a promise
       const msg = await messageOrPromise;
 
-      // Schedule deletion
+      // Schedule deletion.
+      // GOTCHA: This timer is not unref'd, so it will keep the process alive.
+      // That's intentional - we want the message to actually get deleted even
+      // during shutdown. If you're seeing hanging processes, this probably isn't
+      // the culprit (30s is the default, not 30 minutes).
       setTimeout(async () => {
         try {
           // Check if message is still deletable

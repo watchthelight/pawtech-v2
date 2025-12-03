@@ -24,6 +24,8 @@ import dotenv from "dotenv";
 import { syncShortCodeMappings } from "../src/features/appLookup.js";
 
 // Load .env for DB_PATH
+// GOTCHA: This must happen before any db-related imports that might read DB_PATH at module load time.
+// We're safe here because better-sqlite3 doesn't cache on import, but don't get creative with the order.
 dotenv.config();
 
 /**
@@ -34,6 +36,8 @@ function validateDiscordId(id: string | undefined, name: string): string {
     console.error(`Error: ${name} is required`);
     process.exit(1);
   }
+  // WHY 17-19 digits? Discord snowflakes started at 17 digits (2015) and will hit 20 around 2090.
+  // If you're maintaining this in 2090, I'm sorry, and also: congratulations on the immortality.
   if (!/^\d{17,19}$/.test(id)) {
     console.error(`Error: ${name} must be a valid Discord snowflake (17-19 digits)`);
     process.exit(1);
@@ -60,6 +64,13 @@ console.log("");
 
 // Open database with production settings
 const db = new Database(dbPath, { fileMustExist: true });
+/*
+ * WHY these pragmas matter:
+ * - WAL: Allows concurrent reads during writes. Essential for scripts that run while the bot is live.
+ * - NORMAL: Trades a tiny durability risk for 2-3x faster writes. Acceptable for a backfill.
+ * - foreign_keys: SQLite defaults this to OFF (for backwards compat with 2005). Wild, I know.
+ * - busy_timeout: Wait 5s before throwing SQLITE_BUSY. The bot might be hammering the DB.
+ */
 db.pragma("journal_mode = WAL");
 db.pragma("synchronous = NORMAL");
 db.pragma("foreign_keys = ON");
@@ -105,6 +116,8 @@ function getStats(guildId?: string): {
   return {
     totalApps,
     existingMappings,
+    // EDGE CASE: This can go negative if someone deletes apps but leaves orphaned mappings.
+    // Harmless, but the "Missing mappings: -3" output will look weird. Good enough.
     missingMappings: totalApps - existingMappings,
   };
 }
@@ -128,6 +141,7 @@ function getGuilds(): Array<{ guild_id: string; count: number }> {
 /**
  * Main backfill execution
  */
+// WHY async? syncShortCodeMappings is sync, but we might need async later. And it costs nothing.
 async function main() {
   // Check if app_short_codes table exists
   if (!checkTableExists()) {
@@ -170,6 +184,12 @@ async function main() {
   // Execute backfill
   console.log("🔄 Starting backfill...\n");
 
+  /*
+   * GOTCHA: This isn't wrapped in a transaction, which sounds scary but is intentional.
+   * syncShortCodeMappings uses INSERT OR IGNORE internally, so it's idempotent.
+   * If we crash mid-backfill, just run it again. The per-guild approach means we don't
+   * lose ALL progress on failure, just the current guild's uncommitted work.
+   */
   try {
     let totalCreated = 0;
 
@@ -202,6 +222,8 @@ async function main() {
     console.log(`✅ Backfill complete! Created ${totalCreated} mappings.`);
 
     if (statsAfter.missingMappings > 0) {
+      // This usually means syncShortCodeMappings hit duplicate short codes and gave up on some apps.
+      // The short code collision rate scales with app count per guild. Fun times ahead for big servers.
       console.log(
         `⚠️  Warning: ${statsAfter.missingMappings} applications still missing mappings (check for errors above)`
       );
@@ -211,11 +233,14 @@ async function main() {
     console.error(err);
     process.exit(1);
   } finally {
+    // Always close, even on error. Leaving db handles open is how you get "database is locked" at 2am.
     db.close();
   }
 }
 
 // Run main function
+// The .catch here is belt-and-suspenders. The try/catch inside main() should handle everything,
+// but if someone adds an await before the try block, this catches it. Defensive programming.
 main().catch((err) => {
   console.error("Fatal error:", err);
   process.exit(1);

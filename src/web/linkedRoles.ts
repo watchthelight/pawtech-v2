@@ -50,6 +50,9 @@ const DISCORD_API = "https://discord.com/api/v10";
 
 // CSRF state store for OAuth2 flow
 // Bounded to prevent memory exhaustion - 1000 concurrent OAuth flows is plenty
+// GOTCHA: This is in-memory, so a server restart invalidates all pending OAuth flows.
+// Users mid-authorization will get "invalid state" errors. Not a huge deal since
+// they can just try again, but worth knowing if you're debugging angry user reports.
 const STATE_STORE_MAX_SIZE = 1000;
 const stateStore = new Map<string, { created: number }>();
 
@@ -60,8 +63,15 @@ interface RateLimitEntry {
   resetAt: number;
 }
 
-// Rate limit constants - defined locally since this is a standalone server
-// and doesn't import from ../lib/constants.ts to keep dependencies minimal
+/*
+ * Rate limit constants - duplicated here instead of importing from ../lib/constants.ts
+ * because this server is meant to be runnable standalone. Fewer imports = fewer things
+ * that can break when you're just trying to debug OAuth at 2am.
+ *
+ * These numbers are conservative. 10 requests/minute is more than enough for normal
+ * users, and 5 OAuth attempts per 5 minutes stops brute-force attempts without being
+ * annoying to legitimate users who fat-finger something.
+ */
 const RATE_LIMIT_WINDOW_MS = 60 * 1000; // 1 minute
 const RATE_LIMIT_MAX_REQUESTS = 10;
 const OAUTH_RATE_LIMIT_WINDOW_MS = 5 * 60 * 1000; // 5 minutes
@@ -129,6 +139,12 @@ function sendRateLimitResponse(res: http.ServerResponse, retryAfterSeconds: numb
 
 /**
  * Evict oldest entries from a Map when it exceeds maxSize
+ *
+ * WHY we do a full sort instead of tracking insertion order separately:
+ * Maps iterate in insertion order, but rate limit entries get updated in-place
+ * (count++), so we can't rely on insertion order = age order. The sort overhead
+ * is negligible since this only runs when we hit capacity (10k entries), and
+ * even then we're sorting timestamps, not doing I/O.
  */
 function evictOldestEntries<K, V extends { created?: number; resetAt?: number }>(
   map: Map<K, V>,
@@ -181,6 +197,8 @@ function validateState(state: string): boolean {
 
 /**
  * Escape HTML special characters to prevent XSS attacks
+ *
+ * Yes, there are libraries for this. No, we don't need one for five replace() calls.
  */
 function escapeHtml(unsafe: string): string {
   return unsafe
@@ -250,6 +268,11 @@ async function getCurrentUser(accessToken: string): Promise<{ id: string; userna
 /**
  * Set the user's role connection metadata
  * This is what makes them qualify for the Linked Role
+ *
+ * GOTCHA: The metadata keys here must EXACTLY match what's registered in the
+ * Discord Developer Portal under "Linked Roles". If you add a new key here
+ * without registering it, Discord silently ignores it. No error, no warning,
+ * just... nothing happens. Ask me how I know.
  */
 async function setRoleConnection(
   accessToken: string,
@@ -283,6 +306,11 @@ async function setRoleConnection(
 
 /**
  * Simple HTML response helper with security headers
+ *
+ * The CSP is intentionally strict: no scripts, no external resources. We're just
+ * serving static success/error pages. If someone complains they want analytics
+ * or fancy JS on these pages, politely remind them this is an OAuth callback
+ * endpoint, not a web app.
  */
 function sendHtml(res: http.ServerResponse, status: number, html: string) {
   res.writeHead(status, {
@@ -300,6 +328,9 @@ function sendHtml(res: http.ServerResponse, status: number, html: string) {
 async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse) {
   const url = new URL(req.url ?? "/", `http://localhost:${PORT}`);
   const pathname = url.pathname;
+  // GOTCHA: If you're behind a reverse proxy (nginx, cloudflare, etc.), this is
+  // the proxy's IP, not the user's. You'd need to trust X-Forwarded-For instead.
+  // We don't do that here because we're running this standalone on a non-proxied port.
   const clientIp = req.socket.remoteAddress || "unknown";
 
   logger.info({ method: req.method, pathname }, "[linkedRoles] HTTP request");
@@ -381,9 +412,11 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
     }
 
     // Handle OAuth2 callback with code
-    // At this point, code is guaranteed to be a string (we've handled !code && !error, and error cases)
+    // TypeScript can't prove that code is non-null here because it doesn't track
+    // the relationship between the early returns above. This is a known limitation.
+    // The check is basically dead code, but it makes tsc happy without needing
+    // a non-null assertion that would be harder to audit.
     if (!code) {
-      // This should never happen due to the flow above, but TypeScript needs it
       sendHtml(res, 400, "<html><body>Invalid request: missing code</body></html>");
       return;
     }
@@ -397,8 +430,10 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
       logger.info({ username: user.global_name ?? user.username, userId: user.id }, "[linkedRoles] User authenticated");
 
       logger.debug("[linkedRoles] Setting role connection metadata");
+      // WHY is_developer = 1 and not true? Discord's metadata API uses integers
+      // for boolean fields (1 = true, 0 = false). Don't ask, just accept it.
       await setRoleConnection(tokens.access_token, user.global_name ?? user.username, {
-        is_developer: 1, // Boolean true = 1
+        is_developer: 1,
       });
 
       logger.info({ username: user.global_name ?? user.username }, "[linkedRoles] Role connection set successfully");
@@ -467,8 +502,14 @@ const server = http.createServer((req, res) => {
   });
 });
 
-// Periodic cleanup of expired state tokens and rate limit entries (every minute)
-// .unref() allows Node.js to exit even if this interval is still pending
+/*
+ * Periodic cleanup of expired entries. Without this, the Maps would only grow
+ * (entries get added on every request, but only removed when checked or evicted).
+ * The cleanup runs every minute which is aggressive, but these are tiny objects
+ * and the iteration is cheap. Better to clean up often than accumulate garbage.
+ *
+ * .unref() is crucial - without it, this interval keeps the process alive forever.
+ */
 const cleanupInterval = setInterval(() => {
   const now = Date.now();
 
@@ -496,6 +537,9 @@ const cleanupInterval = setInterval(() => {
 cleanupInterval.unref();
 
 // Graceful shutdown handler
+// NOTE: Only handles SIGTERM, not SIGINT (Ctrl+C). PM2 sends SIGTERM, so that's
+// what we care about in production. If you're testing locally and Ctrl+C doesn't
+// shut down cleanly, that's why.
 process.on("SIGTERM", () => {
   logger.info("[linkedRoles] Received SIGTERM, shutting down");
   clearInterval(cleanupInterval);

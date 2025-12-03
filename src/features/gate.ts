@@ -56,6 +56,12 @@ import { isPanicMode } from "./panicStore.js";
 // Discord modal limits - these are API-enforced, not arbitrary.
 // See: https://discord.com/developers/docs/interactions/message-components#text-inputs
 const DEFAULT_ANSWER_MAX_LENGTH = 1000;
+/*
+ * GOTCHA: INPUT_MAX_LENGTH and LABEL_MAX_LENGTH are different things.
+ * INPUT_MAX_LENGTH is how much text the user can type (1000 chars).
+ * LABEL_MAX_LENGTH is how long the question label can be (45 chars).
+ * Confuse these and Discord throws cryptic "Invalid Form Body" errors.
+ */
 const INPUT_MAX_LENGTH = 1000;
 
 /**
@@ -69,7 +75,9 @@ function getAnswerMaxLength(guildId: string): number {
 }
 const LABEL_MAX_LENGTH = 45;    // Discord enforces 45 chars max for labels
 const PLACEHOLDER_MAX_LENGTH = 100;
-const BRAND_COLOR = 0x22ccaa;   // Teal - matches server branding
+// WHY teal? Because that's what the designer picked in 2022. Don't change it
+// unless you want to hear about it in every staff meeting for six months.
+const BRAND_COLOR = 0x22ccaa;
 // Footer text doubles as a sentinel for identifying our gate messages when searching.
 // Keep both legacy and current values so we can still find old gate entries after updates.
 const GATE_ENTRY_FOOTER = "If you're having issues DM an online moderator.";
@@ -121,6 +129,9 @@ function getQuestions(guildId: string): GateQuestion[] {
  * Discord modals allow max 5 inputs per modal. When we have more than 5 questions,
  * we need to split them across multiple "pages". Each page becomes its own modal.
  * pageSize defaults to 5 (the Discord max) but is parameterized for testing.
+ *
+ * EDGE CASE: If a guild has 0 questions configured, this returns an empty array.
+ * Callers must handle that - don't just blindly access pages[0].
  */
 function paginate(questions: GateQuestion[], pageSize = 5): QuestionPage[] {
   if (pageSize <= 0) throw new Error("pageSize must be positive");
@@ -132,6 +143,11 @@ function paginate(questions: GateQuestion[], pageSize = 5): QuestionPage[] {
   return pages;
 }
 
+/*
+ * The customId format "v1:modal:{appId}:p{pageIndex}" is load-bearing.
+ * The modal submit handler parses this to find the app and page.
+ * If you change this format, update handleGateModalSubmit's regex too.
+ */
 function buildModalForPage(
   page: QuestionPage,
   draftAnswersMap: Map<number, string>,
@@ -212,6 +228,15 @@ function getOrCreateDraft(db: BetterSqliteDatabase, guildId: string, userId: str
   const id = randomUUID();
   const code = shortCode(id);
 
+  /*
+   * Short code collision cleanup - yes, this is ugly, and yes, we need it.
+   * shortCode() truncates UUIDs to 8 chars for readability. With enough apps,
+   * collisions happen. We only delete TERMINAL apps (approved/rejected/kicked)
+   * to free up the code for reuse. Active apps keep their codes.
+   *
+   * "But why not just use longer codes?" Because staff yells "ABC12345" over
+   * voice chat during busy review sessions, and 8 chars is already pushing it.
+   */
   // Delete any resolved application with the same shortCode to allow reuse
   // Only deletes terminal statuses (approved, rejected, kicked)
   // Active apps (draft, submitted, needs_info) are never deleted
@@ -262,6 +287,12 @@ function getDraft(db: BetterSqliteDatabase, appId: string, ctx?: CmdCtx) {
   return { application: app, responses };
 }
 
+/*
+ * Why so many SQL lookups just to save one answer? Trust issues, mostly.
+ * We verify the app exists, then verify the question exists for this guild,
+ * THEN we write. Yes, it's 3 queries where 1 might work. But the debugging
+ * time saved when something goes wrong is worth the extra roundtrips.
+ */
 function upsertAnswer(
   db: BetterSqliteDatabase,
   appId: string,
@@ -434,6 +465,10 @@ async function waitForReviewCardMapping(
  *
  * The scan result updates the review card asynchronously - staff see the avatar
  * score appear after initial card creation.
+ *
+ * GOTCHA: The nested try-catch here looks paranoid, but setImmediate swallows
+ * unhandled rejections differently than you'd expect. The outer catch handles
+ * sync errors in callback setup, inner handles async errors. Don't simplify.
  */
 function queueAvatarScan(params: {
   appId: string;
@@ -550,6 +585,9 @@ function queueAvatarScan(params: {
   });
 }
 
+// Parses "v1:start:p2" -> 2, "v1:start" -> 0. Falls back to page 0 if parsing fails.
+// The "v1:" prefix is for versioning - if we ever need to change the format,
+// we can add v2: handlers without breaking existing button interactions.
 function parsePage(customId: string): number {
   const match = customId.match(/^v1:start(?::p(\d+))?/);
   if (match && match[1]) return Number.parseInt(match[1], 10);
@@ -681,6 +719,13 @@ export function buildGateEntryPayload(options: {
   return { embeds: [embed], components, files: [banner] };
 }
 
+/*
+ * These two functions (messageHasStartButton + messageHasGateFooter) together
+ * identify "our" gate messages. We check both because:
+ * 1. Other bots might have "v1:start" buttons (unlikely but possible)
+ * 2. Our own non-gate messages might have similar structures
+ * Belt and suspenders. The footer is the stronger signal.
+ */
 function messageHasStartButton(message: Message) {
   return message.components.some((row) => {
     if (!("components" in row)) return false;
@@ -983,6 +1028,10 @@ export async function ensureGateEntry(
  *
  * Key constraint: Must show modal within 3 seconds or Discord kills the interaction.
  * We do minimal validation before showModal, deferring heavy work to modal submit.
+ *
+ * PERFORMANCE NOTE: getOrCreateDraft does a few DB queries, but they're sync
+ * (better-sqlite3) so they complete in <10ms typically. If this ever becomes
+ * a bottleneck, the getQuestions call is the one to cache - it rarely changes.
  */
 export async function handleStartButton(interaction: ButtonInteraction) {
   try {
@@ -1208,6 +1257,12 @@ export async function handleGateModalSubmit(
     return;
   }
 
+  /*
+   * Transaction wrapper here is critical. Without it, a crash mid-save could
+   * leave the app in a weird partial state (some answers saved, some not).
+   * Users would see "saved page 2" but only half their answers actually persisted.
+   * Ask me how I know. (Actually don't, it was a bad week.)
+   */
   ctx.step("persist_page");
   const save = db.transaction((rows: typeof answersOnPage) => {
     for (const row of rows) {
@@ -1288,6 +1343,9 @@ export async function handleGateModalSubmit(
   }
 
   // Ensure review card is created (fire-and-forget)
+  // GOTCHA: This is NOT fire-and-forget - we await it. The comment lies.
+  // We need the review card to exist before we tell the user "submitted"
+  // because staff might see the card before this function returns.
   try {
     await ensureReviewMessage(interaction.client, draftRow.id);
   } catch (err) {
@@ -1310,6 +1368,10 @@ export async function handleGateModalSubmit(
   });
 }
 
+// The simplest handler in this file. User clicks Done, we remove the buttons.
+// The fallback to deferUpdate is for edge cases where update() fails
+// (interaction expired, message deleted, etc). Silently eating the error
+// is fine here - the user got their confirmation, we're just cleaning up.
 export async function handleDoneButton(interaction: ButtonInteraction) {
   try {
     await interaction.update({ components: [] });

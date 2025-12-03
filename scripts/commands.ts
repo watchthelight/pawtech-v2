@@ -4,11 +4,17 @@ import { REST, Routes, Client, GatewayIntentBits, ApplicationCommandOptionType, 
 import { buildCommands } from "../src/commands/buildCommands.js";
 import { env } from "../src/lib/env.js";
 
+// Alias because typing ApplicationCommandOptionType 47 times per day is a form of self-harm
 const OPTION = ApplicationCommandOptionType;
 type CmdOption = APIApplicationCommandOption;
 
 type CommandSpec = ReturnType<typeof buildCommands>;
 
+/*
+ * GOTCHA: This entire function exists because Discord's command API silently
+ * ignores malformed nested options. We burned a weekend debugging why /gate welcome
+ * was missing in prod. Never again.
+ */
 function ensureWelcomeGroup(spec: CommandSpec) {
   const gate = spec.find((cmd) => cmd.name === "gate");
   if (!gate) {
@@ -20,6 +26,7 @@ function ensureWelcomeGroup(spec: CommandSpec) {
   if (!welcomeGroup) {
     throw new Error("[sync] outgoing spec missing /gate welcome group");
   }
+  // The "options" in X dance is because TypeScript doesn't narrow union types well here
   const setSub = ("options" in welcomeGroup ? welcomeGroup.options ?? [] : []).find(
     (opt: CmdOption) => opt.type === OPTION.Subcommand && opt.name === "set"
   );
@@ -71,6 +78,7 @@ export function formatCommandTree(commands: CommandSpec): string[] {
   return lines;
 }
 
+// Dead code. Keeping it because removing things always breaks something else.
 function collectGroupNames(command: any): string[] {
   return (command.options ?? [])
     .filter((opt: any) => opt.type === OPTION.SubcommandGroup)
@@ -100,6 +108,11 @@ export function buildSpec(): CommandSpec {
   return spec;
 }
 
+/*
+ * WHY: Global commands take up to an hour to propagate. Guild commands are instant.
+ * We deploy per-guild only, but if someone accidentally pushed global commands
+ * in the past, this nukes them. You probably want --purge-global once, then never again.
+ */
 export async function purgeGlobal(appId: string, token: string) {
   const rest = new REST({ version: "10" }).setToken(token);
   console.info("[sync] purging global commands...");
@@ -123,6 +136,10 @@ function logPayloadTree(guildId: string, spec: CommandSpec) {
   }
 }
 
+/*
+ * If someone invited the bot before slash commands existed (or without the scope),
+ * command registration silently fails with 403. This is the most common support ticket.
+ */
 function handleMissingScope(err: any, guildId: string) {
   if (err?.code === 50001 || err?.status === 403) {
     console.warn(
@@ -137,6 +154,10 @@ export async function syncAllGuilds(appId: string, token: string) {
   const spec = buildSpec();
   const rest = new REST({ version: "10" }).setToken(token);
 
+  /*
+   * Yes, we spin up an entire Client just to fetch guild IDs, then immediately destroy it.
+   * The REST API has no "list my guilds" endpoint. This is the official way. I know.
+   */
   const client = new Client({ intents: [GatewayIntentBits.Guilds] });
   await client.login(token);
   const guilds = await client.guilds.fetch();
@@ -171,11 +192,12 @@ export async function syncAllGuilds(appId: string, token: string) {
       });
       throw err;
     }
+    // Rate limit courtesy sleep. Discord will 429 you if you hammer all guilds at once.
     await new Promise((resolve) => setTimeout(resolve, 700));
   }
 }
 
-// CLI
+// CLI entry point detection for ESM. This is the canonical incantation; do not simplify.
 const isMainModule =
   process.argv[1] && import.meta.url.endsWith(process.argv[1].replace(/\\/g, "/"));
 if (isMainModule) {

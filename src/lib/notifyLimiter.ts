@@ -21,6 +21,8 @@ interface RateLimitCheck {
 }
 
 // Maximum timestamps to keep per guild (prevents memory exhaustion between cleanup cycles)
+// 100 is way more than the default 10/hour cap, so in normal operation we'll never hit this.
+// It's here for the "someone set max_per_hour to 9999" scenario.
 const MAX_TIMESTAMPS_PER_GUILD = 100;
 
 interface GuildNotifyState {
@@ -75,7 +77,7 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
 
     const guildState = this.state.get(guildId);
 
-    // Check cooldown
+    // Check cooldown first - it's the cheaper check (O(1) vs O(n) for hourly cap)
     if (guildState) {
       const timeSinceLastNotify = now - guildState.lastNotifyAt;
       if (timeSinceLastNotify < cooldownMs) {
@@ -110,6 +112,12 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
    */
   recordNotify(guildId: string): void {
     const now = Date.now();
+    /*
+     * The || here means we create fresh state on first access.
+     * Edge case: if someone calls recordNotify without calling canNotify first,
+     * they'll bypass the rate limit check entirely. The interface doesn't enforce
+     * ordering, so this is a trust-the-caller situation. Document it and move on.
+     */
     const guildState = this.state.get(guildId) || { timestamps: [], lastNotifyAt: 0 };
 
     // No deduplication - callers are responsible for only calling this after
@@ -143,7 +151,9 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
       const recentTimestamps = state.timestamps.filter((ts) => ts > oneHourAgo);
 
       if (recentTimestamps.length === 0 && now - state.lastNotifyAt > 60 * 60 * 1000) {
-        // No recent activity, remove guild
+        // No recent activity, remove guild entirely.
+        // The 1-hour grace period prevents thrashing for guilds that notify regularly
+        // but happen to have quiet moments.
         this.state.delete(guildId);
         cleanedGuilds++;
       } else {
@@ -161,6 +171,8 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
    * WHAT: Stop cleanup interval (for tests/shutdown)
    * WHY: Prevent memory leaks
    */
+  // Learned this the hard way: tests hang without this. Jest sits there waiting
+  // for the interval to complete, which is never, because it runs forever.
   destroy(): void {
     if (this.cleanupInterval) {
       clearInterval(this.cleanupInterval);
@@ -175,6 +187,8 @@ export class InMemoryNotifyLimiter implements INotifyLimiter {
  *
  * MULTI-INSTANCE: This in-memory implementation does not coordinate across bot instances
  */
+// Yes, this is a singleton. No, I'm not proud of it. But the alternative is passing
+// a limiter instance through 15 layers of function calls, and life is too short.
 export const notifyLimiter: INotifyLimiter = new InMemoryNotifyLimiter();
 
 logger.info("[notifyLimiter] initialized in-memory rate limiter");

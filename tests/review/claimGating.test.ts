@@ -20,11 +20,12 @@ import {
 } from "../../src/features/review.js";
 import { shortCode } from "../../src/lib/ids.js";
 
+/*
+ * The review UI is stateful: what buttons you see depends on whether someone
+ * has claimed the application. This prevents the "two mods click Accept at
+ * the same time and now we have duplicate welcome messages" scenario.
+ */
 describe("review decision buttons", () => {
-  /**
-   * Unclaimed apps only show the Claim button. This is the first state any
-   * application is in when it enters the review queue.
-   */
   it("shows only Claim when unclaimed", () => {
     const rows = buildDecisionComponents("submitted", "app-123", "user-123", null);
     expect(rows).toHaveLength(1);
@@ -94,9 +95,12 @@ describe("review decision buttons", () => {
   });
 });
 
-/**
+/*
  * claimGuard is the authorization check that runs before any decision action.
- * It ensures the user clicking the button is the same one who claimed the app.
+ * Returns null to proceed, or an error message to show the user.
+ *
+ * Why null instead of boolean? Because the error message includes context
+ * (who has the claim) that the caller would otherwise need to reconstruct.
  */
 describe("claim guard", () => {
   /**

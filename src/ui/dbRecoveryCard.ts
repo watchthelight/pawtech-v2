@@ -38,6 +38,9 @@ const COLORS = {
 /**
  * Format bytes as human-readable size
  */
+// GOTCHA: This will return "Infinity GB" if you pass a negative number.
+// The Math.log of a negative is NaN, but the floor of NaN is 0, and pow(1024, 0) is 1.
+// Just... don't pass negatives, okay?
 function formatBytes(bytes: number): string {
   if (bytes === 0) return "0 B";
   const k = 1024;
@@ -49,6 +52,8 @@ function formatBytes(bytes: number): string {
 /**
  * Wrap text at ~80 characters for embed reasons
  */
+// WHY 80? Discord embeds render wider than that, but 80 is the sweet spot
+// where text looks good on both desktop AND mobile without weird line breaks.
 function wrapText(text: string, maxLen = 80): string {
   if (text.length <= maxLen) return text;
 
@@ -141,6 +146,9 @@ export function buildCandidateListEmbed(
       });
     });
 
+    // WHY 10? Discord embeds have a 25-field limit, but 10 is where it starts to
+    // feel like a CVS receipt on mobile. If you have more than 10 backups lying
+    // around, you probably have bigger problems to solve.
     if (candidates.length > 10) {
       embed.addFields({
         name: `\u200b`,
@@ -286,6 +294,9 @@ export function buildRestoreSummaryEmbed(
   });
 
   // Pre-restore backup
+  // GOTCHA: The regex split handles both Unix (/) and Windows (\) path separators.
+  // This matters because developers on Windows can test restore locally before deploying
+  // to the Linux server. Yes, this has bitten us before.
   if (result.preRestoreBackupPath) {
     const backupFilename = result.preRestoreBackupPath.split(/[\\/]/).pop() || "unknown";
     embed.addFields({
@@ -354,6 +365,10 @@ export function buildRestoreSummaryEmbed(
  * @param nonce - Random nonce for custom ID security
  * @returns ActionRowBuilder with buttons
  */
+// SECURITY: The nonce prevents button hijacking. Without it, a malicious user could
+// craft a button interaction with a guessed candidateId. The nonce is generated per-message
+// and validated on click. If someone complains "my buttons stopped working", the nonce
+// probably changed when the embed was refreshed.
 export function buildCandidateActionRow(
   candidateId: string,
   nonce: string
@@ -371,6 +386,9 @@ export function buildCandidateActionRow(
       .setStyle(ButtonStyle.Secondary)
       .setEmoji("🧪"),
 
+    // WHY Danger style? Because clicking this replaces the entire database.
+    // The red color and warning emoji are not decorative. They are a speed bump
+    // for the person who's about to make a Very Permanent Decision.
     new ButtonBuilder()
       .setCustomId(`dbrecover:restore-confirm:${candidateId}:${nonce}`)
       .setLabel("Restore (Confirm)")

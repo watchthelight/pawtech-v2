@@ -40,6 +40,9 @@ export async function postWelcomeCard(opts: {
   }
 
   // 2) Fetch and validate channel
+  // GOTCHA: guild.channels.fetch() can return null even for valid IDs if the bot
+  // was recently added or the cache is cold. The isTextBased() check is necessary
+  // because Voice channels also have IDs that look identical to text channel IDs.
   let channel: GuildTextBasedChannel;
   try {
     const fetched = await guild.channels.fetch(channelId);
@@ -61,6 +64,8 @@ export async function postWelcomeCard(opts: {
     const missingPerms: string[] = [];
 
     // EmbedLinks required for rich embed, AttachFiles for the banner.webp attachment
+    // WHY check all four? Because Discord's error messages are useless. If you're missing
+    // EmbedLinks, the API just says "Missing Permissions" with no indication of which one.
     if (!perms?.has(PermissionFlagsBits.ViewChannel)) missingPerms.push("ViewChannel");
     if (!perms?.has(PermissionFlagsBits.SendMessages)) missingPerms.push("SendMessages");
     if (!perms?.has(PermissionFlagsBits.EmbedLinks)) missingPerms.push("EmbedLinks");
@@ -76,6 +81,8 @@ export async function postWelcomeCard(opts: {
   }
 
   // 4) Build message content (pings for user + optional extra role)
+  // The ping happens here in content, NOT in the embed description. This is intentional:
+  // Discord only sends notifications for mentions in the content field, not embed text.
   const contentParts = [`<@${user.id}>`];
   if (config.welcome_ping_role_id) {
     contentParts.push(`<@&${config.welcome_ping_role_id}>`);
@@ -101,8 +108,10 @@ export async function postWelcomeCard(opts: {
   descriptionLines.push("", "✅ Enjoy your stay!", "", "_Bot by watchthelight._");
 
   // 6) Build embed matching screenshot requirements
+  // Using APIEmbed (plain object) instead of EmbedBuilder because we're constructing
+  // a static embed. EmbedBuilder is overkill when you're not chaining methods.
   const embed: APIEmbed = {
-    color: 0x00c2ff,
+    color: 0x00c2ff,  // This cyan matches the brand. Don't change it on a whim.
     author: {
       name: guild.name,
       icon_url: guild.iconURL({ size: 128 }) ?? undefined,
@@ -117,6 +126,9 @@ export async function postWelcomeCard(opts: {
   // 7) Attach banner file
   // Path is relative to working directory (project root). If the bot runs from a different cwd,
   // this will fail. Consider using __dirname or an absolute path for robustness.
+  // GOTCHA: The file is sent with every welcome message. If the server is busy with approvals,
+  // this could be a lot of bandwidth. Discord does CDN the attachment, but the upload happens
+  // every time. For a high-volume server, consider hosting the banner externally and using a URL.
   const files = [{ attachment: "./assets/banner.webp", name: "banner.webp" }];
 
   // 8) Send message with allowed mentions limited to the specific user and role

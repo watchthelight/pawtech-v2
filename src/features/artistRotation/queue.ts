@@ -26,9 +26,15 @@ import type {
   SyncResult,
 } from "./types.js";
 
-// ============================================================================
-// Prepared Statements (cached at module load for performance)
-// ============================================================================
+/*
+ * ============================================================================
+ * Prepared Statements (cached at module load for performance)
+ * ============================================================================
+ *
+ * WHY all these prepared statements at module level? better-sqlite3 compiles
+ * SQL on .prepare(), so we do it once at startup. Every query after that just
+ * binds params and executes. Measurable improvement when processing many artists.
+ */
 
 const getQueueLengthStmt = db.prepare(
   `SELECT COUNT(*) as count FROM artist_queue WHERE guild_id = ?`
@@ -54,6 +60,8 @@ const deleteArtistStmt = db.prepare(
   `DELETE FROM artist_queue WHERE guild_id = ? AND user_id = ?`
 );
 
+// When we remove an artist, everyone after them slides up. This makes
+// positions contiguous (1, 2, 3...) rather than sparse (1, 3, 4...).
 const reorderPositionsAfterRemovalStmt = db.prepare(
   `UPDATE artist_queue SET position = position - 1 WHERE guild_id = ? AND position > ?`
 );
@@ -66,6 +74,8 @@ const getAllArtistsStmt = db.prepare(
   `SELECT * FROM artist_queue WHERE guild_id = ? ORDER BY position ASC`
 );
 
+// The core query: who's next? Lowest position, not on break.
+// LIMIT 1 because we only care about the next person up.
 const getNextArtistStmt = db.prepare(
   `SELECT user_id, position, assignments_count, last_assigned_at
    FROM artist_queue
@@ -78,6 +88,10 @@ const getArtistPositionStmt = db.prepare(
   `SELECT position FROM artist_queue WHERE guild_id = ? AND user_id = ?`
 );
 
+/*
+ * Position shifting for reordering. Moving an artist requires shifting
+ * everyone in between. Think of it like people in a line shuffling over.
+ */
 const shiftPositionsUpStmt = db.prepare(
   `UPDATE artist_queue SET position = position - 1
    WHERE guild_id = ? AND position > ? AND position <= ?`
@@ -193,6 +207,10 @@ export function addArtist(guildId: string, userId: string): number | null {
  * WHAT: Remove an artist from the queue and reorder positions.
  * WHY: When someone loses the Server Artist role, remove them from rotation.
  * SECURITY: Uses transaction to ensure DELETE and position reorder happen atomically.
+ *
+ * GOTCHA: We return their assignment count so callers can log stats about
+ * their tenure. Don't skip this - it's useful for the departure embed.
+ *
  * @returns The artist's assignment count before removal, or null if not found
  */
 export function removeArtist(guildId: string, userId: string): number | null {
@@ -275,7 +293,8 @@ export function moveToPosition(guildId: string, userId: string, newPosition: num
   const currentPosition = artist.position;
   const maxPosition = getMaxPosition(guildId);
 
-  // Clamp to valid range
+  // Clamp to valid range. No position 0, no position beyond the queue.
+  // If someone asks for position 999 in a 5-person queue, they get position 5.
   const targetPosition = Math.max(1, Math.min(newPosition, maxPosition));
 
   if (currentPosition === targetPosition) {
@@ -343,7 +362,10 @@ export function incrementAssignments(guildId: string, userId: string): void {
  * processAssignment
  * WHAT: Atomically move artist to end of queue and increment assignment count.
  * WHY: Prevents race conditions when multiple assignments happen simultaneously.
- * SECURITY: Uses transaction to ensure queue position and assignment count are updated atomically.
+ *
+ * This is the most important function in the rotation system. Without the
+ * transaction, two simultaneous /redeemreward commands could both see the
+ * same "next artist" and create duplicate assignments. Ask me how I know.
  *
  * @param guildId - Guild ID
  * @param userId - Artist user ID
@@ -367,7 +389,12 @@ export function processAssignment(
     const currentPosition = artist.position;
     const maxPosition = getMaxPosition(guildId);
 
-    // 2. Move artist to end (only if not already there)
+    /*
+     * 2. Move artist to end (only if not already there)
+     *
+     * Edge case: If there's only one artist, currentPosition == maxPosition
+     * and we skip this entirely. That's fine - they're already "at the end".
+     */
     if (currentPosition !== maxPosition) {
       // Move everyone after this artist up by 1
       shiftPositionsAfterStmt.run(guildId, currentPosition);
@@ -466,6 +493,11 @@ export function getArtistStats(
  * syncWithRoleMembers
  * WHAT: Sync the queue with a list of user IDs who have the Server Artist role.
  * WHY: Ensure queue matches reality - add missing, remove stale entries.
+ *
+ * Call this when you suspect the queue has drifted from reality. Common causes:
+ * - Bot was offline when roles changed
+ * - Manual database edits
+ * - Discord's PartialGuildMember nonsense (see roleSync.ts GOTCHA)
  */
 export function syncWithRoleMembers(guildId: string, roleHolderIds: string[]): SyncResult {
   const currentQueue = getAllArtists(guildId);
@@ -476,7 +508,8 @@ export function syncWithRoleMembers(guildId: string, roleHolderIds: string[]): S
   const removed: string[] = [];
   const unchanged: string[] = [];
 
-  // Add missing artists
+  // Add missing artists. They go to the end of the queue - fair is fair,
+  // even if they "should" have been added earlier.
   for (const userId of roleHolderIds) {
     if (!currentIds.has(userId)) {
       addArtist(guildId, userId);
@@ -486,7 +519,8 @@ export function syncWithRoleMembers(guildId: string, roleHolderIds: string[]): S
     }
   }
 
-  // Remove artists who no longer have the role
+  // Remove artists who no longer have the role. Their stats are preserved
+  // in artist_assignment_log if anyone cares about historical data.
   for (const artist of currentQueue) {
     if (!roleHolderSet.has(artist.user_id)) {
       removeArtist(guildId, artist.user_id);
