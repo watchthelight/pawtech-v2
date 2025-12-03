@@ -5,7 +5,44 @@ All notable changes to Pawtropolis Tech will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
-## [Unreleased]
+## [4.7.0] - 2025-12-03
+
+### Added
+
+- **Interactive Help System** - Comprehensive `/help` command with intelligent navigation and search:
+  - **Full command coverage**: Detailed documentation for all 30+ commands with examples, options, and workflow tips
+  - **Category browsing**: 9 categories (Gate, Config, Moderation, Queue, Analytics, Messaging, Roles, Artist, System)
+  - **Intelligent search**: Full-text search across command names, aliases, descriptions, and subcommands
+  - **Search modal**: Button-triggered modal for entering search queries
+  - **Autocomplete**: Permission-filtered suggestions as you type in `/help command:`
+  - **Permission-aware**: Commands filtered based on user roles - only shows what you can access
+  - **Quick vs Full mode**: Toggle between concise overview and detailed documentation
+  - **Smart workflow tips**: Contextual suggestions like "Check /listopen for your next review"
+  - **Related commands**: One-click navigation to related commands
+  - **Mobile-friendly**: All content in embed descriptions for optimal mobile display
+
+- **Movie Attendance Intelligence** - Enhanced movie night tracking with crash recovery and manual adjustments:
+  - **Late start handling**: Users already in the voice channel when `/movie start` is run are now automatically credited
+  - **Crash recovery**: Sessions are persisted to database every 5 minutes and recovered on bot restart
+  - **`/movie add @user <minutes> [reason]`**: Manually add minutes to a user's current event attendance
+  - **`/movie credit @user <date> <minutes> [reason]`**: Credit attendance to any past event date
+  - **`/movie bump @user [date] [reason]`**: Give a user full qualified credit for compensation
+  - **`/movie resume`**: Check status of recovered session after bot restart
+  - Audit logging for all manual adjustments with actor tracking and reason fields
+  - New database tables: `active_movie_events`, `active_movie_sessions` for persistence
+  - New columns in `movie_attendance`: `adjustment_type`, `adjusted_by`, `adjustment_reason`
+
+- **AI Detection Setup Wizard** - New `/config isitreal` command for interactive API key configuration:
+  - Visual dashboard showing all 4 services (Hive, Illuminarty, SightEngine, Optic) with health status
+  - One-click setup buttons for each service with modal dialogs to enter API keys
+  - Automatic key validation and testing before saving
+  - Direct .env file injection with runtime hot-reload (no bot restart required)
+  - Access limited to server owner, community managers (leadership role), and bot owner
+  - Links to signup pages for each service
+
+---
+
+## [4.6.0] - 2025-12-03
 
 ### Added
 
@@ -16,6 +53,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Ephemeral response for staff-only visibility
   - Permission controlled via `mod_role_ids` guild config (same as other staff commands)
   - New environment variables: `HIVE_API_KEY`, `SIGHTENGINE_API_USER`, `SIGHTENGINE_API_SECRET`, `OPTIC_API_KEY` (all optional)
+
+### Documentation
+
+- **Handbook Cross-Linking** - Added "Related Documentation" sections to all handbooks:
+  - `BOT-HANDBOOK.md` - Links to MOD-HANDBOOK, MOD-QUICKREF, CHANGELOG
+  - `docs/MOD-HANDBOOK.md` - Links to BOT-HANDBOOK, MOD-QUICKREF, CHANGELOG
+  - `MOD-QUICKREF.md` - Links to both handbooks and changelog, added Audit & Detection Tools section
+  - `docs/README.md` - Added Staff Handbooks section, fixed broken roadmap link
+  - `docs/reference/slash-commands.md` - Added note pointing to BOT-HANDBOOK for user-friendly docs
+- Fixed outdated permission reference in BOT-HANDBOOK (removed `/suggest` which was removed in v4.3.0)
+- Updated "Last revised" dates
+
+### Removed
+
+- **Dead Code Cleanup** (~1,400 lines removed):
+  - `src/lib/auditHelper.ts` - Never imported anywhere (~132 lines)
+  - `src/lib/startupHealth.ts` - Never imported anywhere (~300 lines)
+  - `src/lib/validation.ts` - Never imported anywhere (~132 lines, was added in 4.5.0 but never integrated)
+  - `src/lib/retry.ts` - Removed unused `CircuitBreaker` class and `CircuitBreakerOpenError` (~240 lines)
+  - `src/db/ensure.ts` - Removed `ensureActionLogAnalyticsIndex()` (duplicate of index created in db.ts)
+  - `src/db/db.ts` - Removed obsolete `dm_bridge` table creation (superseded by `modmail_bridge`)
+  - 14 obsolete `.sql` migration files (~639 lines) - Migration runner only processes `.ts` files
+- Fixed duplicate migration number: renamed `034_drop_unused_tables.ts` to `035_drop_unused_tables.ts`
+- Removed unused `PermissionFlagsBits` import from `src/commands/search.ts`
 
 ### Chores
 
@@ -693,7 +754,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ---
 
-[Unreleased]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.5.0...HEAD
+[4.7.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.6.0...v4.7.0
+[4.6.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.5.0...v4.6.0
 [4.5.0]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.4...v4.5.0
 [4.4.4]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.3...v4.4.4
 [4.4.3]: https://github.com/pawtropolis/pawtropolis-tech/compare/v4.4.2...v4.4.3

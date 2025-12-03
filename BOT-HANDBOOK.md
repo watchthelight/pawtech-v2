@@ -87,25 +87,29 @@ Everything you need to know about the bot — what it does, who can use it, and 
 - 6.6 [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
 
 ### 7. [Utility & Admin](#utility--admin)
-- 7.1 [/update](#update) — Bot presence and profile
-  - 7.1.1 [Activity Types](#activity-types)
-  - 7.1.2 [Banner Updates](#banner-updates)
-  - 7.1.3 [Avatar Updates](#avatar-updates)
-- 7.2 [/send](#send) — Post messages as the bot
-  - 7.2.1 [Understanding the Silent Option](#understanding-the-silent-option)
-- 7.3 [/purge](#purge) — Bulk delete messages
-  - 7.3.1 [How Purge Works](#how-purge-works)
-  - 7.3.2 [Important Limitations](#important-limitations)
-- 7.4 [/health](#health) — Bot status check
-- 7.5 [/activity](#activity) — Server activity heatmap
-  - 7.5.1 [What the Heatmap Shows](#what-the-heatmap-shows)
-- 7.6 [/backfill](#backfill) — Rebuild activity data
-  - 7.6.1 [When to Use Backfill](#when-to-use-backfill)
-  - 7.6.2 [How It Works](#how-it-works-2)
-- 7.7 [/poke](#poke) — Multi-channel ping (owner)
-- 7.8 [/database](#database) — Database management
-  - 7.8.1 [Database Check](#database-check)
-  - 7.8.2 [Database Recover](#database-recover)
+- 7.1 [/help](#help) — Interactive help system
+  - 7.1.1 [Browsing by Category](#browsing-by-category)
+  - 7.1.2 [Searching Commands](#searching-commands)
+  - 7.1.3 [Quick vs Full Mode](#quick-vs-full-mode)
+- 7.2 [/update](#update) — Bot presence and profile
+  - 7.2.1 [Activity Types](#activity-types)
+  - 7.2.2 [Banner Updates](#banner-updates)
+  - 7.2.3 [Avatar Updates](#avatar-updates)
+- 7.3 [/send](#send) — Post messages as the bot
+  - 7.3.1 [Understanding the Silent Option](#understanding-the-silent-option)
+- 7.4 [/purge](#purge) — Bulk delete messages
+  - 7.4.1 [How Purge Works](#how-purge-works)
+  - 7.4.2 [Important Limitations](#important-limitations)
+- 7.5 [/health](#health) — Bot status check
+- 7.6 [/activity](#activity) — Server activity heatmap
+  - 7.6.1 [What the Heatmap Shows](#what-the-heatmap-shows)
+- 7.7 [/backfill](#backfill) — Rebuild activity data
+  - 7.7.1 [When to Use Backfill](#when-to-use-backfill)
+  - 7.7.2 [How It Works](#how-it-works-2)
+- 7.8 [/poke](#poke) — Multi-channel ping (owner)
+- 7.9 [/database](#database) — Database management
+  - 7.9.1 [Database Check](#database-check)
+  - 7.9.2 [Database Recover](#database-recover)
 
 ### 8. [Permission Reference](#permission-reference)
 - 8.1 [What counts as "Staff"?](#what-counts-as-staff)
@@ -1955,6 +1959,61 @@ Control whether `/listopen` results are visible to everyone or just you.
 ## Utility & Admin
 
 General-purpose tools and admin commands. These help you maintain the bot, communicate with members, and keep things running smoothly.
+
+### `/help`
+**Who can use it:** Everyone (commands filtered by your permissions)
+
+The interactive help system for Pawtropolis Tech. It shows you every command you have access to, organized by category, with full documentation, examples, and workflow tips.
+
+**Basic usage:**
+- `/help` — Main overview with category buttons
+- `/help command:accept` — Detailed info for a specific command
+- `/help search:role` — Search all commands by keyword
+- `/help category:gate` — Browse all commands in a category
+
+#### Browsing by Category
+
+The help system organizes commands into 9 categories:
+
+| Category | What's in it |
+|----------|--------------|
+| Gate & Verification | accept, reject, kick, unclaim, gate |
+| Configuration | config (with 24+ subcommands) |
+| Moderation | audit, flag, isitreal, unblock |
+| Queue Management | listopen, search, sample |
+| Analytics | activity, approval-rate, modstats, modhistory |
+| Messaging | send, purge, poke, modmail |
+| Role Automation | roles, movie, panic |
+| Artist System | artistqueue, art, redeemreward |
+| System | health, update, database, resetdata, backfill |
+
+Click any category button to see all commands in that category. From there, use the select menu to dive into specific commands.
+
+#### Searching Commands
+
+There are three ways to search:
+
+1. **Autocomplete** — Type `/help command:` and start typing. Suggestions appear filtered by what you can access.
+2. **Keyword search** — Use `/help search:role` to find any command mentioning "role" in its name, description, or aliases.
+3. **Search modal** — Click the Search button on the overview to open a modal where you can enter your query.
+
+Search is smart — it looks at command names, aliases (like "approve" for "accept"), descriptions, and even subcommand names.
+
+#### Quick vs Full Mode
+
+Each command has two viewing modes:
+
+- **Quick Mode** (default): Shows usage, permission level, and category. Good for quick reference.
+- **Full Mode**: Shows everything — options, examples, notes, and workflow tips. Click "Full Details" to expand.
+
+The workflow tips are particularly helpful — they tell you things like "After accepting, check /listopen for your next review" to guide you through common workflows.
+
+**Pro tips:**
+- Commands you can't access won't show up at all (permission filtering)
+- Related command buttons let you quickly jump between associated commands
+- The search index is built at startup, so searches are instant
+
+---
 
 ### `/update`
 **Who can use it:** Bot Owner only

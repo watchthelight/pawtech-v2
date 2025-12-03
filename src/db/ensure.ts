@@ -750,38 +750,6 @@ export function ensureActionLogFreeText() {
 }
 
 /**
- * ensureActionLogAnalyticsIndex
- * WHAT: Creates composite index for modstats queries filtering by guild + action + time.
- * WHY: /modstats queries filter by action IN (...) - without this index, full table scan occurs.
- * DOCS:
- *  - CREATE INDEX: https://sqlite.org/lang_createindex.html
- */
-export function ensureActionLogAnalyticsIndex() {
-  try {
-    const tableExists = db
-      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='action_log'`)
-      .get();
-
-    if (!tableExists) {
-      logger.warn("[ensure] action_log table does not exist, skipping analytics index");
-      return;
-    }
-
-    // Composite index for queries like:
-    // SELECT ... FROM action_log WHERE guild_id = ? AND action IN (...) AND created_at_s >= ?
-    db.prepare(
-      `CREATE INDEX IF NOT EXISTS idx_action_log_guild_action_created
-       ON action_log(guild_id, action, created_at_s)`
-    ).run();
-
-    logger.info("[ensure] action_log analytics index ensured");
-  } catch (err) {
-    logger.error({ err }, "[ensure] failed to ensure action_log analytics index");
-    throw err;
-  }
-}
-
-/**
  * ensurePanicModeColumn
  * WHAT: Adds panic_mode and panic_enabled_at columns to guild_config table.
  * WHY: Persists panic mode state across bot restarts (was in-memory only before).

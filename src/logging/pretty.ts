@@ -54,7 +54,12 @@ export type ActionType =
   | "role_grant_skipped"
   | "role_grant_blocked"
   | "panic_enabled"
-  | "panic_disabled";
+  | "panic_disabled"
+  | "movie_tier_granted"
+  | "movie_tier_progress"
+  | "movie_manual_add"
+  | "movie_credit"
+  | "movie_bump";
 
 /**
  * Parameters for logging an action
@@ -238,6 +243,31 @@ function getActionMeta(action: ActionType): ActionMeta {
       title: "Panic Mode Disabled",
       color: 0x57f287, // Green
       emoji: "✅",
+    },
+    movie_tier_granted: {
+      title: "Movie Tier Role Granted",
+      color: 0x57f287, // Green
+      emoji: "🎬",
+    },
+    movie_tier_progress: {
+      title: "Movie Tier Progress",
+      color: 0x5865f2, // Discord blurple
+      emoji: "🎬",
+    },
+    movie_manual_add: {
+      title: "Movie Attendance Added",
+      color: 0xfee75c, // Yellow
+      emoji: "🎬",
+    },
+    movie_credit: {
+      title: "Movie Attendance Credited",
+      color: 0xfee75c, // Yellow
+      emoji: "📝",
+    },
+    movie_bump: {
+      title: "Movie Attendance Bump",
+      color: 0x57f287, // Green
+      emoji: "⬆️",
     },
   };
 

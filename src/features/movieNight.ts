@@ -5,11 +5,14 @@
  * WHY: Automates tracking VC participation and assigning tier roles
  * FLOWS:
  *  - /movie start → track VC join/leave → /movie end → assign tier roles
+ *  - Session persistence: in-memory state is periodically persisted to DB
+ *  - Crash recovery: sessions are restored from DB on startup
+ *  - Manual adjustments: /movie add, /movie credit, /movie bump
  * DOCS:
  *  - Discord.js VoiceState: https://discord.js.org/#/docs/discord.js/main/class/VoiceState
  */
 
-import type { Guild, VoiceState } from "discord.js";
+import type { Guild, VoiceBasedChannel } from "discord.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { assignRole, getRoleTiers, removeRole, type RoleAssignmentResult } from "./roleAutomation.js";
@@ -50,14 +53,17 @@ interface ActiveMovieEvent {
 // State Management
 // ============================================================================
 
-// In-memory session tracking. Intentionally NOT persisted to DB because:
-// 1. Sessions are ephemeral (only matter during active event)
-// 2. High-frequency updates (voice join/leave) would hammer the DB
-// 3. If bot crashes mid-movie, attendance is lost - acceptable tradeoff
+// Persistence interval in milliseconds (5 minutes)
+const PERSISTENCE_INTERVAL_MS = 5 * 60 * 1000;
+
+// In-memory session tracking. Persisted to DB periodically for crash recovery.
 const movieSessions = new Map<string, MovieSession>();
 
 // One active event per guild at a time. Enforced by overwriting on startMovieEvent.
 const activeEvents = new Map<string, ActiveMovieEvent>();
+
+// Persistence interval handle
+let persistenceInterval: ReturnType<typeof setInterval> | null = null;
 
 /**
  * Get the key for a session (guild:user)
@@ -92,22 +98,73 @@ function getOrCreateSession(guildId: string, userId: string): MovieSession {
  * Start tracking a movie night event. If one is already active, it gets
  * overwritten - this is intentional to allow "restarts" without explicit end.
  * Callers should check isMovieEventActive() first if they want to warn.
+ *
+ * @returns Number of users already in the VC who were credited
  */
-export function startMovieEvent(guildId: string, channelId: string, eventDate: string): void {
+export async function startMovieEvent(
+  guild: Guild,
+  channelId: string,
+  eventDate: string
+): Promise<{ retroactiveCount: number }> {
   const event: ActiveMovieEvent = {
-    guildId,
+    guildId: guild.id,
     channelId,
     eventDate,
     startedAt: Date.now(),
   };
-  activeEvents.set(guildId, event);
+  activeEvents.set(guild.id, event);
+
+  // Credit users already in the voice channel
+  const retroactiveCount = await initializeExistingVoiceMembers(guild, channelId);
+
+  // Persist immediately after start
+  persistAllSessions();
 
   logger.info({
     evt: "movie_event_started",
-    guildId,
+    guildId: guild.id,
     channelId,
     eventDate,
+    retroactiveCount,
   }, "Movie night event started");
+
+  return { retroactiveCount };
+}
+
+/**
+ * Initialize sessions for users already in the voice channel when tracking starts.
+ * Discord API doesn't expose when a user joined the VC, so we credit from now.
+ */
+async function initializeExistingVoiceMembers(
+  guild: Guild,
+  channelId: string
+): Promise<number> {
+  try {
+    const channel = await guild.channels.fetch(channelId);
+    if (!channel?.isVoiceBased()) return 0;
+
+    const voiceChannel = channel as VoiceBasedChannel;
+    let count = 0;
+
+    for (const [memberId, member] of voiceChannel.members) {
+      if (member.user.bot) continue;
+      handleMovieVoiceJoin(guild.id, memberId);
+      count++;
+    }
+
+    logger.info({
+      evt: "movie_retroactive_credit",
+      guildId: guild.id,
+      channelId,
+      userCount: count,
+    }, `Credited ${count} users already in VC`);
+
+    return count;
+  } catch (err) {
+    logger.error({ err, guildId: guild.id, channelId },
+      "Failed to initialize existing voice members");
+    return 0;
+  }
 }
 
 /**
@@ -279,6 +336,9 @@ export async function finalizeMovieAttendance(guild: Guild): Promise<void> {
   // iterate and delete only matching guild keys.
   movieSessions.clear();
   activeEvents.delete(guild.id);
+
+  // Clean up persisted session data
+  clearPersistedSessions(guild.id);
 
   logger.info({
     evt: "movie_event_finalized",
@@ -452,3 +512,403 @@ export async function updateMovieTierRole(guild: Guild, userId: string): Promise
 
   return results;
 }
+
+// ============================================================================
+// Session Persistence (Crash Recovery)
+// ============================================================================
+
+/**
+ * Persist all active sessions to database for crash recovery.
+ * Called periodically and on graceful shutdown.
+ */
+export function persistAllSessions(): void {
+  const now = Date.now();
+
+  // Persist active events
+  const eventStmt = db.prepare(`
+    INSERT OR REPLACE INTO active_movie_events
+    (guild_id, channel_id, event_date, started_at)
+    VALUES (?, ?, ?, ?)
+  `);
+
+  for (const [guildId, event] of activeEvents) {
+    eventStmt.run(guildId, event.channelId, event.eventDate, event.startedAt);
+  }
+
+  // Persist sessions
+  const sessionStmt = db.prepare(`
+    INSERT OR REPLACE INTO active_movie_sessions
+    (guild_id, user_id, event_date, current_session_start,
+     accumulated_minutes, longest_session_minutes, last_persisted_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?)
+  `);
+
+  for (const [key, session] of movieSessions) {
+    const [guildId, userId] = key.split(":");
+    const event = activeEvents.get(guildId);
+    if (!event) continue;
+
+    sessionStmt.run(
+      guildId,
+      userId,
+      event.eventDate,
+      session.currentSessionStart,
+      session.totalMinutes,
+      session.longestSessionMinutes,
+      now
+    );
+  }
+
+  logger.debug({
+    evt: "movie_sessions_persisted",
+    eventCount: activeEvents.size,
+    sessionCount: movieSessions.size,
+  }, "Movie sessions persisted to database");
+}
+
+/**
+ * Recover persisted sessions from database after restart.
+ * Should be called once on startup.
+ */
+export function recoverPersistedSessions(): { events: number; sessions: number } {
+  // Recover active events
+  const eventRows = db.prepare(`
+    SELECT guild_id, channel_id, event_date, started_at
+    FROM active_movie_events
+  `).all() as Array<{
+    guild_id: string;
+    channel_id: string;
+    event_date: string;
+    started_at: number;
+  }>;
+
+  for (const row of eventRows) {
+    activeEvents.set(row.guild_id, {
+      guildId: row.guild_id,
+      channelId: row.channel_id,
+      eventDate: row.event_date,
+      startedAt: row.started_at,
+    });
+  }
+
+  // Recover sessions
+  const now = Date.now();
+  const sessionRows = db.prepare(`
+    SELECT guild_id, user_id, event_date, current_session_start,
+           accumulated_minutes, longest_session_minutes, last_persisted_at
+    FROM active_movie_sessions
+  `).all() as Array<{
+    guild_id: string;
+    user_id: string;
+    event_date: string;
+    current_session_start: number | null;
+    accumulated_minutes: number;
+    longest_session_minutes: number;
+    last_persisted_at: number;
+  }>;
+
+  for (const row of sessionRows) {
+    const key = getSessionKey(row.guild_id, row.user_id);
+
+    // If user was in the middle of a session when we crashed,
+    // credit them from their last session start until now
+    let totalMinutes = row.accumulated_minutes;
+    let longestSession = row.longest_session_minutes;
+
+    if (row.current_session_start) {
+      // Calculate time from last persist to now (crashed session recovery)
+      const lostSessionMs = now - row.last_persisted_at;
+      const lostMinutes = Math.floor(lostSessionMs / 60000);
+      totalMinutes += lostMinutes;
+      longestSession = Math.max(longestSession, lostMinutes);
+
+      logger.info({
+        evt: "movie_session_recovered",
+        guildId: row.guild_id,
+        userId: row.user_id,
+        lostMinutes,
+        totalMinutes,
+      }, `Recovered ${lostMinutes} lost minutes for user`);
+    }
+
+    movieSessions.set(key, {
+      currentSessionStart: row.current_session_start ? now : null, // Reset timer if was active
+      totalMinutes,
+      longestSessionMinutes: longestSession,
+    });
+  }
+
+  logger.info({
+    evt: "movie_sessions_recovered",
+    eventCount: eventRows.length,
+    sessionCount: sessionRows.length,
+  }, "Movie sessions recovered from database");
+
+  return { events: eventRows.length, sessions: sessionRows.length };
+}
+
+/**
+ * Clear persisted session data for a guild.
+ * Called after event finalization.
+ */
+export function clearPersistedSessions(guildId: string): void {
+  db.prepare(`DELETE FROM active_movie_events WHERE guild_id = ?`).run(guildId);
+  db.prepare(`DELETE FROM active_movie_sessions WHERE guild_id = ?`).run(guildId);
+
+  logger.debug({
+    evt: "movie_persisted_sessions_cleared",
+    guildId,
+  }, "Persisted movie sessions cleared");
+}
+
+/**
+ * Start the periodic persistence interval.
+ * Should be called once on startup.
+ */
+export function startSessionPersistence(): void {
+  if (persistenceInterval) {
+    logger.warn({ evt: "movie_persistence_already_running" },
+      "Movie session persistence already running");
+    return;
+  }
+
+  persistenceInterval = setInterval(() => {
+    if (activeEvents.size > 0) {
+      persistAllSessions();
+    }
+  }, PERSISTENCE_INTERVAL_MS);
+
+  // Don't prevent Node from exiting
+  persistenceInterval.unref();
+
+  logger.info({
+    evt: "movie_persistence_started",
+    intervalMs: PERSISTENCE_INTERVAL_MS,
+  }, "Movie session persistence started");
+}
+
+/**
+ * Stop the periodic persistence interval.
+ * Should be called on graceful shutdown.
+ */
+export function stopSessionPersistence(): void {
+  if (persistenceInterval) {
+    clearInterval(persistenceInterval);
+    persistenceInterval = null;
+    logger.info({ evt: "movie_persistence_stopped" },
+      "Movie session persistence stopped");
+  }
+}
+
+/**
+ * Get recovery status for the /movie resume command.
+ */
+export function getRecoveryStatus(): {
+  hasActiveEvent: boolean;
+  guildId: string | null;
+  channelId: string | null;
+  eventDate: string | null;
+  sessionCount: number;
+  totalRecoveredMinutes: number;
+} {
+  if (activeEvents.size === 0) {
+    return {
+      hasActiveEvent: false,
+      guildId: null,
+      channelId: null,
+      eventDate: null,
+      sessionCount: 0,
+      totalRecoveredMinutes: 0,
+    };
+  }
+
+  // Get first (typically only) active event
+  const [guildId, event] = [...activeEvents.entries()][0];
+
+  let sessionCount = 0;
+  let totalRecoveredMinutes = 0;
+
+  for (const [key, session] of movieSessions) {
+    if (key.startsWith(guildId + ":")) {
+      sessionCount++;
+      totalRecoveredMinutes += session.totalMinutes;
+    }
+  }
+
+  return {
+    hasActiveEvent: true,
+    guildId,
+    channelId: event.channelId,
+    eventDate: event.eventDate,
+    sessionCount,
+    totalRecoveredMinutes,
+  };
+}
+
+// ============================================================================
+// Manual Attendance Adjustments
+// ============================================================================
+
+/**
+ * Add minutes to a user's current active session.
+ * Returns false if no active event exists.
+ */
+export function addManualAttendance(
+  guildId: string,
+  userId: string,
+  minutes: number,
+  adjustedBy: string,
+  reason?: string
+): boolean {
+  const event = activeEvents.get(guildId);
+  if (!event) {
+    return false;
+  }
+
+  const session = getOrCreateSession(guildId, userId);
+  session.totalMinutes += minutes;
+  session.longestSessionMinutes = Math.max(session.longestSessionMinutes, minutes);
+
+  logger.info({
+    evt: "movie_manual_add",
+    guildId,
+    userId,
+    minutes,
+    adjustedBy,
+    reason,
+    newTotal: session.totalMinutes,
+  }, `Manually added ${minutes} minutes to user's movie attendance`);
+
+  return true;
+}
+
+/**
+ * Credit attendance to a historical event date.
+ * Creates or updates a movie_attendance record directly.
+ */
+export function creditHistoricalAttendance(
+  guildId: string,
+  userId: string,
+  eventDate: string,
+  minutes: number,
+  adjustedBy: string,
+  reason?: string
+): void {
+  const threshold = getMovieQualificationThreshold(guildId);
+  const mode = getMovieAttendanceMode(guildId);
+
+  // Check if record exists
+  const existing = db.prepare(`
+    SELECT duration_minutes, longest_session_minutes
+    FROM movie_attendance
+    WHERE guild_id = ? AND user_id = ? AND event_date = ?
+  `).get(guildId, userId, eventDate) as {
+    duration_minutes: number;
+    longest_session_minutes: number;
+  } | undefined;
+
+  const totalMinutes = (existing?.duration_minutes ?? 0) + minutes;
+  const longestSession = Math.max(existing?.longest_session_minutes ?? 0, minutes);
+  const qualified = mode === "continuous"
+    ? longestSession >= threshold
+    : totalMinutes >= threshold;
+
+  db.prepare(`
+    INSERT INTO movie_attendance (
+      guild_id, user_id, event_date, voice_channel_id,
+      duration_minutes, longest_session_minutes, qualified,
+      adjustment_type, adjusted_by, adjustment_reason
+    ) VALUES (?, ?, ?, 'manual', ?, ?, ?, 'manual_add', ?, ?)
+    ON CONFLICT(guild_id, user_id, event_date) DO UPDATE SET
+      duration_minutes = excluded.duration_minutes,
+      longest_session_minutes = excluded.longest_session_minutes,
+      qualified = excluded.qualified,
+      adjustment_type = excluded.adjustment_type,
+      adjusted_by = excluded.adjusted_by,
+      adjustment_reason = excluded.adjustment_reason
+  `).run(
+    guildId,
+    userId,
+    eventDate,
+    totalMinutes,
+    longestSession,
+    qualified ? 1 : 0,
+    adjustedBy,
+    reason ?? null
+  );
+
+  logger.info({
+    evt: "movie_credit_historical",
+    guildId,
+    userId,
+    eventDate,
+    minutes,
+    totalMinutes,
+    qualified,
+    adjustedBy,
+    reason,
+  }, `Credited ${minutes} minutes to historical attendance`);
+}
+
+/**
+ * Create a qualified "bump" entry for a user.
+ * Gives them credit for a full movie they may have missed due to bot issues.
+ */
+export function bumpAttendance(
+  guildId: string,
+  userId: string,
+  eventDate: string,
+  adjustedBy: string,
+  reason?: string
+): { created: boolean; previouslyQualified: boolean } {
+  const threshold = getMovieQualificationThreshold(guildId);
+
+  // Check if already qualified for this date
+  const existing = db.prepare(`
+    SELECT qualified FROM movie_attendance
+    WHERE guild_id = ? AND user_id = ? AND event_date = ?
+  `).get(guildId, userId, eventDate) as { qualified: number } | undefined;
+
+  if (existing?.qualified) {
+    return { created: false, previouslyQualified: true };
+  }
+
+  // Create a qualified entry with exactly the threshold minutes
+  db.prepare(`
+    INSERT INTO movie_attendance (
+      guild_id, user_id, event_date, voice_channel_id,
+      duration_minutes, longest_session_minutes, qualified,
+      adjustment_type, adjusted_by, adjustment_reason
+    ) VALUES (?, ?, ?, 'bump', ?, ?, 1, 'bump', ?, ?)
+    ON CONFLICT(guild_id, user_id, event_date) DO UPDATE SET
+      duration_minutes = excluded.duration_minutes,
+      longest_session_minutes = excluded.longest_session_minutes,
+      qualified = 1,
+      adjustment_type = 'bump',
+      adjusted_by = excluded.adjusted_by,
+      adjustment_reason = excluded.adjustment_reason
+  `).run(
+    guildId,
+    userId,
+    eventDate,
+    threshold,
+    threshold,
+    adjustedBy,
+    reason ?? "Manual bump compensation"
+  );
+
+  logger.info({
+    evt: "movie_bump",
+    guildId,
+    userId,
+    eventDate,
+    threshold,
+    adjustedBy,
+    reason,
+  }, `Created bump attendance entry for user`);
+
+  return { created: true, previouslyQualified: false };
+}
+
+// Export getMovieQualificationThreshold for use by commands
+export { getMovieQualificationThreshold };

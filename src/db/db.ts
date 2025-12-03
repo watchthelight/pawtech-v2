@@ -110,20 +110,6 @@ db.prepare(
 `
 ).run();
 
-// dm_bridge: per-application DM channel/thread bookkeeping
-db.prepare(
-  `
-  CREATE TABLE IF NOT EXISTS dm_bridge (
-    app_id TEXT PRIMARY KEY,
-    user_id TEXT NOT NULL,
-    thread_id TEXT NOT NULL,
-    dm_channel_id TEXT NOT NULL,
-    opened_at TEXT NOT NULL,
-    closed_at TEXT
-  )
-`
-).run();
-
 // transcript: simple audit trail for messages/actions related to an application
 db.prepare(
   `

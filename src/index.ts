@@ -272,6 +272,10 @@ commands.set(artistqueue.data.name, wrapCommand("artistqueue", artistqueue.execu
 commands.set(redeemreward.data.name, wrapCommand("redeemreward", redeemreward.execute));
 commands.set(art.data.name, wrapCommand("art", art.execute));
 
+// Help command (interactive help system)
+import * as help from "./commands/help/index.js";
+commands.set(help.data.name, wrapCommand("help", help.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work
@@ -329,6 +333,19 @@ client.once(Events.ClientReady, async () => {
     loadPanicState();
   } catch (err) {
     logger.error({ err }, "[startup] panic state load failed");
+  }
+
+  // Recover movie night sessions from database (crash recovery)
+  try {
+    const { recoverPersistedSessions, startSessionPersistence } =
+      await import("./features/movieNight.js");
+    const { events, sessions } = recoverPersistedSessions();
+    if (events > 0) {
+      logger.info({ events, sessions }, "[startup] Recovered movie night sessions");
+    }
+    startSessionPersistence();
+  } catch (err) {
+    logger.error({ err }, "[startup] Movie session recovery failed");
   }
 
   // Hydrate open modmail threads from database into memory
@@ -522,16 +539,27 @@ client.once(Events.ClientReady, async () => {
         logger.warn({ err }, "[shutdown] Modstats rate limiter cleanup failed (non-fatal)");
       }
 
-      // 6. Remove all event listeners before destroying client
+      // 6. Persist movie sessions before shutdown
+      try {
+        const { persistAllSessions, stopSessionPersistence } =
+          await import("./features/movieNight.js");
+        persistAllSessions();
+        stopSessionPersistence();
+        logger.debug("[shutdown] Movie sessions persisted");
+      } catch (err) {
+        logger.warn({ err }, "[shutdown] Movie session persist failed (non-fatal)");
+      }
+
+      // 7. Remove all event listeners before destroying client
       // WHY: Explicit cleanup prevents race conditions and makes shutdown behavior predictable
       client.removeAllListeners();
       logger.debug("[shutdown] Event listeners removed");
 
-      // 7. Destroy Discord client (closes WebSocket connection)
+      // 8. Destroy Discord client (closes WebSocket connection)
       client.destroy();
       logger.debug("[shutdown] Discord client destroyed");
 
-      // 8. Close database
+      // 9. Close database
       try {
         db.close();
         logger.debug("[shutdown] Database closed");
@@ -902,7 +930,9 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             ? "button"
             : interaction.isModalSubmit()
               ? "modal"
-              : "other",
+              : interaction.isStringSelectMenu()
+                ? "select"
+                : "other",
         cmd: interaction.isChatInputCommand()
           ? interaction.commandName
           : (interaction as any).customId,
@@ -911,16 +941,18 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
     );
   }
 
-  // router map: slash → button → modal → contextMenu; anything else early‑return
+  // router map: slash → button → modal → select → contextMenu; anything else early‑return
   const kind = interaction.isChatInputCommand()
     ? "slash"
     : interaction.isButton()
       ? "button"
       : interaction.isModalSubmit()
         ? "modal"
-        : interaction.isContextMenuCommand()
-          ? "contextMenu"
-          : "other";
+        : interaction.isStringSelectMenu()
+          ? "select"
+          : interaction.isContextMenuCommand()
+            ? "contextMenu"
+            : "other";
 
   if (kind === "other") {
     return;
@@ -932,7 +964,7 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
       ? interaction.isChatInputCommand()
         ? interaction.commandName
         : "unknown"
-      : interaction.isButton() || interaction.isModalSubmit()
+      : interaction.isButton() || interaction.isModalSubmit() || interaction.isStringSelectMenu()
         ? interaction.customId
         : "unknown";
 
@@ -1016,6 +1048,16 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
       let succeeded = false;
 
       try {
+        // Autocomplete interactions
+        if (interaction.isAutocomplete()) {
+          const { commandName } = interaction;
+          if (commandName === "help") {
+            await help.handleAutocomplete(interaction);
+          }
+          succeeded = true;
+          return;
+        }
+
         if (interaction.isChatInputCommand()) {
           const executor = commands.get(interaction.commandName);
           if (!executor) {
@@ -1273,6 +1315,26 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             return;
           }
 
+          // AI detection service configuration buttons
+          if (customId.startsWith("isitreal_")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "isitreal_config",
+                id: customId,
+                traceId,
+              },
+              "route: isitreal config"
+            );
+            const { isIsitRealInteraction, routeIsitRealInteraction } = await import("./commands/config/isitreal.js");
+            if (isIsitRealInteraction(customId)) {
+              await routeIsitRealInteraction(interaction);
+            }
+            succeeded = true;
+            return;
+          }
+
           // Art reward redemption buttons
           if (customId.startsWith("redeemreward:")) {
             logger.info(
@@ -1287,6 +1349,23 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             );
             const { handleRedeemRewardButton } = await import("./features/artistRotation/index.js");
             await handleRedeemRewardButton(interaction);
+            succeeded = true;
+            return;
+          }
+
+          // Help navigation buttons
+          if (customId.startsWith("help:")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "help_nav",
+                id: customId,
+                traceId,
+              },
+              "route: help navigation"
+            );
+            await help.handleHelpButton(interaction);
             succeeded = true;
             return;
           }
@@ -1315,12 +1394,46 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             return;
           }
 
+          // Help command select menus
+          if (customId.startsWith("help:select:")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "select_menu",
+                route: "help_select",
+                id: customId,
+                traceId,
+              },
+              "route: help select menu"
+            );
+            await help.handleHelpSelectMenu(interaction);
+            succeeded = true;
+            return;
+          }
+
           succeeded = true;
           return;
         }
 
         if (interaction.isModalSubmit()) {
           const { customId } = interaction;
+
+          // Help search modal
+          if (customId === "help:modal:search") {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "modal",
+                route: "help_search",
+                id: customId,
+                traceId,
+              },
+              "route: help search modal"
+            );
+            await help.handleHelpModal(interaction);
+            succeeded = true;
+            return;
+          }
 
           // yes, HEX6 on purpose (humans > uuids)
           if (customId.startsWith("v1:modal:") || customId.startsWith("v1:avatar:confirm18:")) {
@@ -1441,6 +1554,24 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
           if (customId.startsWith("v1:gate:reset:")) {
             const { handleResetModal } = await import("./commands/gate.js");
             await handleResetModal(interaction);
+            succeeded = true;
+            return;
+          }
+
+          // AI detection service configuration modals
+          if (customId.startsWith("isitreal_modal_")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "modal",
+                route: "isitreal_config",
+                id: customId,
+                traceId,
+              },
+              "route: isitreal config modal"
+            );
+            const { routeIsitRealInteraction } = await import("./commands/config/isitreal.js");
+            await routeIsitRealInteraction(interaction);
             succeeded = true;
             return;
           }

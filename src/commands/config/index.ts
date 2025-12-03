@@ -87,6 +87,8 @@ import {
   executeView,
 } from "./get.js";
 
+import { executeIsitreal } from "./isitreal.js";
+
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * execute
@@ -210,5 +212,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     }
   } else if (subcommand === "view") {
     await executeView(ctx);
+  } else if (subcommand === "isitreal") {
+    await executeIsitreal(ctx);
   }
 }

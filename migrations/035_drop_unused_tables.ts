@@ -1,5 +1,5 @@
 /**
- * Pawtropolis Tech — migrations/034_drop_unused_tables.ts
+ * Pawtropolis Tech — migrations/035_drop_unused_tables.ts
  * WHAT: Drop unused database tables that have 0 rows and no code references
  * WHY: Clean up dead code - tables never implemented or superseded
  * TABLES:
@@ -10,9 +10,15 @@
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
-import { db } from "../src/db/db.js";
+import type { Database } from "better-sqlite3";
+import { logger } from "../src/lib/logger.js";
+import { recordMigration, enableForeignKeys } from "./lib/helpers.js";
 
-export function migrate() {
+export function migrate035DropUnusedTables(db: Database): void {
+  logger.info("[migration 035] Starting: drop unused tables");
+
+  enableForeignKeys(db);
+
   // Tables to drop - all have 0 rows and no code references
   const tables = ["ping_log", "dm_bridge", "suggestion", "suggestion_vote"];
 
@@ -37,5 +43,8 @@ export function migrate() {
   db.prepare("DROP TABLE IF EXISTS dm_bridge").run();
   db.prepare("DROP TABLE IF EXISTS ping_log").run();
 
-  console.log("[migrate] Dropped unused tables: ping_log, dm_bridge, suggestion, suggestion_vote");
+  logger.info("[migration 035] Dropped unused tables: ping_log, dm_bridge, suggestion, suggestion_vote");
+
+  recordMigration(db, "035", "drop_unused_tables");
+  logger.info("[migration 035] Complete");
 }

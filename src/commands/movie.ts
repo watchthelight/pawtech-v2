@@ -28,7 +28,13 @@ import {
   finalizeMovieAttendance,
   getUserQualifiedMovieCount,
   updateMovieTierRole,
+  getRecoveryStatus,
+  addManualAttendance,
+  creditHistoricalAttendance,
+  bumpAttendance,
+  getMovieQualificationThreshold,
 } from "../features/movieNight.js";
+import { logActionPretty } from "../logging/pretty.js";
 
 /*
  * Movie Night Attendance System
@@ -91,6 +97,90 @@ export const data = new SlashCommandBuilder()
           .setDescription("User to check (leave empty to see all attendees)")
           .setRequired(false)
       )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("add")
+      .setDescription("Manually add minutes to a user's current event attendance")
+      .addUserOption((opt) =>
+        opt
+          .setName("user")
+          .setDescription("User to add minutes for")
+          .setRequired(true)
+      )
+      .addIntegerOption((opt) =>
+        opt
+          .setName("minutes")
+          .setDescription("Number of minutes to add (1-300)")
+          .setMinValue(1)
+          .setMaxValue(300)
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("reason")
+          .setDescription("Reason for the adjustment")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("credit")
+      .setDescription("Credit attendance minutes to any event date")
+      .addUserOption((opt) =>
+        opt
+          .setName("user")
+          .setDescription("User to credit")
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("date")
+          .setDescription("Event date (YYYY-MM-DD)")
+          .setRequired(true)
+      )
+      .addIntegerOption((opt) =>
+        opt
+          .setName("minutes")
+          .setDescription("Number of minutes to credit (1-300)")
+          .setMinValue(1)
+          .setMaxValue(300)
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("reason")
+          .setDescription("Reason for the credit")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("bump")
+      .setDescription("Give a user full credit for a movie (compensation)")
+      .addUserOption((opt) =>
+        opt
+          .setName("user")
+          .setDescription("User to bump")
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("date")
+          .setDescription("Event date (YYYY-MM-DD, defaults to today)")
+          .setRequired(false)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("reason")
+          .setDescription("Reason for the bump")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("resume")
+      .setDescription("Check status of recovered movie session after bot restart")
   );
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
@@ -119,6 +209,18 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     case "attendance":
       await handleAttendance(interaction);
       break;
+    case "add":
+      await handleAdd(interaction);
+      break;
+    case "credit":
+      await handleCredit(interaction);
+      break;
+    case "bump":
+      await handleBump(interaction);
+      break;
+    case "resume":
+      await handleResume(interaction);
+      break;
     default:
       await interaction.reply({
         content: "Unknown subcommand.",
@@ -139,14 +241,19 @@ async function handleStart(interaction: ChatInputCommandInteraction): Promise<vo
     return;
   }
 
+  // Defer since initializing existing members may take a moment
+  await interaction.deferReply();
+
   const eventDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  startMovieEvent(guild.id, channel.id, eventDate);
+  const { retroactiveCount } = await startMovieEvent(guild, channel.id, eventDate);
+  const threshold = getMovieQualificationThreshold(guild.id);
 
   logger.info({
     evt: "movie_start_command",
     guildId: guild.id,
     channelId: channel.id,
     eventDate,
+    retroactiveCount,
     invokedBy: interaction.user.id,
   }, `Movie night started in ${channel.name}`);
 
@@ -155,12 +262,19 @@ async function handleStart(interaction: ChatInputCommandInteraction): Promise<vo
     .setDescription(`Now tracking attendance in <#${channel.id}>`)
     .addFields(
       { name: "Date", value: eventDate, inline: true },
-      { name: "Minimum Time", value: "30 minutes to qualify", inline: true }
+      { name: "Minimum Time", value: `${threshold} minutes to qualify`, inline: true }
     )
     .setColor(0x5865F2)
     .setTimestamp();
 
-  await interaction.reply({ embeds: [embed] });
+  if (retroactiveCount > 0) {
+    embed.addFields({
+      name: "Already in VC",
+      value: `${retroactiveCount} user${retroactiveCount > 1 ? "s" : ""} already in the channel have been credited`,
+    });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
 }
 
 async function handleEnd(interaction: ChatInputCommandInteraction): Promise<void> {
@@ -369,4 +483,211 @@ async function handleAttendance(interaction: ChatInputCommandInteraction): Promi
   }
 
   await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleAdd(interaction: ChatInputCommandInteraction): Promise<void> {
+  const guild = interaction.guild!;
+  const user = interaction.options.getUser("user", true);
+  const minutes = interaction.options.getInteger("minutes", true);
+  const reason = interaction.options.getString("reason") ?? undefined;
+
+  const success = addManualAttendance(
+    guild.id,
+    user.id,
+    minutes,
+    interaction.user.id,
+    reason
+  );
+
+  if (!success) {
+    await interaction.reply({
+      content: "⚠️ No movie night is currently in progress. Use `/movie credit` to credit historical attendance.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Log the action
+  await logActionPretty(guild, {
+    actorId: interaction.user.id,
+    subjectId: user.id,
+    action: "movie_manual_add",
+    reason: reason ?? `Manually added ${minutes} minutes`,
+    meta: {
+      minutes,
+      eventDate: getActiveMovieEvent(guild.id)?.eventDate ?? "unknown",
+    },
+  }).catch(() => {});
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎬 Attendance Updated")
+    .setDescription(`Added **${minutes} minutes** to ${user}'s attendance`)
+    .setColor(0x57F287)
+    .setTimestamp();
+
+  if (reason) {
+    embed.addFields({ name: "Reason", value: reason });
+  }
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
+}
+
+async function handleCredit(interaction: ChatInputCommandInteraction): Promise<void> {
+  const guild = interaction.guild!;
+  const user = interaction.options.getUser("user", true);
+  const dateStr = interaction.options.getString("date", true);
+  const minutes = interaction.options.getInteger("minutes", true);
+  const reason = interaction.options.getString("reason") ?? undefined;
+
+  // Validate date format
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    await interaction.reply({
+      content: "⚠️ Invalid date format. Use YYYY-MM-DD (e.g., 2024-01-15)",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Check date is not in the future
+  const today = new Date().toISOString().split("T")[0];
+  if (dateStr > today) {
+    await interaction.reply({
+      content: "⚠️ Cannot credit attendance for future dates.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  creditHistoricalAttendance(
+    guild.id,
+    user.id,
+    dateStr,
+    minutes,
+    interaction.user.id,
+    reason
+  );
+
+  // Check if they now qualify for a tier upgrade
+  await updateMovieTierRole(guild, user.id);
+
+  // Log the action
+  await logActionPretty(guild, {
+    actorId: interaction.user.id,
+    subjectId: user.id,
+    action: "movie_credit",
+    reason: reason ?? `Credited ${minutes} minutes for ${dateStr}`,
+    meta: {
+      minutes,
+      eventDate: dateStr,
+    },
+  }).catch(() => {});
+
+  const newCount = getUserQualifiedMovieCount(guild.id, user.id);
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎬 Attendance Credited")
+    .setDescription(`Credited **${minutes} minutes** to ${user} for ${dateStr}`)
+    .addFields(
+      { name: "Total Qualified Movies", value: newCount.toString(), inline: true }
+    )
+    .setColor(0x57F287)
+    .setTimestamp();
+
+  if (reason) {
+    embed.addFields({ name: "Reason", value: reason });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleBump(interaction: ChatInputCommandInteraction): Promise<void> {
+  const guild = interaction.guild!;
+  const user = interaction.options.getUser("user", true);
+  const dateStr = interaction.options.getString("date") ?? new Date().toISOString().split("T")[0];
+  const reason = interaction.options.getString("reason") ?? undefined;
+
+  // Validate date format if provided
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(dateStr)) {
+    await interaction.reply({
+      content: "⚠️ Invalid date format. Use YYYY-MM-DD (e.g., 2024-01-15)",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: true });
+
+  const result = bumpAttendance(
+    guild.id,
+    user.id,
+    dateStr,
+    interaction.user.id,
+    reason
+  );
+
+  if (result.previouslyQualified) {
+    await interaction.editReply({
+      content: `⚠️ ${user} already has a qualified attendance record for ${dateStr}.`,
+    });
+    return;
+  }
+
+  // Check if they now qualify for a tier upgrade
+  await updateMovieTierRole(guild, user.id);
+
+  // Log the action
+  await logActionPretty(guild, {
+    actorId: interaction.user.id,
+    subjectId: user.id,
+    action: "movie_bump",
+    reason: reason ?? `Bump compensation for ${dateStr}`,
+    meta: {
+      eventDate: dateStr,
+    },
+  }).catch(() => {});
+
+  const newCount = getUserQualifiedMovieCount(guild.id, user.id);
+
+  const embed = new EmbedBuilder()
+    .setTitle("⬆️ Attendance Bumped")
+    .setDescription(`${user} has been given full credit for ${dateStr}`)
+    .addFields(
+      { name: "Total Qualified Movies", value: newCount.toString(), inline: true }
+    )
+    .setColor(0x57F287)
+    .setTimestamp();
+
+  if (reason) {
+    embed.addFields({ name: "Reason", value: reason });
+  }
+
+  await interaction.editReply({ embeds: [embed] });
+}
+
+async function handleResume(interaction: ChatInputCommandInteraction): Promise<void> {
+  const status = getRecoveryStatus();
+
+  if (!status.hasActiveEvent) {
+    await interaction.reply({
+      content: "ℹ️ No movie night session is currently active or recovered.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const embed = new EmbedBuilder()
+    .setTitle("🎬 Movie Night Session Status")
+    .setDescription("Session recovered from database after bot restart")
+    .addFields(
+      { name: "Channel", value: `<#${status.channelId}>`, inline: true },
+      { name: "Event Date", value: status.eventDate ?? "Unknown", inline: true },
+      { name: "Active Sessions", value: status.sessionCount.toString(), inline: true },
+      { name: "Total Recovered Minutes", value: status.totalRecoveredMinutes.toString(), inline: true }
+    )
+    .setColor(0x5865F2)
+    .setTimestamp();
+
+  await interaction.reply({ embeds: [embed], ephemeral: true });
 }

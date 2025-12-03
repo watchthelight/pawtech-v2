@@ -12,9 +12,15 @@
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
-import { db } from "../src/db/db.js";
+import type { Database } from "better-sqlite3";
+import { logger } from "../src/lib/logger.js";
+import { recordMigration, enableForeignKeys } from "./lib/helpers.js";
 
-export function migrate() {
+export function migrate034AddPerformanceIndexes(db: Database): void {
+  logger.info("[migration 034] Starting: add performance indexes");
+
+  enableForeignKeys(db);
+
   // For getAvgClaimToDecision (app_id + action + time)
   db.prepare(`
     CREATE INDEX IF NOT EXISTS idx_action_log_app_action_time
@@ -44,4 +50,7 @@ export function migrate() {
     CREATE INDEX IF NOT EXISTS idx_modmail_guild_status_user
     ON modmail_ticket(guild_id, status, user_id)
   `).run();
+
+  recordMigration(db, "034", "add_performance_indexes");
+  logger.info("[migration 034] Complete");
 }

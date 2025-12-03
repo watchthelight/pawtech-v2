@@ -15,7 +15,6 @@ import {
   ChatInputCommandInteraction,
   SlashCommandBuilder,
   EmbedBuilder,
-  PermissionFlagsBits,
 } from "discord.js";
 import { db } from "../db/db.js";
 import { shortCode } from "../lib/ids.js";

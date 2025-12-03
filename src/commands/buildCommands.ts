@@ -42,6 +42,7 @@ import { data as redeemrewardData } from "./redeemreward.js";
 import { data as artData } from "./art.js";
 import { data as auditData } from "./audit.js";
 import { data as isitrealData } from "./isitreal.js";
+import { data as helpData } from "./help/index.js";
 
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
@@ -94,6 +95,9 @@ export function buildCommands() {
     // Admin utilities
     auditData.toJSON(),
     isitrealData.toJSON(),
+
+    // Help system
+    helpData.toJSON(),
 
     // Context menu commands are registered alongside slash commands in Discord.js v14
     modmailContextMenu.toJSON(),
