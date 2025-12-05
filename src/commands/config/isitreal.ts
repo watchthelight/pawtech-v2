@@ -31,11 +31,12 @@ import {
   getServiceStatus,
   testAllConfigured,
   testHive,
-  testIlluminarty,
+  testRapidAI,
   testSightEngine,
   testOptic,
   type ServiceHealth,
 } from "../../features/aiDetection/health.js";
+import { getEnabledServices } from "../../store/aiDetectionToggles.js";
 import * as fs from "fs";
 import * as path from "path";
 
@@ -90,10 +91,10 @@ const SERVICE_INFO: Record<string, { name: string; description: string; signupUr
     description: "AI-generated media detection with high accuracy",
     signupUrl: "https://thehive.ai/",
   },
-  illuminarty: {
-    name: "Illuminarty",
-    description: "AI image detection specialized for art",
-    signupUrl: "https://illuminarty.ai/",
+  rapidai: {
+    name: "RapidAPI AI Art Detection",
+    description: "AI image detection via RapidAPI marketplace",
+    signupUrl: "https://rapidapi.com/hammas.majeed/api/ai-generated-image-detection-api",
   },
   sightengine: {
     name: "SightEngine",
@@ -126,12 +127,17 @@ export async function executeIsitreal(ctx: CommandContext<ChatInputCommandIntera
 
   await interaction.deferReply({ ephemeral: true });
 
-  // Get and test all services
+  // Get enabled services for this guild
+  const guildId = interaction.guildId!;
+  const enabledServiceIds = getEnabledServices(guildId);
+
+  // Get and test all services, then filter to only enabled ones
   ctx.step("testing_services");
-  const services = await testAllConfigured();
+  const allServices = await testAllConfigured();
+  const services = allServices.filter((s) => enabledServiceIds.includes(s.service));
 
   // Build status embed
-  const embed = buildStatusEmbed(services);
+  const embed = buildStatusEmbed(services, enabledServiceIds.length < 4);
 
   // Build setup buttons
   const rows = buildSetupButtons(services);
@@ -143,18 +149,27 @@ export async function executeIsitreal(ctx: CommandContext<ChatInputCommandIntera
 // Embed Builders
 // ============================================================================
 
-function buildStatusEmbed(services: ServiceHealth[]): EmbedBuilder {
+function buildStatusEmbed(services: ServiceHealth[], hasDisabledServices: boolean): EmbedBuilder {
   const configuredCount = services.filter((s) => s.configured).length;
   const healthyCount = services.filter((s) => s.healthy === true).length;
+  const totalServices = services.length;
+
+  let description = `Configure API keys for the \`/isitreal\` command.\n\n`;
+
+  if (totalServices === 0) {
+    description += `**All services are disabled.** Use \`/config toggleapis\` to enable services.`;
+  } else {
+    description += `**Status:** ${configuredCount}/${totalServices} services configured, ${healthyCount}/${totalServices} healthy\n\n`;
+    description += `Click a button below to configure a service. You'll need to sign up for an API key from each provider.`;
+    if (hasDisabledServices) {
+      description += `\n\n*Some services are hidden. Use \`/config toggleapis\` to enable them.*`;
+    }
+  }
 
   const embed = new EmbedBuilder()
     .setTitle("AI Detection Services Configuration")
-    .setDescription(
-      `Configure API keys for the \`/isitreal\` command.\n\n` +
-      `**Status:** ${configuredCount}/4 services configured, ${healthyCount}/4 healthy\n\n` +
-      `Click a button below to configure a service. You'll need to sign up for an API key from each provider.`
-    )
-    .setColor(configuredCount === 0 ? 0xef4444 : configuredCount === 4 ? 0x22c55e : 0xf59e0b)
+    .setDescription(description)
+    .setColor(totalServices === 0 ? 0xef4444 : configuredCount === 0 ? 0xef4444 : configuredCount === totalServices ? 0x22c55e : 0xf59e0b)
     .setTimestamp();
 
   for (const svc of services) {
@@ -325,9 +340,9 @@ export async function handleIsitRealModal(interaction: ModalSubmitInteraction) {
         testResult = await testHive(apiKey);
         envVars = { HIVE_API_KEY: apiKey };
         break;
-      case "illuminarty":
-        testResult = await testIlluminarty(apiKey);
-        envVars = { ILLUMINARTY_API_KEY: apiKey };
+      case "rapidai":
+        testResult = await testRapidAI(apiKey);
+        envVars = { RAPIDAPI_KEY: apiKey };
         break;
       case "optic":
         testResult = await testOptic(apiKey);

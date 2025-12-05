@@ -5,7 +5,7 @@
  */
 
 /** Supported AI detection service identifiers */
-export type AIDetectionService = "hive" | "illuminarty" | "sightengine" | "optic";
+export type AIDetectionService = "hive" | "rapidai" | "sightengine" | "optic";
 
 /** Result from a single detection service */
 export type ServiceResult = {

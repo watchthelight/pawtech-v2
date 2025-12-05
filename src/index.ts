@@ -96,7 +96,6 @@ import {
 import {
   handleModmailOpenButton,
   handleModmailCloseButton,
-  handleModmailContextMenu,
   executeModmailCommand,
   getOpenTicketByUser,
   getTicketByThread,
@@ -1359,6 +1358,24 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
             return;
           }
 
+          // AI detection API toggle buttons
+          if (customId.startsWith("toggleapi_")) {
+            logger.info(
+              {
+                evt: "ix_route_match",
+                kind: "button",
+                route: "toggleapi",
+                id: customId,
+                traceId,
+              },
+              "route: toggle api"
+            );
+            const { handleToggleApiButton } = await import("./commands/config/toggleapis.js");
+            await handleToggleApiButton(interaction);
+            succeeded = true;
+            return;
+          }
+
           // Art reward redemption buttons
           if (customId.startsWith("redeemreward:")) {
             logger.info(
@@ -1615,18 +1632,18 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
 
         // Context menu commands
         if (kind === "contextMenu" && interaction.isMessageContextMenuCommand()) {
-          if (interaction.commandName === "Modmail: Open") {
+          if (interaction.commandName === "Is It Real?") {
             logger.info(
               {
                 evt: "ix_route_match",
                 kind: "contextMenu",
-                route: "modmail_open",
+                route: "isitreal",
                 commandName: interaction.commandName,
                 traceId,
               },
-              "route: modmail context menu"
+              "route: isitreal context menu"
             );
-            await handleModmailContextMenu(interaction);
+            await isitreal.handleIsItRealContextMenu(interaction);
             succeeded = true;
             return;
           }

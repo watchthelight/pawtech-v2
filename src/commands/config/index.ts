@@ -88,6 +88,7 @@ import {
 } from "./get.js";
 
 import { executeIsitreal } from "./isitreal.js";
+import { executeToggleApis } from "./toggleapis.js";
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
@@ -214,5 +215,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     await executeView(ctx);
   } else if (subcommand === "isitreal") {
     await executeIsitreal(ctx);
+  } else if (subcommand === "toggleapis") {
+    await executeToggleApis(ctx);
   }
 }

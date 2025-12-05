@@ -268,6 +268,7 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sc) => sc.setName("view").setDescription("View current guild configuration"))
   .addSubcommand((sc) => sc.setName("isitreal").setDescription("Configure AI detection API keys (owner only)"))
+  .addSubcommand((sc) => sc.setName("toggleapis").setDescription("Enable/disable AI detection APIs for this server"))
   .addSubcommandGroup((group) =>
     group
       .setName("poke")

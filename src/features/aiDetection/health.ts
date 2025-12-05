@@ -16,7 +16,7 @@ const TEST_IMAGE_URL = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/4
 const TIMEOUT_MS = 15000;
 
 export interface ServiceHealth {
-  service: "hive" | "illuminarty" | "sightengine" | "optic";
+  service: "hive" | "rapidai" | "sightengine" | "optic";
   displayName: string;
   configured: boolean;
   // null means we haven't tested yet, not that we're philosophically
@@ -41,12 +41,12 @@ export function getServiceStatus(): ServiceHealth[] {
       envVars: ["HIVE_API_KEY"],
     },
     {
-      service: "illuminarty",
-      displayName: "Illuminarty",
-      configured: !!env.ILLUMINARTY_API_KEY,
+      service: "rapidai",
+      displayName: "RapidAPI AI Art Detection",
+      configured: !!env.RAPIDAPI_KEY,
       healthy: null,
-      docsUrl: "https://illuminarty.ai/",
-      envVars: ["ILLUMINARTY_API_KEY"],
+      docsUrl: "https://rapidapi.com/hammas.majeed/api/ai-generated-image-detection-api",
+      envVars: ["RAPIDAPI_KEY"],
     },
     {
       service: "sightengine",
@@ -105,17 +105,20 @@ export async function testHive(apiKey: string): Promise<{ success: boolean; erro
 }
 
 /**
- * Test Illuminarty API key.
+ * Test RapidAPI AI Art Detection API key.
  */
-export async function testIlluminarty(apiKey: string): Promise<{ success: boolean; error?: string }> {
+export async function testRapidAI(apiKey: string): Promise<{ success: boolean; error?: string }> {
+  const RAPIDAPI_HOST = "ai-generated-image-detection-api.p.rapidapi.com";
+
   try {
-    const response = await fetch("https://api.illuminarty.ai/v1/detect", {
+    const response = await fetch(`https://${RAPIDAPI_HOST}/v1/image/detect-ai-image`, {
       method: "POST",
       headers: {
-        Authorization: `Bearer ${apiKey}`,
         "Content-Type": "application/json",
+        "X-RapidAPI-Key": apiKey,
+        "X-RapidAPI-Host": RAPIDAPI_HOST,
       },
-      body: JSON.stringify({ url: TEST_IMAGE_URL }),
+      body: JSON.stringify({ type: "url", url: TEST_IMAGE_URL }),
       signal: AbortSignal.timeout(TIMEOUT_MS),
     });
 
@@ -129,7 +132,7 @@ export async function testIlluminarty(apiKey: string): Promise<{ success: boolea
     return { success: true };
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ err }, "[aiHealth] Illuminarty test failed");
+    logger.warn({ err }, "[aiHealth] RapidAI test failed");
     return { success: false, error: msg };
   }
 }
@@ -227,8 +230,8 @@ export async function testAllConfigured(): Promise<ServiceHealth[]> {
       case "hive":
         result = await testHive(env.HIVE_API_KEY!);
         break;
-      case "illuminarty":
-        result = await testIlluminarty(env.ILLUMINARTY_API_KEY!);
+      case "rapidai":
+        result = await testRapidAI(env.RAPIDAPI_KEY!);
         break;
       case "sightengine":
         result = await testSightEngine(env.SIGHTENGINE_API_USER!, env.SIGHTENGINE_API_SECRET!);

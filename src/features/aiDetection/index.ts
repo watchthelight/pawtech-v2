@@ -10,11 +10,12 @@
 
 import { EmbedBuilder, type Message } from "discord.js";
 import { detectHive } from "./hive.js";
-import { detectIlluminarty } from "./illuminarty.js";
+import { detectRapidAI } from "./rapidai.js";
 import { detectSightEngine } from "./sightengine.js";
 import { detectOptic } from "./optic.js";
 import type { AIDetectionResult, AIDetectionService, ServiceResult } from "./types.js";
 import { logger } from "../../lib/logger.js";
+import { getEnabledServices } from "../../store/aiDetectionToggles.js";
 
 /*
  * We obfuscate the actual service names in the UI so users don't game the
@@ -23,7 +24,7 @@ import { logger } from "../../lib/logger.js";
  */
 const SERVICE_NAMES: Record<AIDetectionService, string> = {
   hive: "Engine 1",
-  illuminarty: "Engine 2",
+  rapidai: "Engine 2",
   sightengine: "Engine 3",
   optic: "Engine 4",
 };
@@ -56,29 +57,59 @@ function processResult(
 }
 
 /**
- * Detect AI-generated content in a single image using all configured services.
+ * Get the detection function for a service.
  */
-export async function detectAIForImage(imageUrl: string, imageName: string): Promise<AIDetectionResult> {
-  logger.info({ imageUrl, imageName }, "[aiDetection] Starting detection for image");
+function getDetector(service: AIDetectionService): (url: string) => Promise<number | null> {
+  switch (service) {
+    case "hive":
+      return detectHive;
+    case "rapidai":
+      return detectRapidAI;
+    case "sightengine":
+      return detectSightEngine;
+    case "optic":
+      return detectOptic;
+  }
+}
+
+/**
+ * Detect AI-generated content in a single image using enabled services.
+ * @param guildId - Guild ID to check which services are enabled
+ */
+export async function detectAIForImage(
+  imageUrl: string,
+  imageName: string,
+  guildId: string
+): Promise<AIDetectionResult> {
+  const enabledServices = getEnabledServices(guildId);
+
+  logger.info(
+    { imageUrl, imageName, enabledServices },
+    "[aiDetection] Starting detection for image"
+  );
+
+  if (enabledServices.length === 0) {
+    return {
+      imageUrl,
+      imageName,
+      services: [],
+      averageScore: null,
+      successCount: 0,
+      failureCount: 0,
+    };
+  }
 
   /*
    * GOTCHA: We use allSettled, not all. If one janky API is down (happens
    * more than you'd think), we still get results from the others instead
    * of the whole thing exploding. The averaging math handles missing scores.
    */
-  const results = await Promise.allSettled([
-    detectHive(imageUrl),
-    detectIlluminarty(imageUrl),
-    detectSightEngine(imageUrl),
-    detectOptic(imageUrl),
-  ]);
+  const detectionPromises = enabledServices.map((svc) => getDetector(svc)(imageUrl));
+  const results = await Promise.allSettled(detectionPromises);
 
-  const services: ServiceResult[] = [
-    processResult(results[0], "hive"),
-    processResult(results[1], "illuminarty"),
-    processResult(results[2], "sightengine"),
-    processResult(results[3], "optic"),
-  ];
+  const services: ServiceResult[] = enabledServices.map((svc, i) =>
+    processResult(results[i], svc)
+  );
 
   /*
    * Only average the services that actually responded. A null score means
@@ -98,23 +129,25 @@ export async function detectAIForImage(imageUrl: string, imageName: string): Pro
     services,
     averageScore,
     successCount: successfulScores.length,
-    failureCount: 4 - successfulScores.length,
+    failureCount: enabledServices.length - successfulScores.length,
   };
 }
 
 /**
  * Detect AI-generated content in multiple images.
  * Processes images sequentially to avoid overwhelming APIs.
+ * @param guildId - Guild ID to check which services are enabled
  */
 export async function detectAIForImages(
-  images: Array<{ url: string; name: string }>
+  images: Array<{ url: string; name: string }>,
+  guildId: string
 ): Promise<AIDetectionResult[]> {
   const results: AIDetectionResult[] = [];
 
-  // Sequential on purpose. Each image already fires 4 parallel API calls,
-  // so doing images in parallel = 4 * N simultaneous requests = rate limits.
+  // Sequential on purpose. Each image already fires N parallel API calls,
+  // so doing images in parallel = N * M simultaneous requests = rate limits.
   for (const img of images) {
-    const result = await detectAIForImage(img.url, img.name);
+    const result = await detectAIForImage(img.url, img.name, guildId);
     results.push(result);
   }
 
@@ -141,7 +174,7 @@ export function buildAIDetectionEmbed(results: AIDetectionResult[], message: Mes
     .setTitle("AI Detection Results")
     .setColor(0x3b82f6) // Blue
     .setTimestamp()
-    .setFooter({ text: `Message from ${message.author.tag}` });
+    .setFooter({ text: `Beta Feature | Message from ${message.author.tag}` });
 
   // Add message link at the top
   embed.setDescription(`[Jump to message](${message.url})`);
@@ -172,9 +205,16 @@ export function buildAIDetectionEmbed(results: AIDetectionResult[], message: Mes
       avgLine = "**Overall Average: Unable to calculate**";
     }
 
-    const fieldValue = [avgLine, "", ...serviceLines, "", `${result.successCount}/4 services responded`].join(
-      "\n"
-    );
+    const totalServices = result.services.length;
+    const fieldValue = [
+      avgLine,
+      "",
+      ...serviceLines,
+      "",
+      totalServices > 0
+        ? `${result.successCount}/${totalServices} services responded`
+        : "No services enabled",
+    ].join("\n");
 
     embed.addFields({
       name: imageHeader,

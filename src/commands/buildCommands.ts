@@ -23,7 +23,8 @@ import { data as configData } from "./config.js";
 import { data as databaseData } from "./database.js";
 // This one lives in features/ because modmail is both a command AND a feature module.
 // Not ideal, but refactoring it would be a three-hour yak shave.
-import { modmailCommand, modmailContextMenu } from "../features/modmail.js";
+import { modmailCommand } from "../features/modmail.js";
+import { isitRealContextMenu } from "./isitreal.js";
 import { analyticsData, analyticsExportData } from "./analytics.js";
 import { data as modstatsData } from "./modstats.js";
 import { data as sendData } from "./send.js";
@@ -114,8 +115,8 @@ export function buildCommands() {
     /*
      * Context menu commands are registered alongside slash commands in Discord.js v14.
      * These show up when you right-click a user or message. Only 5 of each type allowed.
-     * The modmail one lets you DM someone without leaving the Discord client.
+     * "Is It Real?" lets staff quickly check images for AI generation.
      */
-    modmailContextMenu.toJSON(),
+    isitRealContextMenu.toJSON(),
   ];
 }

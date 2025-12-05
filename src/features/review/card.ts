@@ -901,6 +901,12 @@ export async function ensureReviewMessage(
         roleMentions.push(`<@&${gatekeeperRoleId}>`);
       }
 
+      // Ping bot dev role if enabled
+      if (guildCfg?.ping_dev_on_app && guildCfg?.bot_dev_role_id) {
+        rolesToPing.push(guildCfg.bot_dev_role_id);
+        roleMentions.push(`<@&${guildCfg.bot_dev_role_id}>`);
+      }
+
       const mentionPrefix = roleMentions.length > 0 ? `${roleMentions.join(" ")} ` : "";
       const content = `${mentionPrefix}New application from <@${app.user_id}> • App #${code}`;
 
@@ -918,6 +924,7 @@ export async function ensureReviewMessage(
 
       logger.info({
         gatekeeperRoleId: gatekeeperRoleId ?? null,
+        botDevRoleId: guildCfg?.ping_dev_on_app ? (guildCfg?.bot_dev_role_id ?? null) : null,
         guildId: app.guild_id,
         code
       }, "[review] role pings sent");

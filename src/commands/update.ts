@@ -63,9 +63,8 @@ export const data = new SlashCommandBuilder()
       .addStringOption((option) =>
         option
           .setName("text")
-          .setDescription("Status text")
-          .setRequired(true)
-          .setMinLength(1)
+          .setDescription("Status text (leave empty to clear)")
+          .setRequired(false)
           .setMaxLength(128)
       )
   )
@@ -199,9 +198,12 @@ async function handleStatusUpdate(
 ) {
   const { interaction } = ctx;
 
+  // Text is optional - null/empty means clear the status
   const text = await withStep(ctx, "validate_text", async () =>
-    interaction.options.getString("text", true)
+    interaction.options.getString("text", false)
   );
+
+  const isClearing = !text || text.trim() === "";
 
   await withStep(ctx, "update_presence", async () => {
     // Get existing status to preserve activity if it exists
@@ -213,8 +215,10 @@ async function handleStatusUpdate(
       activities.push({ type: saved.activityType, name: saved.activityText });
     }
 
-    // Add custom status (Custom type uses 'name' field for the status text)
-    activities.push({ type: ActivityType.Custom, name: text });
+    // Add custom status only if we're not clearing it
+    if (!isClearing) {
+      activities.push({ type: ActivityType.Custom, name: text });
+    }
 
     await user.setPresence({
       activities,
@@ -230,16 +234,19 @@ async function handleStatusUpdate(
       scopeKey: "global",
       activityType: saved?.activityType ?? null,
       activityText: saved?.activityText ?? null,
-      customStatus: text,
+      customStatus: isClearing ? null : text,
       status: "online",
       updatedAt: Date.now(),
     });
   });
 
   await withStep(ctx, "final_reply", async () => {
+    const message = isClearing
+      ? "Custom status cleared (saved for restarts)."
+      : `Custom status updated to: "${text}" (saved for restarts).`;
     await interaction.reply({
       flags: MessageFlags.Ephemeral,
-      content: `Custom status updated to: "${text}" (saved for restarts).`,
+      content: message,
     });
   });
 }

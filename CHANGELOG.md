@@ -5,6 +5,34 @@ All notable changes to Pawtropolis Tech will be documented in this file.
 The format is based on [Keep a Changelog](https://keepachangelog.com/en/1.1.0/),
 and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0.html).
 
+## [Unreleased]
+
+### Added
+
+- **"Is It Real?" Context Menu** - Right-click any message → Apps → "Is It Real?" to scan images for AI generation without typing the full command
+
+### Removed
+
+- **"Modmail: Open" Context Menu** - Removed the right-click context menu for opening modmail threads
+
+### Fixed
+
+- **Bot Dev Ping on Application** - Fixed `ping_dev_on_app` feature not working:
+  - The setting was configurable via `/config set pingdevonapp` but pings were never sent
+  - Now pings `bot_dev_role_id` when `ping_dev_on_app` is enabled on new application submissions
+
+### Changed
+
+- **`/update status` Clear Support** - Running `/update status` without text now clears the custom status instead of requiring text
+
+- **AI Detection: Illuminarty → RapidAPI** - Replaced Illuminarty API with RapidAPI AI Art Detection:
+  - New env var: `RAPIDAPI_KEY` (replaces `ILLUMINARTY_API_KEY`)
+  - Signup: https://rapidapi.com/hammas.majeed/api/ai-generated-image-detection-api
+  - `/config isitreal` updated with new service info and setup wizard
+  - Detection module rewritten for RapidAPI endpoint format
+
+---
+
 ## [4.7.1] - 2025-12-03
 
 ### Fixed
