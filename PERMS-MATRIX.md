@@ -8,7 +8,7 @@ Complete reference for all role-based permissions in Pawtropolis Tech.
 
 - [Role Hierarchy](#role-hierarchy)
 - [Special Bypass Roles](#special-bypass-roles)
-- [Permission Notation](#permission-notation)
+- [Permission Types](#permission-types)
 - [Commands by Permission Level](#commands-by-permission-level)
   - [Public Commands](#public-commands-anyone)
   - [Gatekeeper Only](#gatekeeper-only-gk)
@@ -20,6 +20,7 @@ Complete reference for all role-based permissions in Pawtropolis Tech.
   - [Senior Administrator+](#senior-administrator-sa)
   - [Community Manager+](#community-manager-cm)
   - [Bot Owner / Server Dev Only](#bot-owner--server-dev-only)
+  - [Discord Permission Based](#discord-permission-based)
   - [Server Artist Role](#server-artist-role)
 - [Review Card Buttons](#review-card-buttons)
 - [Permission Denied Messages](#permission-denied-messages)
@@ -59,28 +60,27 @@ These roles bypass all permission checks and have full access to every command:
 
 ---
 
-## Permission Notation
+## Permission Types
 
-Commands use two types of permission requirements:
+Commands use different permission systems:
 
-### Hierarchical ("X+")
+### Role-Based Hierarchical ("X+")
 
 **"X+"** means the specified role and all roles above it in the hierarchy.
 
 Example: **"Senior Mod+"** (SM+) includes:
-- Senior Moderator
-- Administrator
-- Senior Administrator
-- Community Development Lead
-- Community Manager
-- Server Owner
-- (plus Server Dev and Bot Owner bypass)
+- Senior Moderator, Administrator, Senior Administrator, CDL, Community Manager, Server Owner
+- Plus Server Dev and Bot Owner bypass
 
-### Explicit ("[X]" or "[X, Y]")
+### Role-Based Explicit ("[X]")
 
-**"[X]"** or **"[X, Y]"** means only those specific roles, regardless of hierarchy.
+**"[X]"** means only that specific role, regardless of hierarchy.
 
-Example: **"[GK]"** means only the Gatekeeper role can use the command. A Senior Moderator cannot use it unless they also have the Gatekeeper role.
+Example: **"[GK]"** means only the Gatekeeper role can use the command.
+
+### Discord Permission Based
+
+Some commands use Discord's built-in permission system (e.g., ManageMessages, ManageRoles) rather than role-based checks. These are indicated with the Discord permission name.
 
 ---
 
@@ -95,6 +95,7 @@ Commands available to all server members:
 | `/help` | Interactive help system with category browsing and search |
 | `/health` | Check bot status, uptime, and connection health |
 | `/art getstatus` | Check progress of your personal art reward |
+| `/sample` | Preview UI components for training purposes |
 
 ---
 
@@ -109,8 +110,8 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/kick` | Kick an applicant from the server |
 | `/unclaim` | Release your claim on an application |
 | `/listopen` | View your currently claimed applications |
-| `/search` | Search application history by user |
 | `/unblock` | Remove a permanent rejection from a user |
+| `/search` | Search application history by user |
 
 **Why Gatekeeper only?** Application handling is a specialized role. Higher-ranked staff who don't handle applications shouldn't accidentally process them.
 
@@ -132,7 +133,6 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/flag @user [reason]` | Flag a user as suspicious for staff review |
 | `/isitreal` | Analyze images in a message for AI generation |
 | "Is It Real?" context menu | Right-click any message to check for AI images |
-| `/send` | Send a message as the bot to a channel |
 
 ---
 
@@ -140,7 +140,6 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 
 | Command | Description |
 |---------|-------------|
-| `/redeemreward @user` | Assign an art reward to a user |
 | `/movie start` | Start a movie night session |
 | `/movie end` | End the current movie night |
 | `/movie attendance` | View current attendance for active session |
@@ -148,7 +147,6 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/movie credit @user <date> <minutes>` | Credit attendance to a past event |
 | `/movie bump @user` | Give a user full qualified credit |
 | `/movie resume` | Check status of recovered session after restart |
-| `/purge <count>` | Bulk delete messages (up to 100, max 14 days old) |
 
 ---
 
@@ -162,7 +160,6 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/update status` | Set bot's custom status text |
 | `/art all` | View all active artist jobs in the system |
 | `/art assign @user` | Assign an art job to a specific artist |
-| `/artistqueue` | Manage the artist rotation queue |
 
 ---
 
@@ -170,13 +167,13 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 
 | Command | Subcommands | Description |
 |---------|-------------|-------------|
-| `/config set` | `mod_roles`, `gatekeeper`, `logging`, `flags_channel`, etc. | Configure server settings |
+| `/config set` | `mod_roles`, `gatekeeper`, `logging`, `flags_channel`, `dadmode`, `skullmode`, etc. | Configure server settings |
 | `/config get` | `logging`, `flags`, `movie_config`, `artist_rotation` | View current configuration |
 | `/config view` | — | Overview of all settings |
+| `/config set-advanced` | `flags_threshold`, `reapply_cooldown`, `min_account_age`, etc. | Advanced configuration |
 | `/config artist` | `rotation`, `ignored_users` | Artist rotation configuration |
 | `/config movie` | `threshold` | Movie night settings |
 | `/config poke` | `add-category`, `remove-category`, `list` | Poke system config |
-| `/roles` | — | Configure role automation mappings |
 | `/art leaderboard` | — | View artist statistics |
 
 ---
@@ -188,15 +185,12 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/panic on` | Enable emergency mode (stops all role automation) |
 | `/panic off` | Disable emergency mode |
 | `/panic status` | Check current panic mode state |
-| `/gate status` | View application statistics |
-| `/gate config` | View gate configuration |
-| `/gate welcome` | Configure welcome messages |
-| `/gate set-questions` | Set application questions |
-| `/config isitreal` | Configure AI detection API keys |
 | `/modstats export` | Export all moderator metrics as CSV |
 | `/modstats reset` | Clear and rebuild statistics (password required) |
-| `/approvalRate` | View server-wide approval analytics |
-| `/analytics` | Visual activity charts |
+| `/config isitreal` | Configure AI detection API keys |
+| `/config toggleapis` | Toggle API services on/off |
+| `/review-set-notify-config` | Configure forum notifications |
+| `/review-get-notify-config` | View notification settings |
 
 ---
 
@@ -208,10 +202,13 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/audit nsfw` | Scan all member avatars for NSFW content |
 | `/gate setup` | Initialize guild gate configuration |
 | `/gate reset` | Reset ALL application data (destructive) |
+| `/gate status` | View application statistics |
+| `/gate config` | View gate configuration |
+| `/gate welcome` | Configure welcome messages |
+| `/gate set-questions` | Set application questions |
 | `/update banner` | Update bot's profile banner |
 | `/update avatar` | Update bot's avatar image |
 | `/backfill` | Rebuild historical activity data |
-| `/poke` | Send messages to multiple channels |
 
 ---
 
@@ -224,6 +221,27 @@ Commands restricted to Server Dev role or Bot Owner user ID only:
 | `/database check` | Run database integrity checks |
 | `/database recover` | Attempt to recover corrupted data |
 | `/sync` | Sync slash commands to Discord |
+| `/poke @user` | Ping a user across multiple category channels |
+
+---
+
+### Discord Permission Based
+
+These commands use Discord's built-in permission system rather than role-based checks:
+
+| Command | Discord Permission | Description |
+|---------|-------------------|-------------|
+| `/send` | ManageMessages | Post an anonymous message as the bot |
+| `/purge` | ManageMessages + Password | Bulk delete messages (up to 100, max 14 days old) |
+| `/roles` | ManageRoles | Configure role automation mappings |
+| `/artistqueue` | ManageRoles | Manage the artist rotation queue |
+| `/redeemreward` | ManageRoles | Assign an art reward to a user |
+| `/resetdata` | ManageGuild + Password | Reset metrics data from now forward |
+| `/review-set-listopen-output` | ManageGuild | Configure listopen visibility |
+| `/modhistory` | Administrator | View detailed mod action history |
+| `/analytics` | Staff/Owner | Visual activity charts |
+| `/analytics-export` | Staff/Owner | Export activity data as CSV |
+| `/approval-rate` | Staff | Server-wide approval analytics |
 
 ---
 
@@ -357,12 +375,14 @@ The permission system always checks bypass conditions first:
 | Level | Notation | Example Commands |
 |-------|----------|------------------|
 | Public | Anyone | `/help`, `/health` |
-| Gatekeeper | [GK] | `/accept`, `/reject`, `/kick` |
+| Gatekeeper | [GK] | `/accept`, `/reject`, `/kick`, `/search` |
 | Gatekeeper+ | GK+ | `/modstats leaderboard` |
 | Junior Mod+ | JM+ | `/flag`, `/isitreal` |
-| Moderator+ | M+ | `/movie`, `/purge` |
+| Moderator+ | M+ | `/movie` |
 | Senior Mod+ | SM+ | `/activity`, `/skullmode` |
 | Administrator+ | A+ | `/config` |
 | Senior Admin+ | SA+ | `/panic`, `/modstats reset` |
-| Community Manager+ | CM+ | `/audit`, `/backfill` |
-| Owner Only | [BO/SD] | `/database` |
+| Community Manager+ | CM+ | `/audit`, `/backfill`, `/gate setup` |
+| Owner Only | [BO/SD] | `/database`, `/poke` |
+| Discord Perm | ManageMessages | `/send`, `/purge` |
+| Discord Perm | ManageRoles | `/roles`, `/artistqueue`, `/redeemreward` |
