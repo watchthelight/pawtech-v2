@@ -114,6 +114,10 @@ export const data = new SlashCommandBuilder()
           .addIntegerOption((o) => o.setName("chance").setDescription("Odds (1 in N, default: 1000)").setRequired(false).setMinValue(2).setMaxValue(100000))
       )
       .addSubcommand((sc) =>
+        sc.setName("skullmode").setDescription("Toggle Skull Mode (random skull emoji reactions)")
+          .addBooleanOption((o) => o.setName("enabled").setDescription("Enable or disable skull reactions").setRequired(true))
+      )
+      .addSubcommand((sc) =>
         sc.setName("pingdevonapp").setDescription("Toggle Bot Dev role ping on new applications")
           .addBooleanOption((o) => o.setName("enabled").setDescription("Enable Bot Dev pings").setRequired(true))
       )

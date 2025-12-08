@@ -70,7 +70,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   // Require staff permissions
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "unblock",
+    description: "Removes permanent rejection from a user, allowing them to reapply.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   // Resolve target user from options
   let targetUser: User | null = null;

@@ -134,35 +134,89 @@ export async function postWelcomeCard(opts: {
   // 8) Send message with allowed mentions limited to the specific user and role
   // allowedMentions is a security measure: even if content contains @everyone or other role mentions,
   // Discord will only actually ping the IDs we explicitly whitelist here.
-  try {
-    const allowedMentions = {
-      users: [user.id],
-      roles: config.welcome_ping_role_id ? [config.welcome_ping_role_id] : [],
-    };
+  const allowedMentions = {
+    users: [user.id],
+    roles: config.welcome_ping_role_id ? [config.welcome_ping_role_id] : [],
+  };
 
-    const message = await channel.send({
-      content,
-      embeds: [embed],
-      files,
-      allowedMentions,
-    });
+  // Retry logic for transient network errors (e.g., SocketError: other side closed)
+  // Discord's API can sometimes close connections unexpectedly; a simple retry usually succeeds.
+  const MAX_RETRIES = 3;
+  const RETRY_DELAY_MS = 500;
 
-    logger.info(
-      {
-        guildId: guild.id,
-        channelId: channel.id,
-        messageId: message.id,
-        userId: user.id,
-      },
-      "[welcome] posted welcome card"
-    );
+  let lastError: unknown;
+  for (let attempt = 1; attempt <= MAX_RETRIES; attempt++) {
+    try {
+      const message = await channel.send({
+        content,
+        embeds: [embed],
+        files,
+        allowedMentions,
+      });
 
-    return message;
-  } catch (err) {
-    logger.error(
-      { err, guildId: guild.id, channelId: channel.id, userId: user.id },
-      "[welcome] failed to send welcome card"
-    );
-    throw err;
+      logger.info(
+        {
+          guildId: guild.id,
+          channelId: channel.id,
+          messageId: message.id,
+          userId: user.id,
+          attempt,
+        },
+        "[welcome] posted welcome card"
+      );
+
+      return message;
+    } catch (err) {
+      lastError = err;
+      const isRetryable = isTransientError(err);
+
+      if (isRetryable && attempt < MAX_RETRIES) {
+        logger.warn(
+          { err, guildId: guild.id, channelId: channel.id, userId: user.id, attempt },
+          "[welcome] transient error, retrying..."
+        );
+        await sleep(RETRY_DELAY_MS * attempt); // Linear backoff: 500ms, 1000ms, 1500ms
+        continue;
+      }
+
+      logger.error(
+        { err, guildId: guild.id, channelId: channel.id, userId: user.id, attempt },
+        "[welcome] failed to send welcome card"
+      );
+      throw err;
+    }
   }
+
+  // Should not reach here, but TypeScript needs this for exhaustiveness
+  throw lastError;
+}
+
+/**
+ * Checks if an error is a transient network error that should be retried.
+ * Common transient errors from undici/Discord:
+ * - SocketError: other side closed (UND_ERR_SOCKET)
+ * - ConnectTimeoutError (UND_ERR_CONNECT_TIMEOUT)
+ * - HeadersTimeoutError (UND_ERR_HEADERS_TIMEOUT)
+ */
+function isTransientError(err: unknown): boolean {
+  if (!(err instanceof Error)) return false;
+
+  // Check for undici socket errors
+  const code = (err as Error & { code?: string }).code;
+  if (code?.startsWith("UND_ERR_")) return true;
+
+  // Check for common transient error messages
+  const msg = err.message.toLowerCase();
+  return (
+    msg.includes("other side closed") ||
+    msg.includes("socket hang up") ||
+    msg.includes("econnreset") ||
+    msg.includes("etimedout") ||
+    msg.includes("econnrefused")
+  );
+}
+
+/** Simple sleep helper */
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }

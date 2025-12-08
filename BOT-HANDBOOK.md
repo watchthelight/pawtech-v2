@@ -79,9 +79,10 @@ Everything you need to know about the bot — what it does, who can use it, and 
   - 6.3.1 [Logging Channel](#logging-channel)
   - 6.3.2 [Flags Channel and Threshold](#flags-channel-and-threshold)
   - 6.3.3 [Dad Mode](#dad-mode)
-  - 6.3.4 [Ping Dev on App](#ping-dev-on-app)
-  - 6.3.5 [Mod Roles](#mod-roles)
-  - 6.3.6 [Review Roles Mode](#review-roles-mode)
+  - 6.3.4 [Skull Mode](#skull-mode)
+  - 6.3.5 [Ping Dev on App](#ping-dev-on-app)
+  - 6.3.6 [Mod Roles](#mod-roles)
+  - 6.3.7 [Review Roles Mode](#review-roles-mode)
 - 6.4 [/review-set-notify-config](#review-set-notify-config) — Forum notifications
 - 6.5 [/review-get-notify-config](#review-get-notify-config) — View notification settings
 - 6.6 [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
@@ -857,8 +858,10 @@ Detect AI-generated images in any Discord message. This command uses multiple ex
 |--------|-----------|--------------|
 | `message` | Yes | Message ID or Discord message link containing images |
 
+**Context menu shortcut:** Right-click any message → Apps → **"Is It Real?"** to scan without typing the command.
+
 **How it works:**
-1. Run `/isitreal message:<id_or_link>` — provide a message ID or full Discord message link
+1. Run `/isitreal message:<id_or_link>` — provide a message ID or full Discord message link (or use the context menu)
 2. The bot extracts all images from the message (attachments and embeds, up to 10)
 3. Each image is sent to multiple AI detection services in parallel
 4. Results are averaged and displayed in an ephemeral embed
@@ -1803,6 +1806,7 @@ This is your control panel for server-wide bot behavior.
 | `set flags_channel` | Where Silent-Since-Join alerts go | Any text channel |
 | `set flags_threshold` | How many days before flagging silent members | 7 to 365 days |
 | `set dadmode` | Toggle the "Hi hungry, I'm Dad!" joke responses | On/Off + odds (1 in N) |
+| `set skullmode` | Toggle random skull emoji reactions on messages | True/False |
 | `set pingdevonapp` | Toggle whether to ping Bot Dev when new apps come in | True/False |
 | `set suggestion_channel` | Where suggestions get posted | Any text channel |
 | `set suggestion_cooldown` | How long between suggestions | 1 to 1440 minutes |
@@ -1874,6 +1878,27 @@ Pure fun. When someone says "I'm tired" or "I'm hungry", the bot might respond "
 **Example:**
 ```
 /config set dadmode state:on chance:500
+```
+
+#### Skull Mode
+Chaotic fun. The bot will randomly react to messages with a skull emoji based on configurable odds.
+
+**Why it exists:** Adds unpredictable chaos and inside jokes to the server.
+
+**Two commands:**
+- `/config set skullmode enabled:true/false` - Turn skull mode on or off
+- `/skullmode chance:N` - Set the odds (1-1000)
+
+**Understanding odds:**
+- `chance:1` means 1 in 1 (100% of the time) - every single message gets skulled
+- `chance:10` means 1 in 10 (10% of the time) - frequent skulls
+- `chance:100` means 1 in 100 (1% of the time) - occasional skulls
+- `chance:1000` means 1 in 1000 (0.1% of the time) - default, rare surprise skulls
+
+**Examples:**
+```
+/config set skullmode enabled:true
+/skullmode chance:100
 ```
 
 #### Ping Dev on App

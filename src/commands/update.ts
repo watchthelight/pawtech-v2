@@ -105,7 +105,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   const { interaction } = ctx;
 
   ctx.step("permission_check");
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "update",
+    description: "Updates bot activity, status, banner, or avatar.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   const subcommand = interaction.options.getSubcommand();
 

@@ -671,7 +671,11 @@ async function handleAll(
 
   // requireStaff handles the "nope" reply internally and returns false.
   // Pattern borrowed from the config commands. Slightly magical but consistent.
-  if (!requireStaff(interaction)) {
+  if (!requireStaff(interaction, {
+    command: "art all",
+    description: "Views all active art jobs across all artists (staff dashboard).",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) {
     return;
   }
 
@@ -732,7 +736,11 @@ async function handleAssign(
     return;
   }
 
-  if (!requireStaff(interaction)) {
+  if (!requireStaff(interaction, {
+    command: "art assign",
+    description: "Manually assigns an art job to an artist.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) {
     return;
   }
 

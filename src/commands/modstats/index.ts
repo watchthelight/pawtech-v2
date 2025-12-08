@@ -112,7 +112,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
   // GOTCHA: requireStaff() already sends an error reply if permission denied.
   // The bare return is intentional - the user has already been told to go away.
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "modstats",
+    description: "Views moderator analytics, leaderboards, and performance metrics.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   const subcommand = interaction.options.getSubcommand();
 

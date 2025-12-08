@@ -20,7 +20,7 @@ import {
 } from "discord.js";
 import { logger } from "../lib/logger.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
-import { requireStaff, canRunAllCommands, hasManageGuild, isReviewer } from "../lib/config.js";
+import { requireStaff, canRunAllCommands, hasManageGuild, isReviewer, postPermissionDenied } from "../lib/config.js";
 import { detectAIForImages, buildAIDetectionEmbed } from "../features/aiDetection/index.js";
 import { isGuildMember } from "../lib/typeGuards.js";
 
@@ -59,7 +59,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   // Permission check - uses mod_role_ids from guild config
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "isitreal",
+    description: "Detects AI-generated images in a message.",
+    requirements: [
+      { type: "config", field: "mod_role_ids" },
+      { type: "config", field: "reviewer_role_id" },
+    ],
+  })) return;
 
   // Defer early - API calls will take time
   await interaction.deferReply({ ephemeral: true });
@@ -205,9 +212,13 @@ export async function handleIsItRealContextMenu(
     isReviewer(guildId, member);
 
   if (!hasPermission) {
-    await interaction.reply({
-      content: "You don't have permission to use this command.",
-      ephemeral: true,
+    await postPermissionDenied(interaction, {
+      command: "Is It Real?",
+      description: "Detects AI-generated images in a message (context menu).",
+      requirements: [
+        { type: "config", field: "mod_role_ids" },
+        { type: "config", field: "reviewer_role_id" },
+      ],
     });
     return;
   }

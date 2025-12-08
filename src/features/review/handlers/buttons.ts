@@ -37,6 +37,7 @@ import {
   openRejectModal,
   openAcceptModal,
   openPermRejectModal,
+  openKickModal,
 } from "./helpers.js";
 
 import { runKickAction } from "./actionRunners.js";
@@ -75,7 +76,15 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
       return;
     }
 
-    // Acknowledge button without visible bubble for kick/claim/unclaim
+    // kick opens modal for confirmation with optional reason
+    if (action === "kick") {
+      const app = await resolveApplication(interaction, code);
+      if (!app) return;
+      await openKickModal(interaction, app);
+      return;
+    }
+
+    // Acknowledge button without visible bubble for claim/unclaim
     // https://discord.js.org/#/docs/discord.js/main/class/Interaction?scrollTo=deferUpdate
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferUpdate().catch((err) => {
@@ -86,9 +95,7 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
     const app = await resolveApplication(interaction, code);
     if (!app) return;
 
-    if (action === "kick") {
-      await runKickAction(interaction, app, null);
-    } else if (action === "claim") {
+    if (action === "claim") {
       await handleClaimToggle(interaction, app);
     } else if (action === "unclaim") {
       await handleUnclaimAction(interaction, app);
@@ -97,7 +104,7 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
     const traceId = interaction.id.slice(-8).toUpperCase();
     logger.error({ err, action, code, traceId }, "Review button handling failed");
     captureException(err, { area: "handleReviewButton", action, code, traceId });
-    if (!interaction.deferred && !interaction.replied && action !== "reject" && action !== "approve" && action !== "accept") {
+    if (!interaction.deferred && !interaction.replied && action !== "reject" && action !== "approve" && action !== "accept" && action !== "kick") {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((deferErr) => {
         logger.debug({ err: deferErr, action, code, traceId }, "[review] error-deferReply failed");
       });

@@ -26,7 +26,7 @@ import { logActionPretty } from "../logging/pretty.js";
 import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { randomBytes } from "node:crypto";
-import { hasStaffPermissions, isReviewer } from "../lib/config.js";
+import { hasStaffPermissions, isReviewer, postPermissionDenied } from "../lib/config.js";
 import { isOwner } from "../lib/owner.js";
 import { LRUCache } from "../lib/lruCache.js";
 
@@ -515,9 +515,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   const isReviewerUser = isReviewer(guildId, member);
 
   if (!isOwnerUser && !isStaff && !isReviewerUser) {
-    await interaction.reply({
-      content: "❌ You don't have permission to use this command. This command is restricted to reviewers, staff, and server administrators.",
-      ephemeral: true,
+    await postPermissionDenied(interaction, {
+      command: "listopen",
+      description: "Lists claimed applications that need review.",
+      requirements: [
+        { type: "config", field: "reviewer_role_id" },
+        { type: "config", field: "mod_role_ids" },
+      ],
     });
 
     logger.warn(

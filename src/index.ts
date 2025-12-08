@@ -86,6 +86,7 @@ import {
   handleReviewButton,
   handleRejectModal,
   handleAcceptModal,
+  handleKickModal,
   handleModmailButton,
   handlePermRejectButton,
   handlePermRejectModal,
@@ -300,6 +301,7 @@ client.once(Events.ClientReady, async () => {
       ensureWelcomeChannelsColumns,
       ensureModRolesColumns,
       ensureDadModeColumns,
+      ensureSkullModeColumns,
       ensureListopenPublicOutputColumn,
     } = await import("./lib/config.js");
     ensureAvatarScanSchema();
@@ -321,6 +323,7 @@ client.once(Events.ClientReady, async () => {
     ensureWelcomeChannelsColumns();
     ensureModRolesColumns();
     ensureDadModeColumns();
+    ensureSkullModeColumns();
     ensureListopenPublicOutputColumn();
   } catch (err) {
     logger.error({ err }, "[startup] schema ensure failed");
@@ -774,6 +777,19 @@ client.on("guildMemberAdd", wrapEvent("guildMemberAdd", async (member) => {
   const { trackJoin } = await import("./features/activityTracker.js");
   const joinedAt = Math.floor((member.joinedTimestamp || Date.now()) / 1000);
   trackJoin(member.guild.id, member.id, joinedAt);
+
+  // Scan avatar for NSFW content on join
+  // WHY: Catch NSFW avatars immediately when members join
+  try {
+    const { handleMemberJoin } = await import("./features/avatarNsfwMonitor.js");
+    await handleMemberJoin(member);
+  } catch (err) {
+    logger.error({
+      err,
+      userId: member.id,
+      guildId: member.guild.id,
+    }, "[guildMemberAdd] Failed to scan avatar for NSFW");
+  }
 }));
 
 // REVIEW CARD: Refresh pending apps when user leaves server
@@ -1580,6 +1596,29 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
               return;
             }
 
+            if (route?.type === "review_kick") {
+              logger.info(
+                {
+                  evt: "ix_route_match",
+                  kind: "modal",
+                  route: "review_kick",
+                  id: customId,
+                  code: route.code,
+                  traceId,
+                },
+                "route: kick modal"
+              );
+              const executor = wrapCommand<ModalSubmitInteraction>(
+                "review_kick",
+                async (commandCtx) => {
+                  await handleKickModal(commandCtx.interaction);
+                }
+              );
+              await executor(interaction);
+              succeeded = true;
+              return;
+            }
+
             // If we got here, someone submitted a modal we don't recognize.
             // This usually means a new modal was added but the route wasn't registered,
             // or there's a typo in the customId. Either way, the user sees an error card.
@@ -1765,6 +1804,20 @@ client.on("messageCreate", wrapEvent("messageCreate", async (message) => {
         await executeDadMode(message);
       } catch (err) {
         logger.debug({ err, messageId: message.id }, "[dadmode] handler failed");
+      }
+    }
+
+    // Skull Mode: Random skull emoji reactions
+    // WHAT: Randomly reacts to messages with a skull emoji based on configurable odds
+    // WHY: Adds playful chaos and community engagement in guilds
+    // HOW: Checks guild config for enabled state and odds, then reacts with skull
+    // DOCS: See src/listeners/messageSkullMode.ts
+    if (message.guildId && !message.webhookId) {
+      try {
+        const { execute: executeSkullMode } = await import("./listeners/messageSkullMode.js");
+        await executeSkullMode(message);
+      } catch (err) {
+        logger.debug({ err, messageId: message.id }, "[skullmode] handler failed");
       }
     }
 

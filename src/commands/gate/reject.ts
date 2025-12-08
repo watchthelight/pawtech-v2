@@ -70,7 +70,14 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     await replyOrEdit(interaction, { content: "Guild only." });
     return;
   }
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "reject",
+    description: "Rejects an application by short code, user mention, or user ID.",
+    requirements: [
+      { type: "config", field: "mod_role_ids" },
+      { type: "config", field: "reviewer_role_id" },
+    ],
+  })) return;
 
   ctx.step("defer");
   await ensureDeferred(interaction);

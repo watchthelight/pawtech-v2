@@ -69,7 +69,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   // Require staff permissions
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "backfill",
+    description: "Backfills historical message activity data for the heatmap.",
+    requirements: [
+      { type: "config", field: "mod_role_ids" },
+      { type: "permission", permission: "ManageGuild" },
+    ],
+  })) return;
 
   const weeks = interaction.options.getInteger('weeks', false) || 8;
   const dryRun = interaction.options.getBoolean('dry-run', false) || false;

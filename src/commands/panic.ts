@@ -82,7 +82,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   // Check staff permissions
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "panic",
+    description: "Emergency shutoff for role automation system.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   const guildId = interaction.guild.id;
   const subcommand = interaction.options.getSubcommand();

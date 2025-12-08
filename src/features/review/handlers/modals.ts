@@ -14,7 +14,7 @@ import {
 import { logger } from "../../../lib/logger.js";
 import { captureException } from "../../../lib/sentry.js";
 import { replyOrEdit } from "../../../lib/cmdWrap.js";
-import { MODAL_PERM_REJECT_RE } from "../../../lib/modalPatterns.js";
+import { MODAL_PERM_REJECT_RE, MODAL_KICK_RE } from "../../../lib/modalPatterns.js";
 
 import {
   MODAL_RE,
@@ -27,6 +27,7 @@ import {
   runApproveAction,
   runRejectAction,
   runPermRejectAction,
+  runKickAction,
 } from "./actionRunners.js";
 
 // ===== Exported Modal Handlers =====
@@ -144,6 +145,45 @@ export async function handlePermRejectModal(interaction: ModalSubmitInteraction)
       content: `Failed to process permanent rejection (trace: ${traceId}).`,
     }).catch((replyErr) => {
       logger.debug({ err: replyErr, code, traceId }, "[review] perm-reject-modal error-reply failed");
+    });
+  }
+}
+
+/**
+ * handleKickModal
+ * WHAT: Handles kick confirmation modal submission.
+ * WHY: Processes optional reason and triggers kick flow after confirmation.
+ */
+export async function handleKickModal(interaction: ModalSubmitInteraction) {
+  const match = MODAL_KICK_RE.exec(interaction.customId);
+  if (!match) return;
+  if (!requireInteractionStaff(interaction)) return;
+
+  // Acknowledge modal without visible bubble
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferUpdate().catch((err) => {
+      logger.debug({ err, interactionId: interaction.id }, "[review] kick-modal deferUpdate failed");
+    });
+  }
+
+  const code = match[1];
+
+  try {
+    const app = await resolveApplication(interaction, code);
+    if (!app) return;
+
+    const reasonRaw = interaction.fields.getTextInputValue("v1:modal:kick:reason") ?? "";
+    const reason = reasonRaw.trim().slice(0, 500) || null;
+
+    await runKickAction(interaction, app, reason);
+  } catch (err) {
+    const traceId = interaction.id.slice(-8).toUpperCase();
+    logger.error({ err, code, traceId }, "Kick modal handling failed");
+    captureException(err, { area: "handleKickModal", code, traceId });
+    await replyOrEdit(interaction, {
+      content: `Failed to process kick (trace: ${traceId}).`,
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] kick-modal error-reply failed");
     });
   }
 }

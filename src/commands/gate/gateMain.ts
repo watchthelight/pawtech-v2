@@ -606,7 +606,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   ctx.step("permission_check");
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "gate",
+    description: "Manages guild gate and verification settings.",
+    requirements: [
+      { type: "config", field: "mod_role_ids" },
+      { type: "permission", permission: "ManageGuild" },
+    ],
+  })) return;
 
   const subcommandGroup = interaction.options.getSubcommandGroup(false);
   if (!subcommandGroup) {

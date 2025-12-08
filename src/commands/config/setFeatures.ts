@@ -107,6 +107,39 @@ export async function executeSetDadMode(ctx: CommandContext<ChatInputCommandInte
   );
 }
 
+export async function executeSetSkullMode(ctx: CommandContext<ChatInputCommandInteraction>) {
+  /**
+   * Skull Mode: toggle random skull emoji reactions on messages.
+   * Use /skullmode to configure the odds (1 in N).
+   */
+  const { interaction } = ctx;
+  await ensureDeferred(interaction);
+
+  const enabled = interaction.options.getBoolean("enabled", true);
+
+  ctx.step("update_config");
+  upsertConfig(interaction.guildId!, { skullmode_enabled: enabled });
+
+  const existingCfg = getConfig(interaction.guildId!);
+  const odds = existingCfg?.skullmode_odds ?? 1000;
+
+  logger.info(
+    {
+      guildId: interaction.guildId,
+      enabled,
+      odds,
+      moderatorId: interaction.user.id,
+    },
+    "[config] skullmode toggled"
+  );
+
+  ctx.step("reply");
+  const statusText = enabled
+    ? `Skull Mode **enabled** (1 in **${odds}** messages). Use \`/skullmode\` to change the odds.`
+    : "Skull Mode **disabled**";
+  await replyOrEdit(interaction, { content: statusText });
+}
+
 export async function executeSetPingDevOnApp(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * Toggle Bot Dev role ping on new applications.

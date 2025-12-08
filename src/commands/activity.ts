@@ -68,7 +68,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   // 1. The heatmap reveals server activity patterns (privacy concern)
   // 2. Image generation is CPU-intensive (rate limiting concern)
   // 3. Regular users don't need to know peak hours (they just want to chat)
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "activity",
+    description: "Views server activity heatmap with trends analysis.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   // Get weeks parameter (default: 1)
   // The || 1 fallback handles null, which happens when the option isn't provided.

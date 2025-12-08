@@ -55,7 +55,14 @@ export async function executeUnclaim(ctx: CommandContext<ChatInputCommandInterac
     await replyOrEdit(interaction, { content: "Guild only." });
     return;
   }
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "unclaim",
+    description: "Releases a claim on an application so others can review it.",
+    requirements: [
+      { type: "config", field: "mod_role_ids" },
+      { type: "config", field: "reviewer_role_id" },
+    ],
+  })) return;
 
   // Defer early. Even though this command is fast, we might hit Discord API
   // latency on the review card refresh, and the 3-second SLA is unforgiving.

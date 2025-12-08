@@ -581,7 +581,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   ctx.step("permission_check");
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "database",
+    description: "Database management and health check commands.",
+    requirements: [
+      { type: "config", field: "mod_role_ids" },
+      { type: "permission", permission: "ManageGuild" },
+    ],
+  })) return;
 
   const subcommand = interaction.options.getSubcommand();
 

@@ -34,6 +34,10 @@ export const MAX_REASON_LENGTH = 512;
 export const DADMODE_ODDS_MIN = 2;
 export const DADMODE_ODDS_MAX = 100000;
 
+/** Skullmode odds range bounds (min, max) */
+export const SKULLMODE_ODDS_MIN = 1;
+export const SKULLMODE_ODDS_MAX = 1000;
+
 // ===== Timeouts & Delays =====
 
 /** Health check timeout before aborting */

@@ -7,15 +7,36 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+---
+
+## [4.8.0] - 2025-12-08
+
 ### Added
 
+- **Intelligent Permission Denied Cards** - Permission errors now show specific role requirements:
+  - Displays the exact roles needed to use each command (e.g., "@Community Manager", "@Bot Developer")
+  - Dynamically resolves role IDs to names from the server
+  - Unique error messages per command with descriptions
+  - Shows config-based roles (mod roles, reviewer role) and Discord permissions
+  - Ephemeral embed with trace ID for debugging
+
 - **"Is It Real?" Context Menu** - Right-click any message → Apps → "Is It Real?" to scan images for AI generation without typing the full command
+
+- **Skull Mode** - Random skull emoji reactions on messages for chaotic fun:
+  - `/skullmode chance:N` - Set the odds (1-1000) for skull reactions
+  - `/config set skullmode enabled:true/false` - Toggle skull mode on/off
+  - Staff-only (requires mod roles configured via `/config set mod_roles`)
 
 ### Removed
 
 - **"Modmail: Open" Context Menu** - Removed the right-click context menu for opening modmail threads
 
 ### Fixed
+
+- **Welcome Card Retry Logic** - Added retry logic for transient network errors (e.g., "other side closed"):
+  - Retries up to 3 times with linear backoff (500ms, 1000ms, 1500ms)
+  - Handles undici socket errors (UND_ERR_SOCKET, connection resets, timeouts)
+  - Logs retry attempts for debugging
 
 - **Bot Dev Ping on Application** - Fixed `ping_dev_on_app` feature not working:
   - The setting was configurable via `/config set pingdevonapp` but pings were never sent

@@ -21,6 +21,15 @@ import { isOwner } from "./owner.js";
 import { touchSyncMarker } from "./syncMarker.js";
 import { isGuildMember } from "./typeGuards.js";
 import { LRUCache } from "./lruCache.js";
+import {
+  postPermissionDenied,
+  type PermissionDenialOptions,
+  type PermissionRequirement,
+} from "./permissionCard.js";
+
+// Re-export permission types for convenient imports
+export type { PermissionDenialOptions, PermissionRequirement };
+export { postPermissionDenied };
 
 // GOTCHA: This type is essentially a SQL row disguised as TypeScript.
 // Half these fields are optional-nullable because SQLite doesn't know the difference.
@@ -44,6 +53,8 @@ export type GuildConfig = {
   review_roles_mode?: string | null;
   dadmode_enabled?: boolean | null;
   dadmode_odds?: number | null;
+  skullmode_enabled?: boolean | null;
+  skullmode_odds?: number | null;
   listopen_public_output?: number | null; // 1=public (default), 0=ephemeral
   leadership_role_id?: string | null; // Role ID for leadership/senior mod permissions
   ping_dev_on_app?: number | null; // 1=ping dev on new apps, 0=don't ping
@@ -170,6 +181,8 @@ const ALLOWED_MIGRATION_COLUMNS = new Set([
   // Feature toggle columns
   "dadmode_enabled",
   "dadmode_odds",
+  "skullmode_enabled",
+  "skullmode_odds",
   "listopen_public_output",
 ]);
 
@@ -335,6 +348,47 @@ export function ensureDadModeColumns() {
     ensuredMigrations.add("guild_config_dadmode");
   } catch (err) {
     logger.error({ err }, "[ensure] failed to ensure dadmode columns");
+  }
+}
+
+export function ensureSkullModeColumns() {
+  /**
+   * ensureSkullModeColumns
+   * WHAT: Migration helper to add skullmode_enabled and skullmode_odds columns.
+   * WHY: Supports Skull Mode feature (random skull emoji reactions).
+   * DOCS:
+   *  - PRAGMA table_info: https://sqlite.org/pragma.html#pragma_table_info
+   *  - ALTER TABLE: https://sqlite.org/lang_altertable.html
+   */
+  if (ensuredMigrations.has("guild_config_skullmode")) return;
+  try {
+    const exists = db
+      .prepare(`SELECT name FROM sqlite_master WHERE type='table' AND name='guild_config'`)
+      .get() as { name: string } | undefined;
+    if (!exists) {
+      return;
+    }
+    const cols = db.prepare(`PRAGMA table_info(guild_config)`).all() as Array<{ name: string }>;
+
+    if (!cols.some((col) => col.name === "skullmode_enabled")) {
+      logger.info(
+        { table: "guild_config", column: "skullmode_enabled" },
+        "[ensure] adding skullmode_enabled column"
+      );
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN skullmode_enabled INTEGER DEFAULT 0`).run();
+    }
+
+    if (!cols.some((col) => col.name === "skullmode_odds")) {
+      logger.info(
+        { table: "guild_config", column: "skullmode_odds" },
+        "[ensure] adding skullmode_odds column"
+      );
+      db.prepare(`ALTER TABLE guild_config ADD COLUMN skullmode_odds INTEGER DEFAULT 1000`).run();
+    }
+
+    ensuredMigrations.add("guild_config_skullmode");
+  } catch (err) {
+    logger.error({ err }, "[ensure] failed to ensure skullmode columns");
   }
 }
 
@@ -506,7 +560,8 @@ export function upsertConfig(guildId: string, partial: Partial<Omit<GuildConfig,
       "accepted_role_id", "reviewer_role_id", "welcome_template", "info_channel_id",
       "rules_channel_id", "welcome_ping_role_id", "mod_role_ids", "gatekeeper_role_id",
       "modmail_log_channel_id", "modmail_delete_on_close", "review_roles_mode",
-      "dadmode_enabled", "dadmode_odds", "listopen_public_output", "leadership_role_id",
+      "dadmode_enabled", "dadmode_odds", "skullmode_enabled", "skullmode_odds",
+      "listopen_public_output", "leadership_role_id",
       "ping_dev_on_app", "image_search_url_template", "reapply_cooldown_hours",
       "min_account_age_hours", "min_join_age_hours", "avatar_scan_enabled",
       "avatar_scan_nsfw_threshold", "avatar_scan_skin_edge_threshold",
@@ -738,13 +793,20 @@ export function canRunAllCommands(member: GuildMember | null, guildId: string): 
   return false;
 }
 
-export function requireStaff(interaction: ChatInputCommandInteraction): boolean {
+export function requireStaff(
+  interaction: ChatInputCommandInteraction,
+  options?: PermissionDenialOptions
+): boolean {
   /**
    * requireStaff
    * WHAT: Guards slash command handlers; ephemeral reply if caller lacks permissions.
    * WHY: Avoid noisy channel replies and ensure a predictable UX.
    * RETURNS: true if allowed; false if denied and a reply was attempted.
    * NOTE: Now uses canRunAllCommands for unified permission checking.
+   *
+   * @param options - Optional permission denial options for custom error messages.
+   *                  If provided, shows an embed with specific role requirements.
+   *                  If not provided, shows generic "You don't have permission" message.
    */
   const member = interaction.member as GuildMember | null;
   const guildId = interaction.guildId!;
@@ -764,12 +826,20 @@ export function requireStaff(interaction: ChatInputCommandInteraction): boolean 
   if (!ok) {
     // Ephemeral reply avoids leaking permission info publicly.
     // Also prevents embarrassing "you're not staff" messages in general chat.
-    interaction
-      .reply({
-        flags: MessageFlags.Ephemeral,
-        content: "You don't have permission to manage gate settings.",
-      })
-      .catch((err) => logger.warn({ err }, "Failed to send permission denied message"));
+    if (options) {
+      // Use new permission card with specific role requirements
+      postPermissionDenied(interaction, options).catch((err) =>
+        logger.warn({ err, command: options.command }, "Failed to send permission denied card")
+      );
+    } else {
+      // Legacy generic message for backwards compatibility
+      interaction
+        .reply({
+          flags: MessageFlags.Ephemeral,
+          content: "You don't have permission to use this command.",
+        })
+        .catch((err) => logger.warn({ err }, "Failed to send permission denied message"));
+    }
   }
   return ok;
 }

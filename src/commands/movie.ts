@@ -195,7 +195,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   // Check staff permissions
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "movie",
+    description: "Movie night attendance tracking and tier role management.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   const subcommand = interaction.options.getSubcommand();
 

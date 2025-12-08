@@ -94,7 +94,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   // Require staff permissions
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "flag",
+    description: "Manually flags a user as suspicious for staff review.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   const moderatorId = interaction.user.id;
   const now = Date.now();

@@ -64,6 +64,7 @@ export const BTN_AUDIT_RE = /^audit:(members|nsfw):/;
 export const MODAL_REJECT_RE = /^v1:modal:reject:code([0-9A-F]{6})$/;
 export const MODAL_PERM_REJECT_RE = /^v1:modal:permreject:code([0-9A-F]{6})$/;
 export const MODAL_ACCEPT_RE = /^v1:modal:accept:code([0-9A-F]{6})$/;
+export const MODAL_KICK_RE = /^v1:modal:kick:code([0-9A-F]{6})$/;
 
 // Age verification modal - requires explicit confirmation before showing NSFW avatar source
 export const MODAL_18_RE = /^v1:avatar:confirm18:code([0-9A-F]{6})$/;
@@ -77,6 +78,7 @@ export type ModalRoute =
   | { type: "review_reject"; code: string }
   | { type: "review_perm_reject"; code: string }
   | { type: "review_accept"; code: string }
+  | { type: "review_kick"; code: string }
   | { type: "avatar_confirm18"; code: string };
 
 /**
@@ -108,6 +110,11 @@ export function identifyModalRoute(id: string): ModalRoute | null {
   const accept = id.match(MODAL_ACCEPT_RE);
   if (accept) {
     return { type: "review_accept", code: accept[1] };
+  }
+
+  const kick = id.match(MODAL_KICK_RE);
+  if (kick) {
+    return { type: "review_kick", code: kick[1] };
   }
 
   const confirm18 = id.match(MODAL_18_RE);

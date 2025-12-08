@@ -27,6 +27,7 @@ import {
   BTN_DECIDE_RE,
   MODAL_REJECT_RE,
   MODAL_ACCEPT_RE,
+  MODAL_KICK_RE,
 } from "../../../lib/modalPatterns.js";
 
 import type { ApplicationRow, ReviewStaffInteraction } from "../types.js";
@@ -233,5 +234,46 @@ export async function openPermRejectModal(interaction: ButtonInteraction, app: A
 
   await interaction.showModal(modal).catch((err) => {
     logger.warn({ err, appId: app.id }, "[review] failed to show permanent reject modal");
+  });
+}
+
+/**
+ * openKickModal
+ * WHAT: Shows the kick confirmation modal with optional reason field.
+ * WHY: Prevents accidental kicks by requiring explicit confirmation.
+ */
+export async function openKickModal(interaction: ButtonInteraction, app: ApplicationRow) {
+  if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick" }, "[review] already-resolved reply failed");
+    });
+    return;
+  }
+
+  const claim = getClaim(app.id);
+  const claimError = claimGuard(claim, interaction.user.id);
+  if (claimError) {
+    await replyOrEdit(interaction, { content: claimError }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "kick" }, "[review] claim-guard reply failed");
+    });
+    return;
+  }
+
+  const code = shortCode(app.id);
+  const modal = new ModalBuilder()
+    .setCustomId(`v1:modal:kick:code${code}`)
+    .setTitle("Confirm Kick");
+  const reasonInput = new TextInputBuilder()
+    .setCustomId("v1:modal:kick:reason")
+    .setLabel("Reason (optional)")
+    .setPlaceholder("Why are you kicking this user?")
+    .setRequired(false)
+    .setMaxLength(500)
+    .setStyle(TextInputStyle.Paragraph);
+  const row = new ActionRowBuilder<TextInputBuilder>().addComponents(reasonInput);
+  modal.addComponents(row);
+
+  await interaction.showModal(modal).catch((err) => {
+    logger.warn({ err, appId: app.id }, "[review] failed to show kick modal");
   });
 }

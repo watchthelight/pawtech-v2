@@ -22,6 +22,7 @@ import {
   type GuildMember,
 } from "discord.js";
 import { logger } from "../lib/logger.js";
+import { postPermissionDenied } from "../lib/permissionCard.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
 import {
   analyzeMember,
@@ -105,9 +106,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
 
   if (!hasAllowedRole) {
-    await interaction.reply({
-      content: "❌ You don't have permission to use this command.",
-      ephemeral: true,
+    await postPermissionDenied(interaction, {
+      command: `audit ${subcommand}`,
+      description: subcommand === "nsfw"
+        ? "Scans member avatars for NSFW content using Google Vision API."
+        : "Scans for bot-like accounts using multiple heuristics.",
+      requirements: [{ type: "roles", roleIds: ALLOWED_ROLES }],
     });
     logger.warn(
       { userId: user.id, guildId },
@@ -332,9 +336,12 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
 
   if (!hasAllowedRole) {
-    await interaction.reply({
-      content: "❌ You don't have permission to use this button.",
-      ephemeral: true,
+    await postPermissionDenied(interaction, {
+      command: `audit ${subcommand}`,
+      description: subcommand === "nsfw"
+        ? "Scans member avatars for NSFW content using Google Vision API."
+        : "Scans for bot-like accounts using multiple heuristics.",
+      requirements: [{ type: "roles", roleIds: ALLOWED_ROLES }],
     });
     return;
   }

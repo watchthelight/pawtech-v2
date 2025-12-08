@@ -55,7 +55,11 @@ export async function executeKick(ctx: CommandContext<ChatInputCommandInteractio
     await replyOrEdit(interaction, { content: "Guild only." });
     return;
   }
-  if (!requireStaff(interaction)) return;
+  if (!requireStaff(interaction, {
+    command: "kick",
+    description: "Kicks an applicant from the server with a reason.",
+    requirements: [{ type: "config", field: "mod_role_ids" }],
+  })) return;
 
   ctx.step("defer");
   await ensureDeferred(interaction);
