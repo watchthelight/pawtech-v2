@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **"Is It Real?" Context Menu** - Right-click any message → Apps → "Is It Real?" to scan images for AI generation without typing the full command
 
-- **Skull Mode** - Random skull emoji reactions on messages for chaotic fun:
+- **Skull Mode** - Random skull emoji reactions on messages:
   - `/skullmode chance:N` - Set the odds (1-1000) for skull reactions
   - `/config set skullmode enabled:true/false` - Toggle skull mode on/off
   - Staff-only (requires mod roles configured via `/config set mod_roles`)
