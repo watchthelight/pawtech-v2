@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Unclaim Button with Confirmation** - Review cards now have an "Unclaim" button:
+  - Appears in the second row when an application is claimed
+  - Requires typing "UNCLAIM" to confirm (prevents accidental unclaims)
+  - Only the claim owner can unclaim their own applications
+
 ---
 
 ## [4.8.0] - 2025-12-08

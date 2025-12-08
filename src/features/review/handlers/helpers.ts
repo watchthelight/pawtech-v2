@@ -277,3 +277,51 @@ export async function openKickModal(interaction: ButtonInteraction, app: Applica
     logger.warn({ err, appId: app.id }, "[review] failed to show kick modal");
   });
 }
+
+/**
+ * openUnclaimModal
+ * WHAT: Shows the unclaim confirmation modal.
+ * WHY: Prevents accidental unclaims by requiring explicit confirmation.
+ */
+export async function openUnclaimModal(interaction: ButtonInteraction, app: ApplicationRow) {
+  if (app.status === "rejected" || app.status === "approved" || app.status === "kicked") {
+    await replyOrEdit(interaction, { content: "This application is already resolved." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "unclaim" }, "[review] already-resolved reply failed");
+    });
+    return;
+  }
+
+  const claim = getClaim(app.id);
+  if (!claim) {
+    await replyOrEdit(interaction, { content: "This application is not currently claimed." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "unclaim" }, "[review] not-claimed reply failed");
+    });
+    return;
+  }
+
+  if (claim.reviewer_id !== interaction.user.id) {
+    await replyOrEdit(interaction, { content: "You did not claim this application. Only the claim owner can unclaim it." }).catch((err) => {
+      logger.debug({ err, appId: app.id, action: "unclaim" }, "[review] not-owner reply failed");
+    });
+    return;
+  }
+
+  const code = shortCode(app.id);
+  const modal = new ModalBuilder()
+    .setCustomId(`v1:modal:unclaim:code${code}`)
+    .setTitle("Confirm Unclaim");
+  const confirmInput = new TextInputBuilder()
+    .setCustomId("v1:modal:unclaim:confirm")
+    .setLabel("Type UNCLAIM to confirm")
+    .setPlaceholder("UNCLAIM")
+    .setRequired(true)
+    .setMinLength(7)
+    .setMaxLength(7)
+    .setStyle(TextInputStyle.Short);
+  const row = new ActionRowBuilder<TextInputBuilder>().addComponents(confirmInput);
+  modal.addComponents(row);
+
+  await interaction.showModal(modal).catch((err) => {
+    logger.warn({ err, appId: app.id }, "[review] failed to show unclaim modal");
+  });
+}

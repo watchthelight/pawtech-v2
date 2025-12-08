@@ -96,6 +96,7 @@ export {
   handleRejectModal,
   handleAcceptModal,
   handleKickModal,
+  handleUnclaimModal,
   handleModmailButton,
   handlePermRejectButton,
   handlePermRejectModal,

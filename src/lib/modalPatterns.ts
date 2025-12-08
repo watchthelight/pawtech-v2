@@ -65,6 +65,7 @@ export const MODAL_REJECT_RE = /^v1:modal:reject:code([0-9A-F]{6})$/;
 export const MODAL_PERM_REJECT_RE = /^v1:modal:permreject:code([0-9A-F]{6})$/;
 export const MODAL_ACCEPT_RE = /^v1:modal:accept:code([0-9A-F]{6})$/;
 export const MODAL_KICK_RE = /^v1:modal:kick:code([0-9A-F]{6})$/;
+export const MODAL_UNCLAIM_RE = /^v1:modal:unclaim:code([0-9A-F]{6})$/;
 
 // Age verification modal - requires explicit confirmation before showing NSFW avatar source
 export const MODAL_18_RE = /^v1:avatar:confirm18:code([0-9A-F]{6})$/;
@@ -79,6 +80,7 @@ export type ModalRoute =
   | { type: "review_perm_reject"; code: string }
   | { type: "review_accept"; code: string }
   | { type: "review_kick"; code: string }
+  | { type: "review_unclaim"; code: string }
   | { type: "avatar_confirm18"; code: string };
 
 /**
@@ -115,6 +117,11 @@ export function identifyModalRoute(id: string): ModalRoute | null {
   const kick = id.match(MODAL_KICK_RE);
   if (kick) {
     return { type: "review_kick", code: kick[1] };
+  }
+
+  const unclaim = id.match(MODAL_UNCLAIM_RE);
+  if (unclaim) {
+    return { type: "review_unclaim", code: unclaim[1] };
   }
 
   const confirm18 = id.match(MODAL_18_RE);

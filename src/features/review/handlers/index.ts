@@ -21,6 +21,7 @@ export {
   handleAcceptModal,
   handlePermRejectModal,
   handleKickModal,
+  handleUnclaimModal,
 } from "./modals.js";
 
 // Re-export helpers for internal use
@@ -32,6 +33,7 @@ export {
   openAcceptModal,
   openPermRejectModal,
   openKickModal,
+  openUnclaimModal,
   BUTTON_RE,
   MODAL_RE,
   ACCEPT_MODAL_RE,

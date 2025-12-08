@@ -87,6 +87,7 @@ import {
   handleRejectModal,
   handleAcceptModal,
   handleKickModal,
+  handleUnclaimModal,
   handleModmailButton,
   handlePermRejectButton,
   handlePermRejectModal,
@@ -1612,6 +1613,29 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
                 "review_kick",
                 async (commandCtx) => {
                   await handleKickModal(commandCtx.interaction);
+                }
+              );
+              await executor(interaction);
+              succeeded = true;
+              return;
+            }
+
+            if (route?.type === "review_unclaim") {
+              logger.info(
+                {
+                  evt: "ix_route_match",
+                  kind: "modal",
+                  route: "review_unclaim",
+                  id: customId,
+                  code: route.code,
+                  traceId,
+                },
+                "route: unclaim modal"
+              );
+              const executor = wrapCommand<ModalSubmitInteraction>(
+                "review_unclaim",
+                async (commandCtx) => {
+                  await handleUnclaimModal(commandCtx.interaction);
                 }
               );
               await executor(interaction);

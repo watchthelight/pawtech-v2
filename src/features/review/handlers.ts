@@ -28,6 +28,7 @@ export {
   handleAcceptModal,
   handlePermRejectModal,
   handleKickModal,
+  handleUnclaimModal,
   // Helpers (for internal use by other modules)
   isStaff,
   requireInteractionStaff,
@@ -36,6 +37,7 @@ export {
   openAcceptModal,
   openPermRejectModal,
   openKickModal,
+  openUnclaimModal,
   BUTTON_RE,
   MODAL_RE,
   ACCEPT_MODAL_RE,

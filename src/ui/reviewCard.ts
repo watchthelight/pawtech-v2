@@ -194,6 +194,7 @@ export function buildActionRowsV2(
 
     const row2 = new ActionRowBuilder<ButtonBuilder>().addComponents(
       new ButtonBuilder().setCustomId(`review:modmail:${idSuffix}`).setLabel("Modmail").setStyle(ButtonStyle.Secondary),
+      new ButtonBuilder().setCustomId(`review:unclaim:${idSuffix}`).setLabel("Unclaim").setStyle(ButtonStyle.Secondary),
       new ButtonBuilder()
         .setCustomId(`review:copy_uid:${idSuffix}:user${app.user_id}`)
         .setLabel("Copy UID")

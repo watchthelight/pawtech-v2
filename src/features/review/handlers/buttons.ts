@@ -38,6 +38,7 @@ import {
   openAcceptModal,
   openPermRejectModal,
   openKickModal,
+  openUnclaimModal,
 } from "./helpers.js";
 
 import { runKickAction } from "./actionRunners.js";
@@ -84,7 +85,15 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
       return;
     }
 
-    // Acknowledge button without visible bubble for claim/unclaim
+    // unclaim opens modal for confirmation
+    if (action === "unclaim") {
+      const app = await resolveApplication(interaction, code);
+      if (!app) return;
+      await openUnclaimModal(interaction, app);
+      return;
+    }
+
+    // Acknowledge button without visible bubble for claim
     // https://discord.js.org/#/docs/discord.js/main/class/Interaction?scrollTo=deferUpdate
     if (!interaction.deferred && !interaction.replied) {
       await interaction.deferUpdate().catch((err) => {
@@ -97,14 +106,14 @@ export async function handleReviewButton(interaction: ButtonInteraction) {
 
     if (action === "claim") {
       await handleClaimToggle(interaction, app);
-    } else if (action === "unclaim") {
-      await handleUnclaimAction(interaction, app);
     }
   } catch (err) {
     const traceId = interaction.id.slice(-8).toUpperCase();
     logger.error({ err, action, code, traceId }, "Review button handling failed");
     captureException(err, { area: "handleReviewButton", action, code, traceId });
-    if (!interaction.deferred && !interaction.replied && action !== "reject" && action !== "approve" && action !== "accept" && action !== "kick") {
+    // Modal-opening actions (reject, approve, accept, kick, unclaim) don't defer
+    const modalActions = ["reject", "approve", "accept", "kick", "unclaim"];
+    if (!interaction.deferred && !interaction.replied && !modalActions.includes(action)) {
       await interaction.deferReply({ flags: MessageFlags.Ephemeral }).catch((deferErr) => {
         logger.debug({ err: deferErr, action, code, traceId }, "[review] error-deferReply failed");
       });

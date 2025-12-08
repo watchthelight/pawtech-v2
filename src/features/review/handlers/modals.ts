@@ -14,7 +14,7 @@ import {
 import { logger } from "../../../lib/logger.js";
 import { captureException } from "../../../lib/sentry.js";
 import { replyOrEdit } from "../../../lib/cmdWrap.js";
-import { MODAL_PERM_REJECT_RE, MODAL_KICK_RE } from "../../../lib/modalPatterns.js";
+import { MODAL_PERM_REJECT_RE, MODAL_KICK_RE, MODAL_UNCLAIM_RE } from "../../../lib/modalPatterns.js";
 
 import {
   MODAL_RE,
@@ -184,6 +184,58 @@ export async function handleKickModal(interaction: ModalSubmitInteraction) {
       content: `Failed to process kick (trace: ${traceId}).`,
     }).catch((replyErr) => {
       logger.debug({ err: replyErr, code, traceId }, "[review] kick-modal error-reply failed");
+    });
+  }
+}
+
+/**
+ * handleUnclaimModal
+ * WHAT: Handles unclaim confirmation modal submission.
+ * WHY: Processes confirmation and triggers unclaim flow.
+ */
+export async function handleUnclaimModal(interaction: ModalSubmitInteraction) {
+  const match = MODAL_UNCLAIM_RE.exec(interaction.customId);
+  if (!match) return;
+  if (!requireInteractionStaff(interaction)) return;
+
+  // Acknowledge modal without visible bubble
+  if (!interaction.deferred && !interaction.replied) {
+    await interaction.deferUpdate().catch((err) => {
+      logger.debug({ err, interactionId: interaction.id }, "[review] unclaim-modal deferUpdate failed");
+    });
+  }
+
+  const code = match[1];
+
+  try {
+    const app = await resolveApplication(interaction, code);
+    if (!app) return;
+
+    // Validate confirmation text
+    const confirmRaw = interaction.fields.getTextInputValue("v1:modal:unclaim:confirm") ?? "";
+    const confirm = confirmRaw.trim().toUpperCase();
+
+    if (confirm !== "UNCLAIM") {
+      await replyOrEdit(interaction, {
+        content: "Unclaim cancelled. You must type `UNCLAIM` to confirm.",
+        flags: MessageFlags.Ephemeral,
+      }).catch((err) => {
+        logger.debug({ err, code }, "[review] unclaim-cancelled reply failed");
+      });
+      return;
+    }
+
+    // Run the unclaim action
+    const { handleUnclaimAction } = await import("./claimHandlers.js");
+    await handleUnclaimAction(interaction, app);
+  } catch (err) {
+    const traceId = interaction.id.slice(-8).toUpperCase();
+    logger.error({ err, code, traceId }, "Unclaim modal handling failed");
+    captureException(err, { area: "handleUnclaimModal", code, traceId });
+    await replyOrEdit(interaction, {
+      content: `Failed to process unclaim (trace: ${traceId}).`,
+    }).catch((replyErr) => {
+      logger.debug({ err: replyErr, code, traceId }, "[review] unclaim-modal error-reply failed");
     });
   }
 }
