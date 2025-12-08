@@ -11,7 +11,7 @@ import {
 } from "discord.js";
 import type { GuildMember } from "discord.js";
 import {
-  requireStaff,
+  requireGatekeeper,
   getConfig,
   findAppByShortCode,
   findPendingAppByUserId,
@@ -64,14 +64,11 @@ export async function executeAccept(ctx: CommandContext<ChatInputCommandInteract
     await replyOrEdit(interaction, { content: "Guild only." });
     return;
   }
-  if (!requireStaff(interaction, {
-    command: "accept",
-    description: "Approves an application by short code, user mention, or user ID.",
-    requirements: [
-      { type: "config", field: "mod_role_ids" },
-      { type: "config", field: "reviewer_role_id" },
-    ],
-  })) return;
+  if (!requireGatekeeper(
+    interaction,
+    "accept",
+    "Approves an application by short code, user mention, or user ID."
+  )) return;
 
   ctx.step("defer");
   await ensureDeferred(interaction);

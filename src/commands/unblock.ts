@@ -15,7 +15,7 @@ import {
   type User,
 } from "discord.js";
 import { logger } from "../lib/logger.js";
-import { requireStaff } from "../lib/config.js";
+import { requireGatekeeper } from "../lib/config.js";
 import { db } from "../db/db.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
 import { postAuditEmbed } from "../features/logger.js";
@@ -69,12 +69,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Require staff permissions
-  if (!requireStaff(interaction, {
-    command: "unblock",
-    description: "Removes permanent rejection from a user, allowing them to reapply.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
-  })) return;
+  // Require Gatekeeper role
+  if (!requireGatekeeper(
+    interaction,
+    "unblock",
+    "Removes permanent rejection from a user, allowing them to reapply."
+  )) return;
 
   // Resolve target user from options
   let targetUser: User | null = null;

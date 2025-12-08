@@ -14,7 +14,7 @@ import {
   EmbedBuilder,
   Colors,
 } from "discord.js";
-import { requireStaff, requireAdminOrLeadership } from "../lib/config.js";
+import { requireOwnerOnly } from "../lib/config.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 import {
   wrapCommand,
@@ -581,39 +581,18 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   ctx.step("permission_check");
-  if (!requireStaff(interaction, {
-    command: "database",
-    description: "Database management and health check commands.",
-    requirements: [
-      { type: "config", field: "mod_role_ids" },
-      { type: "permission", permission: "ManageGuild" },
-    ],
-  })) return;
+  // Require Bot Owner / Server Dev only
+  if (!requireOwnerOnly(
+    interaction,
+    "database",
+    "Database management and health check commands."
+  )) return;
 
   const subcommand = interaction.options.getSubcommand();
 
   if (subcommand === "check") {
     await executeCheck(ctx);
   } else if (subcommand === "recover") {
-    // Security: Database recovery is a destructive operation requiring admin permissions
-    // beyond the standard staff check. This prevents accidental or unauthorized recovery.
-    const isAdmin = await requireAdminOrLeadership(interaction);
-    if (!isAdmin) {
-      await interaction.reply({
-        content: "Database recovery requires admin or leadership permissions.",
-        ephemeral: true,
-      });
-      logger.warn(
-        {
-          evt: "db_recover_denied",
-          guildId: interaction.guildId,
-          userId: interaction.user.id,
-          reason: "insufficient_permissions",
-        },
-        "[database] Recovery denied: user lacks admin/leadership permissions"
-      );
-      return;
-    }
     await executeRecover(ctx);
   }
 }

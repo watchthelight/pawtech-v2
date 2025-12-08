@@ -316,11 +316,11 @@ export async function handlePingInUnverified(interaction: ButtonInteraction) {
     return;
   }
 
-  // Check staff permissions
+  // Check Gatekeeper permissions
   const member = interaction.member as GuildMember | null;
-  if (!isStaff(interaction.guildId, member)) {
+  if (!isStaff(member, interaction.user.id)) {
     await replyOrEdit(interaction, {
-      content: "You do not have permission for this.",
+      content: "You do not have the Gatekeeper role required for this.",
     }).catch((err) => {
       logger.debug({ err, interactionId: interaction.id, guildId: interaction.guildId }, "[review] ping permission reply failed");
     });
@@ -498,12 +498,12 @@ export async function handleDeletePing(interaction: ButtonInteraction) {
     return;
   }
 
-  // Check staff permissions
+  // Check Gatekeeper permissions
   const member = interaction.member as GuildMember | null;
-  if (!isStaff(interaction.guildId, member)) {
+  if (!isStaff(member, interaction.user.id)) {
     await interaction
       .reply({
-        content: "You do not have permission for this.",
+        content: "You do not have the Gatekeeper role required for this.",
         flags: MessageFlags.Ephemeral,
       })
       .catch((err) => {

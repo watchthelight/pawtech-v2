@@ -8,7 +8,8 @@
 import {
   type ChatInputCommandInteraction,
   MessageFlags,
-  requireStaff,
+  requireMinRole,
+  ROLE_IDS,
   type CommandContext,
 } from "./shared.js";
 
@@ -106,13 +107,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   ctx.step("permission_check");
-  if (!requireStaff(interaction, {
+  // Require Administrator+ role
+  if (!requireMinRole(interaction, ROLE_IDS.ADMINISTRATOR, {
     command: "config",
     description: "Modifies server configuration settings.",
-    requirements: [
-      { type: "config", field: "mod_role_ids" },
-      { type: "permission", permission: "ManageGuild" },
-    ],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.ADMINISTRATOR }],
   })) return;
 
   const subcommandGroup = interaction.options.getSubcommandGroup(false);

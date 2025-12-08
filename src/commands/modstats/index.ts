@@ -24,7 +24,7 @@ import {
   SlashCommandBuilder,
 } from "discord.js";
 import type { CommandContext } from "../../lib/cmdWrap.js";
-import { requireStaff } from "../../lib/config.js";
+import { requireMinRole, ROLE_IDS } from "../../lib/config.js";
 
 /*
  * GOTCHA: If you're wondering why this is split across 4 files for ~120 lines of routing,
@@ -110,15 +110,24 @@ export const data = new SlashCommandBuilder()
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
   const { interaction } = ctx;
 
-  // GOTCHA: requireStaff() already sends an error reply if permission denied.
-  // The bare return is intentional - the user has already been told to go away.
-  if (!requireStaff(interaction, {
-    command: "modstats",
-    description: "Views moderator analytics, leaderboards, and performance metrics.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
-  })) return;
-
   const subcommand = interaction.options.getSubcommand();
+
+  // Different permission levels for different subcommands:
+  // - leaderboard/user: Gatekeeper+ (GK+)
+  // - export/reset: Senior Administrator+ (SA+)
+  if (subcommand === "leaderboard" || subcommand === "user") {
+    if (!requireMinRole(interaction, ROLE_IDS.GATEKEEPER, {
+      command: `modstats ${subcommand}`,
+      description: `Views moderator ${subcommand === "leaderboard" ? "leaderboard" : "individual stats"}.`,
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.GATEKEEPER }],
+    })) return;
+  } else if (subcommand === "export" || subcommand === "reset") {
+    if (!requireMinRole(interaction, ROLE_IDS.SENIOR_ADMIN, {
+      command: `modstats ${subcommand}`,
+      description: subcommand === "export" ? "Exports moderator metrics as CSV." : "Resets moderator statistics.",
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_ADMIN }],
+    })) return;
+  }
 
   /*
    * Yes, a switch statement would be cleaner. But if-else chains are easier to

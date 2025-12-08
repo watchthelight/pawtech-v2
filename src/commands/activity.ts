@@ -22,7 +22,7 @@ import {
 } from 'discord.js';
 import { withStep, type CommandContext } from '../lib/cmdWrap.js';
 import { fetchActivityData, generateHeatmap } from '../lib/activityHeatmap.js';
-import { requireStaff } from '../lib/config.js';
+import { requireMinRole, ROLE_IDS, SENIOR_MOD_PLUS } from '../lib/config.js';
 import { classifyError, userFriendlyMessage } from '../lib/errors.js';
 import { logger } from '../lib/logger.js';
 
@@ -64,14 +64,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Require staff permissions. This is a staff-only command because:
+  // Require Senior Moderator+ role. This command is restricted because:
   // 1. The heatmap reveals server activity patterns (privacy concern)
   // 2. Image generation is CPU-intensive (rate limiting concern)
   // 3. Regular users don't need to know peak hours (they just want to chat)
-  if (!requireStaff(interaction, {
+  if (!requireMinRole(interaction, ROLE_IDS.SENIOR_MOD, {
     command: "activity",
     description: "Views server activity heatmap with trends analysis.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_MOD }],
   })) return;
 
   // Get weeks parameter (default: 1)

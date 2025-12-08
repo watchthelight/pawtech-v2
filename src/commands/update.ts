@@ -20,7 +20,7 @@ import {
   ActivityType,
   MessageFlags,
 } from "discord.js";
-import { requireStaff } from "../lib/config.js";
+import { requireMinRole, ROLE_IDS } from "../lib/config.js";
 import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { upsertStatus, getStatus } from "../features/statusStore.js";
 import { writeFileSync } from "node:fs";
@@ -104,14 +104,25 @@ const ACTIVITY_TYPE_MAP: Record<string, ActivityType> = {
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
   const { interaction } = ctx;
 
-  ctx.step("permission_check");
-  if (!requireStaff(interaction, {
-    command: "update",
-    description: "Updates bot activity, status, banner, or avatar.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
-  })) return;
-
   const subcommand = interaction.options.getSubcommand();
+
+  // Different permission levels for different subcommands:
+  // - activity/status: Senior Moderator+
+  // - banner/avatar: Community Manager+
+  ctx.step("permission_check");
+  if (subcommand === "activity" || subcommand === "status") {
+    if (!requireMinRole(interaction, ROLE_IDS.SENIOR_MOD, {
+      command: `update ${subcommand}`,
+      description: `Updates bot ${subcommand}.`,
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_MOD }],
+    })) return;
+  } else if (subcommand === "banner" || subcommand === "avatar") {
+    if (!requireMinRole(interaction, ROLE_IDS.COMMUNITY_MANAGER, {
+      command: `update ${subcommand}`,
+      description: `Updates bot ${subcommand}.`,
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.COMMUNITY_MANAGER }],
+    })) return;
+  }
 
   const user = await withStep(ctx, "load_bot_user", async () => interaction.client.user);
   if (!user) {

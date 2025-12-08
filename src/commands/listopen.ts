@@ -26,8 +26,13 @@ import { logActionPretty } from "../logging/pretty.js";
 import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { randomBytes } from "node:crypto";
-import { hasStaffPermissions, isReviewer, postPermissionDenied } from "../lib/config.js";
-import { isOwner } from "../lib/owner.js";
+import {
+  postPermissionDenied,
+  shouldBypass,
+  hasRole,
+  ROLE_IDS,
+  GATEKEEPER_ONLY,
+} from "../lib/config.js";
 import { LRUCache } from "../lib/lruCache.js";
 
 /*
@@ -506,26 +511,22 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   const reviewerId = interaction.user.id;
   const guildId = interaction.guildId;
 
-  // Runtime permission check: reviewer role, owner, or staff permissions
+  // Runtime permission check: Gatekeeper role only (Bot Owner/Server Dev bypass)
   // This follows the project pattern: make command discoverable, enforce at runtime
   const member = interaction.member ? (await interaction.guild.members.fetch(reviewerId).catch(() => null)) : null;
 
-  const isOwnerUser = isOwner(reviewerId);
-  const isStaff = hasStaffPermissions(member, guildId);
-  const isReviewerUser = isReviewer(guildId, member);
+  const hasBypass = shouldBypass(reviewerId, member);
+  const isGatekeeper = hasRole(member, ROLE_IDS.GATEKEEPER);
 
-  if (!isOwnerUser && !isStaff && !isReviewerUser) {
+  if (!hasBypass && !isGatekeeper) {
     await postPermissionDenied(interaction, {
       command: "listopen",
       description: "Lists claimed applications that need review.",
-      requirements: [
-        { type: "config", field: "reviewer_role_id" },
-        { type: "config", field: "mod_role_ids" },
-      ],
+      requirements: [{ type: "roles", roleIds: GATEKEEPER_ONLY }],
     });
 
     logger.warn(
-      { userId: reviewerId, guildId, isOwner: isOwnerUser, isStaff, isReviewer: isReviewerUser },
+      { userId: reviewerId, guildId, hasBypass, isGatekeeper },
       "[listopen] unauthorized access attempt"
     );
     return;

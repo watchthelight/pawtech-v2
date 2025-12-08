@@ -16,7 +16,7 @@ import {
 } from 'discord.js';
 import { spawn } from 'child_process';
 import { type CommandContext } from '../lib/cmdWrap.js';
-import { requireStaff, getConfig } from '../lib/config.js';
+import { requireMinRole, ROLE_IDS, getConfig } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
 
 export const data = new SlashCommandBuilder()
@@ -68,14 +68,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Require staff permissions
-  if (!requireStaff(interaction, {
+  // Require Community Manager+ role
+  if (!requireMinRole(interaction, ROLE_IDS.COMMUNITY_MANAGER, {
     command: "backfill",
     description: "Backfills historical message activity data for the heatmap.",
-    requirements: [
-      { type: "config", field: "mod_role_ids" },
-      { type: "permission", permission: "ManageGuild" },
-    ],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.COMMUNITY_MANAGER }],
   })) return;
 
   const weeks = interaction.options.getInteger('weeks', false) || 8;

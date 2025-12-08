@@ -2349,22 +2349,53 @@ This is an interactive wizard that helps you:
 
 ## Permission Reference
 
-| Level | Who has it | Example commands |
-|-------|------------|------------------|
-| **Everyone** | All server members | `/health`, `/art getstatus`, `/art leaderboard` |
-| **Staff** | Reviewer role or Manage Guild | `/accept`, `/reject`, `/listopen`, `/modstats` |
-| **Leadership** | Server owners + leadership role | `/modhistory` |
-| **Administrator** | Administrator permission | `/config`, `/review-set-notify-config` |
-| **Bot Owner** | Designated in config | `/update`, `/poke`, `/database` |
+> **Note:** For the complete permission matrix with role IDs, see [PERMS-MATRIX.md](PERMS-MATRIX.md).
 
-### What counts as "Staff"?
+### Role Hierarchy (Highest to Lowest)
 
-You're considered staff if you have ANY of these:
-- The configured Reviewer role
-- Manage Guild permission
-- Administrator permission
-- You're the server owner
-- You're a bot owner
+| Rank | Role | Abbreviation |
+|------|------|--------------|
+| 1 | Server Owner | SO |
+| 2 | Community Manager | CM |
+| 3 | Community Development Lead | CDL |
+| 4 | Senior Administrator | SA |
+| 5 | Administrator | A |
+| 6 | Senior Moderator | SM |
+| 7 | Moderator | M |
+| 8 | Junior Moderator | JM |
+| 9 | Gatekeeper | GK |
+| 10 | Moderation Team | MT |
+
+### Special Bypass Roles
+- **Server Dev** - Full access to all commands (same as Bot Owner)
+- **Bot Owner** - Always bypasses all permission checks
+
+### Command Permission Levels
+
+| Permission Level | Who has it | Commands |
+|------------------|------------|----------|
+| **Everyone** | All server members | `/help`, `/health`, `/art getstatus` |
+| **Gatekeeper only** | Gatekeeper role | `/accept`, `/reject`, `/kick`, `/unclaim`, `/listopen`, `/unblock`, review card buttons |
+| **Gatekeeper+** | GK and above | `/modstats leaderboard`, `/modstats user` |
+| **Junior Mod+** | JM and above | `/flag`, `/isitreal` |
+| **Moderator+** | M and above | `/movie` |
+| **Senior Mod+** | SM and above | `/activity`, `/skullmode`, `/update activity/status` |
+| **Administrator+** | A and above | `/config` |
+| **Senior Admin+** | SA and above | `/panic`, `/modstats export/reset` |
+| **Community Manager+** | CM and above | `/update banner/avatar`, `/backfill`, `/audit` |
+| **Bot Owner only** | Server Dev or Bot Owner | `/database` |
+
+### Understanding "X and above"
+
+When a command requires "Senior Mod+" (Senior Moderator and above), any of these roles will work:
+- Senior Moderator
+- Administrator
+- Senior Administrator
+- Community Development Lead
+- Community Manager
+- Server Owner
+- Server Dev (bypass)
+- Bot Owner (bypass)
 
 ---
 

@@ -26,10 +26,56 @@ import {
   type PermissionDenialOptions,
   type PermissionRequirement,
 } from "./permissionCard.js";
+import {
+  ROLE_IDS,
+  BOT_OWNER_UID,
+  isBotOwner,
+  isServerDev,
+  shouldBypass,
+  hasRole,
+  hasAnyRole,
+  hasRoleOrAbove,
+  getRolesAtOrAbove,
+  getMinRoleDescription,
+  GATEKEEPER_ONLY,
+  GATEKEEPER_PLUS,
+  JUNIOR_MOD_PLUS,
+  MODERATOR_PLUS,
+  SENIOR_MOD_PLUS,
+  ADMIN_PLUS,
+  SENIOR_ADMIN_PLUS,
+  COMMUNITY_MANAGER_PLUS,
+  SERVER_ARTIST,
+  ARTIST_OR_ADMIN,
+} from "./roles.js";
 
 // Re-export permission types for convenient imports
 export type { PermissionDenialOptions, PermissionRequirement };
 export { postPermissionDenied };
+
+// Re-export role system for convenient imports
+export {
+  ROLE_IDS,
+  BOT_OWNER_UID,
+  isBotOwner,
+  isServerDev,
+  shouldBypass,
+  hasRole,
+  hasAnyRole,
+  hasRoleOrAbove,
+  getRolesAtOrAbove,
+  getMinRoleDescription,
+  GATEKEEPER_ONLY,
+  GATEKEEPER_PLUS,
+  JUNIOR_MOD_PLUS,
+  MODERATOR_PLUS,
+  SENIOR_MOD_PLUS,
+  ADMIN_PLUS,
+  SENIOR_ADMIN_PLUS,
+  COMMUNITY_MANAGER_PLUS,
+  SERVER_ARTIST,
+  ARTIST_OR_ADMIN,
+};
 
 // GOTCHA: This type is essentially a SQL row disguised as TypeScript.
 // Half these fields are optional-nullable because SQLite doesn't know the difference.
@@ -1033,5 +1079,176 @@ export async function requireAdminOrLeadership(
     return true;
   }
 
+  return false;
+}
+
+// =============================================================================
+// NEW ROLE-BASED PERMISSION SYSTEM
+// =============================================================================
+
+/**
+ * requireMinRole
+ * WHAT: Guards commands that require a minimum role level (hierarchical check).
+ * WHY: Replaces generic requireStaff() with specific role requirements.
+ * LOGIC:
+ *   1. Bot Owner bypass (always)
+ *   2. Server Dev bypass (always)
+ *   3. Check if member has minRoleId or any higher-ranked role
+ * RETURNS: true if allowed; false if denied and a reply was sent
+ *
+ * @param interaction - ChatInputCommandInteraction to check
+ * @param minRoleId - Minimum role required (e.g., ROLE_IDS.SENIOR_MOD for SM+)
+ * @param options - Permission denial options for error display
+ */
+export function requireMinRole(
+  interaction: ChatInputCommandInteraction,
+  minRoleId: string,
+  options: PermissionDenialOptions
+): boolean {
+  const member = interaction.member as GuildMember | null;
+  const userId = interaction.user.id;
+
+  // Bot Owner / Server Dev bypass
+  if (shouldBypass(userId, member)) {
+    logger.debug(
+      { evt: "role_check", userId, minRoleId, result: true, reason: "bypass" },
+      "[requireMinRole] user has bypass permission"
+    );
+    return true;
+  }
+
+  // Check hierarchical role
+  if (hasRoleOrAbove(member, minRoleId)) {
+    logger.debug(
+      { evt: "role_check", userId, minRoleId, result: true, reason: "has_role_or_above" },
+      "[requireMinRole] user has required role or above"
+    );
+    return true;
+  }
+
+  // Permission denied - send error card
+  logger.debug(
+    { evt: "role_check", userId, minRoleId, result: false, reason: "no_matching_role" },
+    "[requireMinRole] user does not have required role"
+  );
+  postPermissionDenied(interaction, options).catch((err) =>
+    logger.warn({ err, command: options.command }, "Failed to send permission denied card")
+  );
+  return false;
+}
+
+/**
+ * requireExactRoles
+ * WHAT: Guards commands that require specific roles (explicit check, not hierarchical).
+ * WHY: For commands like Gatekeeper-only that don't follow hierarchy.
+ * LOGIC:
+ *   1. Bot Owner bypass (always)
+ *   2. Server Dev bypass (always)
+ *   3. Check if member has ANY of the specified roles
+ * RETURNS: true if allowed; false if denied and a reply was sent
+ *
+ * @param interaction - ChatInputCommandInteraction to check
+ * @param roleIds - Array of role IDs that grant access (OR logic)
+ * @param options - Permission denial options for error display
+ */
+export function requireExactRoles(
+  interaction: ChatInputCommandInteraction,
+  roleIds: string[],
+  options: PermissionDenialOptions
+): boolean {
+  const member = interaction.member as GuildMember | null;
+  const userId = interaction.user.id;
+
+  // Bot Owner / Server Dev bypass
+  if (shouldBypass(userId, member)) {
+    logger.debug(
+      { evt: "role_check", userId, roleIds, result: true, reason: "bypass" },
+      "[requireExactRoles] user has bypass permission"
+    );
+    return true;
+  }
+
+  // Check if member has any of the specified roles
+  if (hasAnyRole(member, roleIds)) {
+    logger.debug(
+      { evt: "role_check", userId, roleIds, result: true, reason: "has_exact_role" },
+      "[requireExactRoles] user has required role"
+    );
+    return true;
+  }
+
+  // Permission denied - send error card
+  logger.debug(
+    { evt: "role_check", userId, roleIds, result: false, reason: "no_matching_role" },
+    "[requireExactRoles] user does not have required role"
+  );
+  postPermissionDenied(interaction, options).catch((err) =>
+    logger.warn({ err, command: options.command }, "Failed to send permission denied card")
+  );
+  return false;
+}
+
+/**
+ * requireGatekeeper
+ * WHAT: Convenience function for Gatekeeper-only commands (accept, reject, kick, etc.)
+ * WHY: Most gate commands are restricted to Gatekeepers only.
+ * RETURNS: true if allowed; false if denied
+ */
+export function requireGatekeeper(
+  interaction: ChatInputCommandInteraction,
+  commandName: string,
+  description: string
+): boolean {
+  return requireExactRoles(interaction, GATEKEEPER_ONLY, {
+    command: commandName,
+    description,
+    requirements: [{ type: "roles", roleIds: GATEKEEPER_ONLY }],
+  });
+}
+
+/**
+ * requireArtist
+ * WHAT: Convenience function for Server Artist OR Admin+ commands
+ * WHY: Artist commands allow both artists and admins to manage jobs.
+ * RETURNS: true if allowed; false if denied
+ */
+export function requireArtist(
+  interaction: ChatInputCommandInteraction,
+  commandName: string,
+  description: string
+): boolean {
+  return requireExactRoles(interaction, ARTIST_OR_ADMIN, {
+    command: commandName,
+    description,
+    requirements: [{ type: "roles", roleIds: ARTIST_OR_ADMIN }],
+  });
+}
+
+/**
+ * requireOwnerOnly
+ * WHAT: Guards commands that only Bot Owner or Server Dev can use.
+ * WHY: For sensitive commands like /database, /sync.
+ * RETURNS: true if allowed; false if denied
+ */
+export function requireOwnerOnly(
+  interaction: ChatInputCommandInteraction,
+  commandName: string,
+  description: string
+): boolean {
+  const member = interaction.member as GuildMember | null;
+  const userId = interaction.user.id;
+
+  if (shouldBypass(userId, member)) {
+    return true;
+  }
+
+  // Permission denied
+  postPermissionDenied(interaction, {
+    command: commandName,
+    description,
+    requirements: [{ type: "owner" }],
+  }).catch((err) =>
+    logger.warn({ err, command: commandName }, "Failed to send permission denied card")
+  );
   return false;
 }

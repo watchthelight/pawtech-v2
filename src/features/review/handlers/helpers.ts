@@ -19,7 +19,7 @@ import {
   TextInputStyle,
 } from "discord.js";
 import { logger } from "../../../lib/logger.js";
-import { hasStaffPermissions } from "../../../lib/config.js";
+import { shouldBypass, hasRole, ROLE_IDS } from "../../../lib/config.js";
 import { replyOrEdit } from "../../../lib/cmdWrap.js";
 import { shortCode } from "../../../lib/ids.js";
 import { findAppByShortCode } from "../../appLookup.js";
@@ -43,17 +43,20 @@ export const ACCEPT_MODAL_RE = MODAL_ACCEPT_RE;
 // ===== Helper Functions =====
 
 /**
- * isStaff
- * WHAT: Check if a member has staff permissions for a guild.
- * WHY: Gate handler access to authorized moderators only.
+ * isStaff (now checks Gatekeeper role)
+ * WHAT: Check if a member has Gatekeeper role or bypass permission.
+ * WHY: Gate handler access to authorized Gatekeepers only.
  */
-export function isStaff(guildId: string, member: GuildMember | null) {
-  return hasStaffPermissions(member, guildId);
+export function isStaff(member: GuildMember | null, userId: string): boolean {
+  // Bot Owner / Server Dev bypass
+  if (shouldBypass(userId, member)) return true;
+  // Check for Gatekeeper role
+  return hasRole(member, ROLE_IDS.GATEKEEPER);
 }
 
 /**
  * requireInteractionStaff
- * WHAT: Validates that an interaction is from a staff member in a guild.
+ * WHAT: Validates that an interaction is from a Gatekeeper in a guild.
  * WHY: Guards all handler entry points against unauthorized access.
  * RETURNS: true if valid, false if rejected (reply sent).
  */
@@ -67,9 +70,10 @@ export function requireInteractionStaff(interaction: ButtonInteraction | ModalSu
     return false;
   }
   const member = interaction.member as GuildMember | null;
-  if (!isStaff(interaction.guildId, member)) {
+  const userId = interaction.user.id;
+  if (!isStaff(member, userId)) {
     interaction
-      .reply({ flags: MessageFlags.Ephemeral, content: "You do not have permission for this." })
+      .reply({ flags: MessageFlags.Ephemeral, content: "You do not have the Gatekeeper role required for this action." })
       .catch((err) => {
         logger.debug({ err, interactionId: interaction.id, guildId: interaction.guildId }, "[review] permission reply failed");
       });

@@ -10,7 +10,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import {
-  requireStaff,
+  requireGatekeeper,
   findAppByShortCode,
   findPendingAppByUserId,
   ensureReviewMessage,
@@ -55,11 +55,11 @@ export async function executeKick(ctx: CommandContext<ChatInputCommandInteractio
     await replyOrEdit(interaction, { content: "Guild only." });
     return;
   }
-  if (!requireStaff(interaction, {
-    command: "kick",
-    description: "Kicks an applicant from the server with a reason.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
-  })) return;
+  if (!requireGatekeeper(
+    interaction,
+    "kick",
+    "Kicks an applicant from the server with a reason."
+  )) return;
 
   ctx.step("defer");
   await ensureDeferred(interaction);

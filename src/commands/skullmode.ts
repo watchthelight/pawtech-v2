@@ -14,7 +14,7 @@ import {
   MessageFlags,
 } from "discord.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
-import { requireStaff, getConfig, upsertConfig } from "../lib/config.js";
+import { requireMinRole, ROLE_IDS, SENIOR_MOD_PLUS, getConfig, upsertConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 
 export const data = new SlashCommandBuilder()
@@ -41,10 +41,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   ctx.step("permission_check");
-  if (!requireStaff(interaction, {
+  // Require Senior Moderator+ role
+  if (!requireMinRole(interaction, ROLE_IDS.SENIOR_MOD, {
     command: "skullmode",
     description: "Configures skull emoji reaction odds (1-1000).",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_MOD }],
   })) return;
 
   const chance = interaction.options.getInteger("chance", true);

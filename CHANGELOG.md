@@ -14,6 +14,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - Requires typing "UNCLAIM" to confirm (prevents accidental unclaims)
   - Only the claim owner can unclaim their own applications
 
+### Changed
+
+- **Role-Based Permission System Redesign** - Complete overhaul of the permission system:
+  - **Named roles instead of generic "staff"** - Commands now require specific named roles (Gatekeeper, Junior Mod, Senior Mod, Administrator, etc.)
+  - **Role hierarchy** - Server Owner > Community Manager > CDL > Senior Admin > Administrator > Senior Mod > Moderator > Junior Mod > Gatekeeper > Moderation Team
+  - **Bot Owner and Server Dev bypass** - Always have full access to all commands
+  - **Per-command permission levels** - Each command has a specific minimum role:
+    - **Gatekeeper only**: `/accept`, `/reject`, `/kick`, `/unclaim`, `/listopen`, `/unblock`, review card buttons
+    - **Gatekeeper+**: `/modstats leaderboard`, `/modstats user`
+    - **Junior Mod+**: `/flag`, `/isitreal`
+    - **Moderator+**: `/movie`
+    - **Senior Mod+**: `/activity`, `/skullmode`, `/update activity`, `/update status`
+    - **Administrator+**: `/config`
+    - **Senior Admin+**: `/panic`, `/modstats export`, `/modstats reset`
+    - **Community Manager+**: `/update banner`, `/update avatar`, `/backfill`
+    - **Bot Owner only**: `/database`
+  - **Improved permission denied messages** - Now show the specific role(s) required with role mentions
+  - See `PERMS-MATRIX.md` for the complete permission matrix
+
 ---
 
 ## [4.8.0] - 2025-12-08

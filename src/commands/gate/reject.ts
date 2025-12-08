@@ -10,7 +10,7 @@ import {
   type ChatInputCommandInteraction,
 } from "discord.js";
 import {
-  requireStaff,
+  requireGatekeeper,
   findAppByShortCode,
   findPendingAppByUserId,
   ensureReviewMessage,
@@ -70,14 +70,11 @@ export async function executeReject(ctx: CommandContext<ChatInputCommandInteract
     await replyOrEdit(interaction, { content: "Guild only." });
     return;
   }
-  if (!requireStaff(interaction, {
-    command: "reject",
-    description: "Rejects an application by short code, user mention, or user ID.",
-    requirements: [
-      { type: "config", field: "mod_role_ids" },
-      { type: "config", field: "reviewer_role_id" },
-    ],
-  })) return;
+  if (!requireGatekeeper(
+    interaction,
+    "reject",
+    "Rejects an application by short code, user mention, or user ID."
+  )) return;
 
   ctx.step("defer");
   await ensureDeferred(interaction);

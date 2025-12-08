@@ -8,6 +8,7 @@
 // Re-export commonly used functions and types
 export {
   requireStaff,
+  requireGatekeeper,
   getConfig,
 } from "../../lib/config.js";
 

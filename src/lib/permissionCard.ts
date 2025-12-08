@@ -17,6 +17,7 @@ import {
   type Guild,
 } from "discord.js";
 import { logger } from "./logger.js";
+import { ROLE_NAMES, getRolesAtOrAbove, getMinRoleDescription } from "./roles.js";
 import { getConfig } from "./config.js";
 
 // ═══════════════════════════════════════════════════════════════════════════
@@ -29,6 +30,7 @@ import { getConfig } from "./config.js";
  */
 export type PermissionRequirement =
   | { type: "roles"; roleIds: string[] }
+  | { type: "hierarchy"; minRoleId: string }
   | { type: "config"; field: "mod_role_ids" | "reviewer_role_id" | "artist_role_id" | "leadership_role_id" }
   | { type: "permission"; permission: "ManageGuild" | "ManageRoles" | "ManageMessages" }
   | { type: "owner" };
@@ -75,10 +77,33 @@ async function resolveRequirement(
   req: PermissionRequirement
 ): Promise<string[]> {
   switch (req.type) {
-    case "roles":
-      return resolveRoleDisplay(guild, req.roleIds);
+    case "roles": {
+      // For explicit role lists, show each role with its name
+      const displays: string[] = [];
+      for (const id of req.roleIds) {
+        const name = ROLE_NAMES[id];
+        if (name) {
+          displays.push(`<@&${id}> (${name})`);
+        } else {
+          displays.push(`<@&${id}>`);
+        }
+      }
+      return displays;
+    }
+
+    case "hierarchy": {
+      // For hierarchical requirements, show "X or above" with role list
+      const minDescription = getMinRoleDescription(req.minRoleId);
+      const rolesAbove = getRolesAtOrAbove(req.minRoleId);
+      const roleNames = rolesAbove.map((id) => {
+        const name = ROLE_NAMES[id];
+        return name ? `<@&${id}>` : `<@&${id}>`;
+      });
+      return [`**${minDescription}**\n${roleNames.map((r) => `  ${r}`).join("\n")}`];
+    }
 
     case "config": {
+      // Legacy support for config-based roles (will be migrated to explicit roles)
       const config = getConfig(guildId);
       if (!config) return [`*${req.field} not configured*`];
 
@@ -119,7 +144,7 @@ async function resolveRequirement(
       }
 
     case "owner":
-      return ["Bot Owner"];
+      return ["**Bot Owner** or **Server Dev**"];
 
     default:
       return ["*Unknown requirement*"];

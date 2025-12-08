@@ -17,7 +17,7 @@ import type { CommandContext } from "../lib/cmdWrap.js";
 import { setPanicMode, getPanicDetails } from "../features/panicStore.js";
 import { logger } from "../lib/logger.js";
 import { logActionPretty } from "../logging/pretty.js";
-import { requireStaff } from "../lib/config.js";
+import { requireMinRole, ROLE_IDS } from "../lib/config.js";
 
 /*
  * Panic Mode: Emergency Kill Switch
@@ -81,11 +81,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  // Check staff permissions
-  if (!requireStaff(interaction, {
+  // Require Senior Administrator+ role
+  if (!requireMinRole(interaction, ROLE_IDS.SENIOR_ADMIN, {
     command: "panic",
     description: "Emergency shutoff for role automation system.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_ADMIN }],
   })) return;
 
   const guildId = interaction.guild.id;

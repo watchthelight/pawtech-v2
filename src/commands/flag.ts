@@ -17,7 +17,7 @@ import {
   Colors,
 } from "discord.js";
 import { logger } from "../lib/logger.js";
-import { requireStaff } from "../lib/config.js";
+import { requireMinRole, ROLE_IDS, JUNIOR_MOD_PLUS } from "../lib/config.js";
 import { env } from "../lib/env.js";
 import { getExistingFlag, isAlreadyFlagged, upsertManualFlag } from "../store/flagsStore.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
@@ -93,11 +93,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Require staff permissions
-  if (!requireStaff(interaction, {
+  // Require Junior Moderator+ role
+  if (!requireMinRole(interaction, ROLE_IDS.JUNIOR_MOD, {
     command: "flag",
     description: "Manually flags a user as suspicious for staff review.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.JUNIOR_MOD }],
   })) return;
 
   const moderatorId = interaction.user.id;

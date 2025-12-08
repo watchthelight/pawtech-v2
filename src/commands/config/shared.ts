@@ -9,7 +9,7 @@
 export { type ChatInputCommandInteraction, MessageFlags } from "discord.js";
 
 // Re-export lib utilities
-export { requireStaff, upsertConfig, getConfig } from "../../lib/config.js";
+export { requireStaff, requireMinRole, ROLE_IDS, upsertConfig, getConfig } from "../../lib/config.js";
 export { type CommandContext, replyOrEdit, ensureDeferred } from "../../lib/cmdWrap.js";
 export { logger } from "../../lib/logger.js";
 export { db } from "../../db/db.js";

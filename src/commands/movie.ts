@@ -20,7 +20,7 @@ import {
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
-import { requireStaff } from "../lib/config.js";
+import { requireMinRole, ROLE_IDS, MODERATOR_PLUS } from "../lib/config.js";
 import {
   startMovieEvent,
   getActiveMovieEvent,
@@ -194,11 +194,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  // Check staff permissions
-  if (!requireStaff(interaction, {
+  // Require Moderator+ role
+  if (!requireMinRole(interaction, ROLE_IDS.MODERATOR, {
     command: "movie",
     description: "Movie night attendance tracking and tier role management.",
-    requirements: [{ type: "config", field: "mod_role_ids" }],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.MODERATOR }],
   })) return;
 
   const subcommand = interaction.options.getSubcommand();

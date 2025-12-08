@@ -20,7 +20,7 @@ import {
 } from "discord.js";
 import { logger } from "../lib/logger.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
-import { requireStaff, canRunAllCommands, hasManageGuild, isReviewer, postPermissionDenied } from "../lib/config.js";
+import { requireMinRole, ROLE_IDS, JUNIOR_MOD_PLUS, shouldBypass, hasRoleOrAbove, postPermissionDenied } from "../lib/config.js";
 import { detectAIForImages, buildAIDetectionEmbed } from "../features/aiDetection/index.js";
 import { isGuildMember } from "../lib/typeGuards.js";
 
@@ -58,14 +58,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  // Permission check - uses mod_role_ids from guild config
-  if (!requireStaff(interaction, {
+  // Require Junior Moderator+ role
+  if (!requireMinRole(interaction, ROLE_IDS.JUNIOR_MOD, {
     command: "isitreal",
     description: "Detects AI-generated images in a message.",
-    requirements: [
-      { type: "config", field: "mod_role_ids" },
-      { type: "config", field: "reviewer_role_id" },
-    ],
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.JUNIOR_MOD }],
   })) return;
 
   // Defer early - API calls will take time
@@ -204,21 +201,16 @@ export async function handleIsItRealContextMenu(
     return;
   }
 
-  // Permission check - uses mod_role_ids from guild config
+  // Permission check - requires Junior Moderator+ role (or bypass)
   const member = isGuildMember(interaction.member) ? interaction.member : null;
-  const hasPermission =
-    canRunAllCommands(member, guildId) ||
-    hasManageGuild(member) ||
-    isReviewer(guildId, member);
+  const userId = interaction.user.id;
+  const hasPermission = shouldBypass(userId, member) || hasRoleOrAbove(member, ROLE_IDS.JUNIOR_MOD);
 
   if (!hasPermission) {
     await postPermissionDenied(interaction, {
       command: "Is It Real?",
       description: "Detects AI-generated images in a message (context menu).",
-      requirements: [
-        { type: "config", field: "mod_role_ids" },
-        { type: "config", field: "reviewer_role_id" },
-      ],
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.JUNIOR_MOD }],
     });
     return;
   }
