@@ -88,3 +88,10 @@ Server audits (leadership only):
 - **[BOT-HANDBOOK.md](BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
 - **[MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)** — Staff policies, escalation, and moderation protocols
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent changes
+
+### Tier-Specific Guides
+
+- **[GATEKEEPER-GUIDE.md](docs/GATEKEEPER-GUIDE.md)** — For Gatekeeper and Junior Mod
+- **[MODERATOR-GUIDE.md](docs/MODERATOR-GUIDE.md)** — For Moderator and Senior Mod
+- **[ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md)** — For Administrator and Senior Admin
+- **[LEADERSHIP-GUIDE.md](docs/LEADERSHIP-GUIDE.md)** — For CM, CDL, and Server Owner

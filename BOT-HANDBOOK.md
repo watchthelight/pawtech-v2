@@ -12,6 +12,15 @@ Everything you need to know about the bot — what it does, who can use it, and 
 | [MOD-QUICKREF.md](MOD-QUICKREF.md) | Quick reference card for common tasks |
 | [CHANGELOG.md](CHANGELOG.md) | Full version history and release notes |
 
+### Tier-Specific Guides
+
+| Guide | For Who | What's Covered |
+|-------|---------|----------------|
+| [GATEKEEPER-GUIDE.md](docs/GATEKEEPER-GUIDE.md) | Gatekeeper, Junior Mod | Gate system, claims, flagging, AI detection |
+| [MODERATOR-GUIDE.md](docs/MODERATOR-GUIDE.md) | Moderator, Senior Mod | Movie night, activity heatmaps, bot presence |
+| [ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) | Administrator, Senior Admin | Server config, role automation, panic mode |
+| [LEADERSHIP-GUIDE.md](docs/LEADERSHIP-GUIDE.md) | CM, CDL, Server Owner | Audits, data management, artist rotation |
+
 ---
 
 ## New to the Team? Start Here
@@ -19,8 +28,12 @@ Everything you need to know about the bot — what it does, who can use it, and 
 **If you're a new moderator**, you don't need to read this entire handbook on day one.
 
 **Your 10-minute setup:**
-1. Read **[MOD-QUICKREF.md](MOD-QUICKREF.md)** first — it covers 90% of daily tasks
-2. Skim Section 1 (Gate System) to understand how applications work
+1. **Read your tier guide first** — pick the one that matches your role:
+   - [GATEKEEPER-GUIDE.md](docs/GATEKEEPER-GUIDE.md) — Gatekeeper and Junior Mod
+   - [MODERATOR-GUIDE.md](docs/MODERATOR-GUIDE.md) — Moderator and Senior Mod
+   - [ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — Administrator and Senior Admin
+   - [LEADERSHIP-GUIDE.md](docs/LEADERSHIP-GUIDE.md) — CM, CDL, Server Owner
+2. Use **[MOD-QUICKREF.md](MOD-QUICKREF.md)** for daily tasks
 3. Try `/listopen` and `/health` to get comfortable with the bot
 4. Bookmark this handbook — come back when you need details
 

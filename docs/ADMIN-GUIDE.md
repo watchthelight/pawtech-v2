@@ -1,0 +1,190 @@
+# Administrator Guide
+
+> **Your role:** You run the show. Administrators configure how the bot behaves, manage role automation, and have emergency controls when things go wrong.
+>
+> **Prerequisites:** [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Make sure you're solid on event management first.
+
+---
+
+## Quick Links
+
+| Document | What it's for |
+|----------|---------------|
+| [MOD-QUICKREF.md](../MOD-QUICKREF.md) | Daily reference for common tasks |
+| [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) | Full technical documentation |
+| [PERMS-MATRIX.md](../PERMS-MATRIX.md) | Complete permission reference |
+| [MOD-HANDBOOK.md](MOD-HANDBOOK.md) | Staff policies and escalation |
+| [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) | Previous tier (event management) |
+| [CHANGELOG.md](../CHANGELOG.md) | Version history |
+
+---
+
+## Everything You Had Before
+
+You still have all Moderator capabilities:
+- Gate system (accept, reject, kick, claim, listopen, search)
+- Flagging users and AI detection
+- Movie night management
+- Activity heatmaps
+- Bot presence updates
+- Skull mode
+
+📖 [Review Moderator Guide →](MODERATOR-GUIDE.md)
+
+---
+
+## What's New at This Level
+
+### Server Configuration
+
+You control how the bot behaves across your entire server.
+
+**Command:**
+- `/config set <setting> <value>` — Change a bot setting
+- `/config get <setting>` — Check a specific setting's status
+- `/config view` — See all current settings at once
+
+**Key settings you can configure:**
+
+| Setting | What it controls |
+|---------|------------------|
+| `logging_channel` | Where bot actions get logged |
+| `flags_channel` | Where Silent-Since-Join alerts go |
+| `flags_threshold` | How many days before flagging silent members |
+| `dadmode` | The "Hi hungry, I'm Dad!" joke feature |
+| `skullmode` | Random skull emoji reactions |
+| `pingdevonapp` | Ping Bot Dev on new applications |
+| `mod_roles` | Roles that can run all bot commands |
+| `gatekeeper` | Role for gatekeeper features |
+| `modmail_log_channel` | Where modmail logs go |
+| `review_roles` | How roles appear on review cards |
+
+📖 [Full documentation →](../BOT-HANDBOOK.md#config)
+
+📋 *Introduced in [v1.0.0](../CHANGELOG.md#100---2025-11-25)* | *Skull mode added in [v4.8.0](../CHANGELOG.md#480---2025-12-08)*
+
+---
+
+### Role Automation Setup
+
+Configure automatic role assignments based on Amaribot levels and movie attendance.
+
+**Commands:**
+- `/roles add-level-tier level:N role:@Role` — Connect an Amaribot level to a role
+- `/roles add-level-reward level:N role:@Role` — Give a one-time token role at a level
+- `/roles add-movie-tier tier_name:Name role:@Role movies_required:N` — Set up movie attendance tiers
+- `/roles list type:...` — See all configured mappings
+- `/roles remove-level-tier level:N` — Delete a level tier
+- `/roles remove-level-reward level:N` — Delete a level reward
+- `/roles remove-movie-tier tier_name:Name` — Delete a movie tier
+
+**Level Tiers vs Level Rewards:**
+- **Level Tiers** are the roles Amaribot assigns (like "Engaged Fur LVL 15")
+- **Level Rewards** are bonus roles you give at milestones (like "Event Ticket")
+
+📖 [Full documentation →](../BOT-HANDBOOK.md#roles)
+
+📋 *Introduced in [v1.1.0](../CHANGELOG.md#110---2025-11-25)*
+
+---
+
+### Emergency Controls
+
+When role automation goes wrong, you can stop everything immediately.
+
+**Commands:**
+- `/panic on` — **STOP** all automatic role grants right now
+- `/panic off` — Resume normal operation
+- `/panic status` — Check if panic mode is currently on
+
+**When to hit the panic button:**
+- Roles going to wrong people
+- Duplicate roles being added
+- Any weird role behavior you don't understand
+- Before making configuration changes (just to be safe)
+
+**Important:** Panic mode survives bot restarts. It stays on until you turn it off.
+
+📖 [Full documentation →](../BOT-HANDBOOK.md#panic)
+
+📋 *Introduced in [v1.1.1](../CHANGELOG.md#111---2025-11-25)*
+
+---
+
+### Advanced Statistics
+
+Export and manage moderator statistics for performance reviews.
+
+**Commands:**
+- `/modstats export days:N` — Download stats as CSV for spreadsheet analysis
+- `/modstats reset password:...` — Reset all metrics to start fresh (nuclear option)
+
+**Export includes:**
+- Every action (accepts, rejects, kicks)
+- Timestamps and response times
+- Reasons given for rejections
+- Application IDs for reference
+
+**When to reset:**
+- New moderation team
+- Significant policy changes
+- Testing cleanup before going live
+- Fresh start for a new season
+
+📖 [Full documentation →](../BOT-HANDBOOK.md#modstats)
+
+📋 *Introduced in [v1.0.0](../CHANGELOG.md#100---2025-11-25)*
+
+---
+
+### Review System Configuration
+
+Fine-tune how the review system notifies staff about new applications.
+
+**Commands:**
+- `/review-set-notify-config` — Set up notifications for new forum posts
+  - `mode`: post (reply in thread) or channel (send to separate channel)
+  - `role`: Which role to ping
+  - `forum`: Which forum to watch
+  - `cooldown`: Seconds between notifications
+  - `max_per_hour`: Cap on notifications per hour
+- `/review-get-notify-config` — View current notification settings
+- `/review-set-listopen-output mode:...` — Control if `/listopen` is public or ephemeral
+
+📖 [Full documentation →](../BOT-HANDBOOK.md#review-set-notify-config)
+
+📋 *Introduced in [v1.0.0](../CHANGELOG.md#100---2025-11-25)*
+
+---
+
+## Tips for This Level
+
+1. **Test config changes carefully** — One wrong setting can break the workflow for your whole team
+2. **Document your role mappings** — Keep notes on why each level tier and reward exists
+3. **Use panic mode proactively** — Turn it on before making changes, not after things break
+4. **Review exports regularly** — Monthly stats reviews help catch burnout early
+5. **Check `/config view` periodically** — Make sure settings haven't drifted
+
+---
+
+## What's Coming Next
+
+When you advance to **Leadership** (Community Manager and above), you'll unlock:
+
+- **Server Audits** — `/audit members` and `/audit nsfw` to scan for bots and inappropriate content
+- **Data Management** — `/backfill` to rebuild activity data, `/resetdata` for metrics
+- **Bot Branding** — `/update banner` and `/update avatar` to customize the bot
+- **Artist Rotation** — Full queue management with `/artistqueue`
+- **Moderation History** — `/modhistory` for detailed performance reviews
+
+📖 [LEADERSHIP-GUIDE.md →](LEADERSHIP-GUIDE.md)
+
+---
+
+## See Also
+
+- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Previous tier (event management)
+- [LEADERSHIP-GUIDE.md](LEADERSHIP-GUIDE.md) — Next tier guide
+- [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
+- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete technical reference
+- [CHANGELOG.md](../CHANGELOG.md) — Version history and updates
