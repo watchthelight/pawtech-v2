@@ -37,6 +37,33 @@ const execAsync = promisify(exec);
 const SAFE_FILENAME_REGEX = /^[a-zA-Z0-9_\-.]+\.db$/;
 
 /**
+ * Regex for validating PM2 process names.
+ * Only allows alphanumeric, underscore, and hyphen characters.
+ * This prevents shell injection attacks when the name is used in exec() calls.
+ */
+const SAFE_PROCESS_NAME_REGEX = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Validate and sanitize PM2 process name to prevent shell injection.
+ * @param name - Process name from environment variable
+ * @returns The validated process name
+ * @throws Error if name is undefined or contains unsafe characters
+ */
+function validateProcessName(name: string | undefined): string {
+  if (!name) {
+    throw new Error("PM2_PROCESS_NAME not configured in environment");
+  }
+  if (!SAFE_PROCESS_NAME_REGEX.test(name)) {
+    logger.error(
+      { processName: name },
+      "[dbRecovery] Invalid PM2_PROCESS_NAME format - potential injection attempt"
+    );
+    throw new Error("Invalid PM2_PROCESS_NAME format - only alphanumeric, underscore, and hyphen allowed");
+  }
+  return name;
+}
+
+/**
  * Safely join a base directory with a filename, preventing path traversal attacks.
  * Validates that the resolved path is actually within the base directory.
  *
@@ -463,11 +490,21 @@ export async function restoreCandidate(
   // Step 3: Stop PM2 process (if enabled)
   if (pm2Coord) {
     logger.info(`[dbRecovery] Step 3: Stopping PM2 process`);
-    messages.push(`🛑 Stopping PM2 process: ${env.PM2_PROCESS_NAME}`);
+
+    // Validate process name before use in shell command to prevent injection
+    let processName: string;
+    try {
+      processName = validateProcessName(env.PM2_PROCESS_NAME);
+    } catch (err) {
+      messages.push(`❌ PM2 coordination failed: ${err instanceof Error ? err.message : "Invalid process name"}`);
+      return { success: false, messages };
+    }
+
+    messages.push(`🛑 Stopping PM2 process: ${processName}`);
 
     if (!dryRun) {
       try {
-        const { stdout, stderr } = await execAsync(`pm2 stop ${env.PM2_PROCESS_NAME}`);
+        const { stdout, stderr } = await execAsync(`pm2 stop ${processName}`);
         logger.info(`[dbRecovery] PM2 stop output: ${stdout}`);
         if (stderr) logger.warn(`[dbRecovery] PM2 stop stderr: ${stderr}`);
         messages.push(`✅ PM2 process stopped`);
@@ -476,7 +513,7 @@ export async function restoreCandidate(
         messages.push(`   Continuing anyway - you may need to stop manually`);
       }
     } else {
-      messages.push(`🔍 [DRY RUN] Would run: pm2 stop ${env.PM2_PROCESS_NAME}`);
+      messages.push(`🔍 [DRY RUN] Would run: pm2 stop ${processName}`);
     }
   }
 
@@ -565,16 +602,29 @@ export async function restoreCandidate(
   // Step 6: Restart PM2 process (if enabled)
   if (pm2Coord) {
     logger.info(`[dbRecovery] Step 6: Restarting PM2 process`);
-    messages.push(`🚀 Restarting PM2 process: ${env.PM2_PROCESS_NAME}`);
+
+    // Validate process name before use in shell command to prevent injection
+    // Note: We validated earlier in Step 3, but re-validate for defense in depth
+    let processName: string;
+    try {
+      processName = validateProcessName(env.PM2_PROCESS_NAME);
+    } catch (err) {
+      messages.push(`⚠️ PM2 restart skipped: ${err instanceof Error ? err.message : "Invalid process name"}`);
+      messages.push(`   You may need to start manually after fixing PM2_PROCESS_NAME`);
+      // Don't fail the whole operation - DB is already restored
+      return { success: true, preRestoreBackupPath, messages, verificationResult };
+    }
+
+    messages.push(`🚀 Restarting PM2 process: ${processName}`);
 
     try {
-      const { stdout, stderr } = await execAsync(`pm2 start ${env.PM2_PROCESS_NAME}`);
+      const { stdout, stderr } = await execAsync(`pm2 start ${processName}`);
       logger.info(`[dbRecovery] PM2 start output: ${stdout}`);
       if (stderr) logger.warn(`[dbRecovery] PM2 start stderr: ${stderr}`);
       messages.push(`✅ PM2 process restarted`);
     } catch (err: any) {
       messages.push(`⚠️ PM2 start failed: ${err.message}`);
-      messages.push(`   You may need to start manually: pm2 start ${env.PM2_PROCESS_NAME}`);
+      messages.push(`   You may need to start manually: pm2 start ${processName}`);
     }
   }
 

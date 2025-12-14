@@ -466,13 +466,17 @@ async function handleRequest(req: http.IncomingMessage, res: http.ServerResponse
         </html>
       `);
     } catch (err) {
+      // Log detailed error server-side for debugging
       logger.error({ err }, "[linkedRoles] Callback error");
+      // Generic message to user - don't expose internal error details
+      // which could contain API URLs, tokens, or other sensitive info
       sendHtml(res, 500, `
         <html>
-          <head><title>Error</title></head>
+          <head><title>Authorization Failed</title></head>
           <body style="font-family: system-ui; padding: 2rem; max-width: 600px; margin: 0 auto;">
-            <h1 style="color: #c00;">Error</h1>
-            <p>${escapeHtml(err instanceof Error ? err.message : "Unknown error")}</p>
+            <h1 style="color: #c00;">Authorization Failed</h1>
+            <p>Something went wrong during authorization. Please try again.</p>
+            <p>If this problem persists, please contact the server administrator.</p>
             <p><a href="/linked-roles">Try again</a></p>
           </body>
         </html>

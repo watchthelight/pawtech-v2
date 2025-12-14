@@ -164,4 +164,8 @@ export const COOLDOWNS = {
   FLAG_MS: 15 * 1000,
   /** Password failure: 30 seconds lockout per user (brute force protection) */
   PASSWORD_FAIL_MS: 30 * 1000,
+  /** Search: 30 seconds per user (prevents Discord API spam via username lookups) */
+  SEARCH_MS: 30 * 1000,
+  /** Artist queue sync: 5 minutes per guild (expensive member fetch) */
+  ARTISTQUEUE_SYNC_MS: 5 * 60 * 1000,
 } as const;

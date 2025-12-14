@@ -14,6 +14,20 @@ Everything you need to know about the bot — what it does, who can use it, and 
 
 ---
 
+## New to the Team? Start Here
+
+**If you're a new moderator**, you don't need to read this entire handbook on day one.
+
+**Your 10-minute setup:**
+1. Read **[MOD-QUICKREF.md](MOD-QUICKREF.md)** first — it covers 90% of daily tasks
+2. Skim Section 1 (Gate System) to understand how applications work
+3. Try `/listopen` and `/health` to get comfortable with the bot
+4. Bookmark this handbook — come back when you need details
+
+**Sections marked with 📚** are reference material. You can skip them until you need them.
+
+---
+
 ## Table of Contents
 
 ### 1. [Gate System (Application Review)](#gate-system-application-review)
@@ -600,6 +614,8 @@ The individual stats let you compare a mod's speed to the server average. If som
 
 ### Anomaly Detection: What It Means
 
+> 📚 **Reference Section** — You don't need to memorize this. It explains how the bot detects unusual patterns. Most mods never need to touch this.
+
 The bot uses something called "z-score analysis" to flag unusual patterns. Don't worry — it sounds complicated but the idea is simple.
 
 **How it works:**
@@ -755,6 +771,9 @@ Flags don't automatically reject people — they just warn other reviewers to pa
 ---
 
 ### `/audit`
+
+> 📚 **Reference Section** — Leadership-only command. Skip unless you're Community Manager or above.
+
 **Who can use it:** Community Managers and Bot Developer only (hardcoded role IDs)
 
 Server audit commands for detecting suspicious accounts and NSFW content. This command has two subcommands:
@@ -943,6 +962,9 @@ A declining approval rate might mean:
 ---
 
 ### `/resetdata`
+
+> 📚 **Reference Section** — Nuclear option. You'll likely never use this. Here for completeness.
+
 **Who can use it:** Manage Guild permission + Password
 
 This is the nuclear option for metrics. It resets all moderator statistics, leaderboards, and analytics to start fresh from the moment you run the command. Historical data in the action log is preserved, but all the calculated metrics start over from zero.
@@ -2304,6 +2326,9 @@ This command sends a message mentioning the user in every text channel within th
 ---
 
 ### `/database`
+
+> 📚 **Reference Section** — Bot owner only. Skip unless you're troubleshooting infrastructure.
+
 **Who can use it:** Bot Owner + Password
 
 Database maintenance and recovery tools. These are advanced commands for troubleshooting database issues.
@@ -2755,7 +2780,7 @@ The more details you provide, the faster support can help you.
 
 ---
 
-*Last revised: December 3, 2025*
+*Last revised: December 14, 2025*
 
 ---
 

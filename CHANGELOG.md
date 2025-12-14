@@ -45,6 +45,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **/flag Cooldown Increase** - Increased flag cooldown from 2 seconds to 15 seconds to prevent spam flagging
 - **Modmail Map Hard Cap Enforcement** - Added hard cap enforcement at 10,000 entries with automatic eviction to prevent memory exhaustion
 - **Flagged User Query Limit** - Added LIMIT 10000 to flagged user queries as a safety valve
+- **/search Command Cooldown** - Added 30-second per-user cooldown to prevent Discord API spam via repeated username lookups
+- **/artistqueue sync Cooldown** - Added 5-minute per-guild cooldown to prevent expensive member fetch abuse
+- **PM2 Process Name Validation** - Added validation for PM2_PROCESS_NAME in database recovery to prevent shell injection attacks
+- **SSH Parameter Validation** - Added validation for REMOTE_ALIAS and REMOTE_PATH in database health checks to prevent shell injection
+- **OAuth Error Message Sanitization** - Made OAuth error messages generic to prevent exposing internal API details to users
 
 ---
 

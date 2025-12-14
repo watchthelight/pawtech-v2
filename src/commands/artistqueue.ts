@@ -26,6 +26,7 @@ import {
 } from "discord.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
+import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 import {
   getArtistConfig,
   getAllArtists,
@@ -233,13 +234,23 @@ async function handleSync(
   interaction: ChatInputCommandInteraction,
   ctx: CommandContext
 ): Promise<void> {
-  await interaction.deferReply({ ephemeral: false });
-
   const guild = interaction.guild;
   if (!guild) {
-    await interaction.editReply("This command must be run in a server.");
+    await interaction.reply({ content: "This command must be run in a server.", ephemeral: true });
     return;
   }
+
+  // Rate limit: 5 minutes per guild (expensive member fetch operation)
+  const cooldownResult = checkCooldown("artistqueue:sync", guild.id, COOLDOWNS.ARTISTQUEUE_SYNC_MS);
+  if (!cooldownResult.allowed) {
+    await interaction.reply({
+      content: `Queue sync is on cooldown. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  await interaction.deferReply({ ephemeral: false });
 
   ctx.step("fetch_role_members");
 

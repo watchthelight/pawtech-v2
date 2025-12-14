@@ -22,6 +22,7 @@ import { logger } from "../lib/logger.js";
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { hasStaffPermissions, isReviewer } from "../lib/config.js";
 import { isOwner } from "../lib/owner.js";
+import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 
 /**
  * Max applications to show in a single embed.
@@ -158,6 +159,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       { userId: reviewerId, guildId, isOwner: isOwnerUser, isStaff, isReviewer: isReviewerUser },
       "[search] unauthorized access attempt"
     );
+    return;
+  }
+
+  // Rate limit: 30 seconds per user (prevents Discord API spam via username lookups)
+  const cooldownResult = checkCooldown("search", reviewerId, COOLDOWNS.SEARCH_MS);
+  if (!cooldownResult.allowed) {
+    await interaction.reply({
+      content: `This command is on cooldown. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
+      ephemeral: true,
+    });
     return;
   }
 

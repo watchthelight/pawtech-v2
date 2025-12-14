@@ -36,6 +36,58 @@ import { secureCompare } from "../lib/secureCompare.js";
 
 const execAsync = promisify(exec);
 
+// ============================================================================
+// Security: Shell Parameter Validation
+// ============================================================================
+
+/**
+ * Regex for validating SSH remote alias names.
+ * Only allows alphanumeric, underscore, and hyphen characters.
+ * Prevents shell injection when used in SSH commands.
+ */
+const SAFE_REMOTE_ALIAS_REGEX = /^[a-zA-Z0-9_-]+$/;
+
+/**
+ * Regex for validating remote paths.
+ * Only allows absolute paths with alphanumeric, underscore, hyphen, and forward slash.
+ * Must start with / to ensure it's an absolute path.
+ */
+const SAFE_REMOTE_PATH_REGEX = /^\/[a-zA-Z0-9_\/-]+$/;
+
+/**
+ * Validate SSH remote alias to prevent shell injection.
+ * @param alias - Remote alias from environment variable
+ * @returns The validated alias
+ * @throws Error if alias contains unsafe characters
+ */
+function validateRemoteAlias(alias: string): string {
+  if (!SAFE_REMOTE_ALIAS_REGEX.test(alias)) {
+    logger.error(
+      { remoteAlias: alias },
+      "[database] Invalid REMOTE_ALIAS format - potential injection attempt"
+    );
+    throw new Error("Invalid remote alias format - only alphanumeric, underscore, and hyphen allowed");
+  }
+  return alias;
+}
+
+/**
+ * Validate remote path to prevent shell injection.
+ * @param remotePath - Remote path from environment variable
+ * @returns The validated path
+ * @throws Error if path contains unsafe characters
+ */
+function validateRemotePath(remotePath: string): string {
+  if (!SAFE_REMOTE_PATH_REGEX.test(remotePath)) {
+    logger.error(
+      { remotePath },
+      "[database] Invalid REMOTE_PATH format - potential injection attempt"
+    );
+    throw new Error("Invalid remote path format - must be absolute path with safe characters");
+  }
+  return remotePath;
+}
+
 interface BackupInfo {
   count: number;
   totalSize: number;
@@ -221,13 +273,24 @@ async function executeCheck(ctx: CommandContext<ChatInputCommandInteraction>) {
 
   try {
     // Check if we have remote config from env
-    const remoteAlias = process.env.REMOTE_ALIAS || "pawtech";
-    const remotePath = process.env.REMOTE_PATH || "/home/ubuntu/pawtech-v2";
+    const remoteAliasRaw = process.env.REMOTE_ALIAS || "pawtech";
+    const remotePathRaw = process.env.REMOTE_PATH || "/home/ubuntu/pawtech-v2";
 
     // Skip remote checks if we're already running on remote
     if (runningOnRemote) {
       remoteError = "Skipped (already running on remote server)";
       throw new Error("Running on remote");
+    }
+
+    // Validate SSH parameters to prevent shell injection
+    let remoteAlias: string;
+    let remotePath: string;
+    try {
+      remoteAlias = validateRemoteAlias(remoteAliasRaw);
+      remotePath = validateRemotePath(remotePathRaw);
+    } catch (err) {
+      remoteError = err instanceof Error ? err.message : "Invalid SSH config";
+      throw err;
     }
 
     // SSH options explained:
