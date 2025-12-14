@@ -24,6 +24,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { postPermissionDenied } from "../lib/permissionCard.js";
 import { type CommandContext } from "../lib/cmdWrap.js";
+import { ROLE_IDS, shouldBypass } from "../lib/roles.js";
 import {
   analyzeMember,
   renderProgressBar,
@@ -48,13 +49,11 @@ import {
 } from "../store/auditSessionStore.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 
-// Allowed role IDs (Community Manager + Bot Developer)
-// GOTCHA: These are hardcoded role IDs. If roles get recreated (or this runs
-// in a different server), you'll need to update these. Consider moving to
-// guild config if this bot ever needs multi-server flexibility.
+// Allowed role IDs (Community Manager + Server Dev)
+// Uses centralized ROLE_IDS from roles.ts for consistency
 const ALLOWED_ROLES = [
-  "1190093021170114680", // Community Manager
-  "1120074045883420753", // Bot Developer
+  ROLE_IDS.COMMUNITY_MANAGER,
+  ROLE_IDS.SERVER_DEV,
 ];
 
 // Nonce generation for button security
@@ -101,11 +100,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   const subcommand = interaction.options.getSubcommand();
 
-  // Check if user has an allowed role
+  // Check if user has an allowed role or is bot owner/server dev
   const member = await guild.members.fetch(user.id);
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
+  const canBypass = shouldBypass(user.id);
 
-  if (!hasAllowedRole) {
+  if (!hasAllowedRole && !canBypass) {
     await postPermissionDenied(interaction, {
       command: `audit ${subcommand}`,
       description: subcommand === "nsfw"
@@ -334,8 +334,9 @@ export async function handleAuditButton(interaction: ButtonInteraction): Promise
   // can be clicked by anyone who sees the message. Re-checking is paranoid but correct.
   const member = await guild.members.fetch(user.id);
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
+  const canBypass = shouldBypass(user.id);
 
-  if (!hasAllowedRole) {
+  if (!hasAllowedRole && !canBypass) {
     await postPermissionDenied(interaction, {
       command: `audit ${subcommand}`,
       description: subcommand === "nsfw"

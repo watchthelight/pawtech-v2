@@ -21,6 +21,7 @@ import {
 import type { CommandContext } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import { secureCompare } from "../lib/secureCompare.js";
+import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 import {
   DISCORD_BULK_DELETE_AGE_LIMIT_MS,
   MESSAGE_DELETE_BATCH_DELAY_MS,
@@ -82,6 +83,17 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
+  // Brute force protection: check if user is on cooldown from previous failed attempt
+  const passwordCooldownKey = `purge:${guildId}:${interaction.user.id}`;
+  const passwordCooldownResult = checkCooldown("password_fail", passwordCooldownKey, COOLDOWNS.PASSWORD_FAIL_MS);
+  if (!passwordCooldownResult.allowed) {
+    await interaction.reply({
+      content: `Too many failed attempts. Try again in ${formatCooldown(passwordCooldownResult.remainingMs!)}.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
   // Validate password
   const correctPassword = process.env.RESET_PASSWORD;
 
@@ -95,9 +107,21 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   if (!secureCompare(password, correctPassword)) {
+    // Cooldown already triggered by checkCooldown above (brute force protection)
     logger.warn({ userId: interaction.user.id, guildId }, "[purge] incorrect password attempt");
     await interaction.reply({
       content: "Incorrect password.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  // Rate limit: 5 minutes per user-guild to prevent abuse
+  const cooldownKey = `${guildId}:${interaction.user.id}`;
+  const cooldownResult = checkCooldown("purge", cooldownKey, COOLDOWNS.PURGE_MS);
+  if (!cooldownResult.allowed) {
+    await interaction.reply({
+      content: `Purge on cooldown. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
       ephemeral: true,
     });
     return;

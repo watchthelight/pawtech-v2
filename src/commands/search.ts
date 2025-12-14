@@ -236,10 +236,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
            * No member found in guild - last resort: search DB for applications.
            * This handles users who applied and then left (or were kicked).
            *
-           * PERFORMANCE WARNING: This fetches up to 100 user IDs from DB, then
-           * hits Discord API for each one to check usernames. In a server with
-           * thousands of applications, this could take 10+ seconds. The LIMIT 100
-           * is a safety valve, not a feature.
+           * SECURITY: Rate limited to 25 candidates with 50ms delay between API calls
+           * to prevent Discord rate limit abuse and DoS attacks.
            *
            * If this becomes a problem, we could cache username->user_id mappings.
            */
@@ -247,14 +245,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
             SELECT DISTINCT a.user_id
             FROM application a
             WHERE a.guild_id = ?
-            LIMIT 100
+            LIMIT 25
           `;
           const candidateUserIds = db.prepare(usernameSearchQuery).all(guildId) as { user_id: string }[];
+
+          // Helper for delay between API calls
+          const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
           // Try to resolve each user and check username
           let foundUserId: string | null = null;
           for (const { user_id } of candidateUserIds) {
             try {
+              // 50ms delay between API calls to prevent rate limit abuse
+              await delay(50);
               const user = await interaction.client.users.fetch(user_id);
               if (
                 user.username.toLowerCase().includes(trimmedQuery.toLowerCase()) ||

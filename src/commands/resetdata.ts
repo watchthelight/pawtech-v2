@@ -23,6 +23,7 @@ import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { secureCompare } from "../lib/secureCompare.js";
+import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 
 export const data = new SlashCommandBuilder()
   .setName("resetdata")
@@ -59,6 +60,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
+  // Brute force protection: check if user is on cooldown from previous failed attempt
+  const passwordCooldownKey = `resetdata:${guildId}:${interaction.user.id}`;
+  const cooldownResult = checkCooldown("password_fail", passwordCooldownKey, COOLDOWNS.PASSWORD_FAIL_MS);
+  if (!cooldownResult.allowed) {
+    await interaction.editReply({
+      content: `❌ Too many failed attempts. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
+    });
+    return;
+  }
+
   // Validate password
   const correctPassword = process.env.RESET_PASSWORD;
 
@@ -71,6 +82,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   if (!secureCompare(password, correctPassword)) {
+    // Cooldown already triggered by checkCooldown above (brute force protection)
     logger.warn({ userId: interaction.user.id, guildId }, "[resetdata] incorrect password attempt");
 
     await interaction.editReply({

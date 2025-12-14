@@ -10,6 +10,32 @@ import { env } from "../../lib/env.js";
 
 // SightEngine needs BOTH credentials. One without the other is useless.
 const ENABLED = !!(env.SIGHTENGINE_API_USER && env.SIGHTENGINE_API_SECRET);
+
+/**
+ * Sanitize error messages to remove SightEngine API credentials.
+ * Prevents accidental credential leakage in logs.
+ */
+function sanitizeError(err: unknown): unknown {
+  if (err instanceof Error) {
+    const sanitized = new Error(
+      err.message
+        .replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+        .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]")
+    );
+    sanitized.name = err.name;
+    sanitized.stack = err.stack
+      ?.replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+      .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]");
+    return sanitized;
+  }
+  if (typeof err === "string") {
+    return err
+      .replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+      .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]");
+  }
+  return err;
+}
+
 const TIMEOUT_MS = 15000;
 
 /**
@@ -61,7 +87,8 @@ export async function detectSightEngine(imageUrl: string): Promise<number | null
     logger.debug({ imageUrl, score }, "[sightengine] Detection result");
     return score;
   } catch (err) {
-    logger.warn({ err, imageUrl }, "[sightengine] Detection failed");
+    // Sanitize error to prevent credential leakage in logs
+    logger.warn({ err: sanitizeError(err), imageUrl }, "[sightengine] Detection failed");
     return null;
   }
 }

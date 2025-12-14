@@ -154,4 +154,14 @@ export const COOLDOWNS = {
   DATABASE_CHECK_MS: 5 * 60 * 1000,
   /** Sync commands: 10 minutes per guild */
   SYNC_MS: 10 * 60 * 1000,
+  /** Avatar NSFW scan: 1 hour per user (prevents API abuse via rapid avatar changes) */
+  AVATAR_SCAN_MS: 60 * 60 * 1000,
+  /** Backfill: 30 minutes per guild (expensive background process) */
+  BACKFILL_MS: 30 * 60 * 1000,
+  /** Purge: 5 minutes per user-guild (destructive operation) */
+  PURGE_MS: 5 * 60 * 1000,
+  /** Flag: 15 seconds per user (prevents spam flagging) */
+  FLAG_MS: 15 * 1000,
+  /** Password failure: 30 seconds lockout per user (brute force protection) */
+  PASSWORD_FAIL_MS: 30 * 1000,
 } as const;

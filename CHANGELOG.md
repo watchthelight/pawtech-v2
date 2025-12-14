@@ -33,6 +33,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   - **Improved permission denied messages** - Now show the specific role(s) required with role mentions
   - See `PERMS-MATRIX.md` for the complete permission matrix
 
+### Security
+
+- **Avatar NSFW Monitor Rate Limiting** - Added 1-hour cooldown per user for avatar NSFW scans to prevent API abuse via rapid avatar changes
+- **/search API Call Protection** - Added 50ms delay between Discord API calls and reduced candidate limit to 25 to prevent rate limit abuse
+- **/backfill Cooldown** - Added 30-minute per-guild cooldown to prevent resource exhaustion
+- **/purge Cooldown** - Added 5-minute per-user-guild cooldown after successful use
+- **Brute Force Protection** - Added 30-second lockout after failed password attempts on `/resetdata` and `/purge` commands
+- **/audit Permission Migration** - Migrated `/audit` to use centralized ROLE_IDS with bot owner bypass support
+- **SightEngine Credential Sanitization** - Added error sanitization to prevent API credentials from leaking in logs
+- **/flag Cooldown Increase** - Increased flag cooldown from 2 seconds to 15 seconds to prevent spam flagging
+- **Modmail Map Hard Cap Enforcement** - Added hard cap enforcement at 10,000 entries with automatic eviction to prevent memory exhaustion
+- **Flagged User Query Limit** - Added LIMIT 10000 to flagged user queries as a safety valve
+
 ---
 
 ## [4.8.0] - 2025-12-08

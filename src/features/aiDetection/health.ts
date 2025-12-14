@@ -7,6 +7,31 @@
 import { logger } from "../../lib/logger.js";
 import { env } from "../../lib/env.js";
 
+/**
+ * Sanitize error messages to remove SightEngine API credentials.
+ * Prevents accidental credential leakage in logs.
+ */
+function sanitizeSightEngineError(err: unknown): unknown {
+  if (err instanceof Error) {
+    const sanitized = new Error(
+      err.message
+        .replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+        .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]")
+    );
+    sanitized.name = err.name;
+    sanitized.stack = err.stack
+      ?.replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+      .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]");
+    return sanitized;
+  }
+  if (typeof err === "string") {
+    return err
+      .replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+      .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]");
+  }
+  return err;
+}
+
 /*
  * Wikipedia's PNG transparency demo image. Chosen because it's stable,
  * CORS-friendly, and definitely not AI-generated (it's just colored boxes).
@@ -173,8 +198,10 @@ export async function testSightEngine(apiUser: string, apiSecret: string): Promi
     }
     return { success: false, error: "Unexpected response" };
   } catch (err) {
-    const msg = err instanceof Error ? err.message : String(err);
-    logger.warn({ err }, "[aiHealth] SightEngine test failed");
+    // Sanitize error to prevent credential leakage in logs
+    const sanitizedErr = sanitizeSightEngineError(err);
+    const msg = sanitizedErr instanceof Error ? sanitizedErr.message : String(sanitizedErr);
+    logger.warn({ err: sanitizedErr }, "[aiHealth] SightEngine test failed");
     return { success: false, error: msg };
   }
 }

@@ -35,8 +35,10 @@ const getExistingFlagStmt = db.prepare(
 
 // No index on flagged_at, so this is a full table scan. Fine for now since
 // guilds rarely exceed 50k users, but if this becomes a hot path, add an index.
+// LIMIT 10000 is a safety valve - no guild should have more than 10k flagged users.
+// If they do, something is very wrong and we should cap it anyway.
 const getFlaggedUserIdsStmt = db.prepare(
-  `SELECT user_id FROM user_activity WHERE guild_id = ? AND flagged_at IS NOT NULL`
+  `SELECT user_id FROM user_activity WHERE guild_id = ? AND flagged_at IS NOT NULL LIMIT 10000`
 );
 
 // SELECT * is lazy but we only use this for existence checks. Could be

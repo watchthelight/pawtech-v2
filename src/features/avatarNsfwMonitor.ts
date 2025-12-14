@@ -17,6 +17,7 @@ import { detectNsfwVision } from "./googleVision.js";
 import { getLoggingChannelId } from "../config/loggingStore.js";
 import { upsertNsfwFlag } from "../store/nsfwFlagsStore.js";
 import { googleReverseImageUrl } from "../ui/reviewCard.js";
+import { checkCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 
 // 80% threshold is intentionally high to minimize false positives.
 // Google Vision flags anime characters, furry art, and beach photos pretty aggressively.
@@ -73,14 +74,25 @@ export async function handleAvatarChange(
   const guildId = newMember.guild.id;
   const userId = newMember.id;
 
+  // Rate limit: 1 scan per user per hour to prevent API abuse
+  // Without this, an attacker could rapidly change avatars and exhaust our Vision API quota
+  const cooldownKey = `${guildId}:${userId}`;
+  const cooldownResult = checkCooldown("avatarScan", cooldownKey, COOLDOWNS.AVATAR_SCAN_MS);
+  if (!cooldownResult.allowed) {
+    logger.debug(
+      { guildId, userId, remainingMs: cooldownResult.remainingMs },
+      "[avatarNsfwMonitor] Rate limited - skipping scan"
+    );
+    return;
+  }
+
   logger.info(
     { guildId, userId, serverAvatarChanged, userAvatarChanged },
     "[avatarNsfwMonitor] Avatar change detected, scanning..."
   );
 
   // Scan with Google Vision
-  // This is the expensive part. Each call costs money. If you're getting spammed
-  // with avatar changes, you might want to add rate limiting per user.
+  // This is the expensive part. Each call costs money.
   const visionResult = await detectNsfwVision(avatarUrl);
 
   if (!visionResult) {
@@ -202,6 +214,17 @@ export async function handleMemberJoin(member: GuildMember): Promise<void> {
 
   const guildId = member.guild.id;
   const userId = member.id;
+
+  // Rate limit: 1 scan per user per hour (shares cooldown with avatar change)
+  const cooldownKey = `${guildId}:${userId}`;
+  const cooldownResult = checkCooldown("avatarScan", cooldownKey, COOLDOWNS.AVATAR_SCAN_MS);
+  if (!cooldownResult.allowed) {
+    logger.debug(
+      { guildId, userId, remainingMs: cooldownResult.remainingMs },
+      "[avatarNsfwMonitor] Join scan rate limited - skipping"
+    );
+    return;
+  }
 
   logger.info(
     { guildId, userId },

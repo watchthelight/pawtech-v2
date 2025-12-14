@@ -18,6 +18,7 @@ import { spawn } from 'child_process';
 import { type CommandContext } from '../lib/cmdWrap.js';
 import { requireMinRole, ROLE_IDS, getConfig } from '../lib/config.js';
 import { logger } from '../lib/logger.js';
+import { checkCooldown, formatCooldown, COOLDOWNS } from '../lib/rateLimiter.js';
 
 export const data = new SlashCommandBuilder()
   .setName('backfill')
@@ -74,6 +75,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     description: "Backfills historical message activity data for the heatmap.",
     requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.COMMUNITY_MANAGER }],
   })) return;
+
+  // Rate limit: 30 minutes per guild to prevent resource exhaustion
+  const cooldownResult = checkCooldown("backfill", guildId, COOLDOWNS.BACKFILL_MS);
+  if (!cooldownResult.allowed) {
+    await interaction.reply({
+      content: `Backfill on cooldown. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
+      ephemeral: true,
+    });
+    return;
+  }
 
   const weeks = interaction.options.getInteger('weeks', false) || 8;
   const dryRun = interaction.options.getBoolean('dry-run', false) || false;

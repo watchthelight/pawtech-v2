@@ -190,9 +190,18 @@ export function isForwarded(messageId: string): boolean {
  * NOTE: Triggers size-based eviction if Map grows too large.
  */
 export function markForwarded(messageId: string) {
+  // Hard cap enforcement: refuse to add if at max size (prevents memory exhaustion)
+  if (forwardedMessages.size >= FORWARDED_MAX_SIZE) {
+    logger.warn(
+      { size: forwardedMessages.size, maxSize: FORWARDED_MAX_SIZE },
+      "[modmail] forwardedMessages at hard cap - evicting oldest entries"
+    );
+    evictOldestEntries(FORWARDED_EVICTION_SIZE / 2);
+  }
+
   forwardedMessages.set(messageId, Date.now());
 
-  // Size-based eviction if Map grows too large
+  // Soft size-based eviction if Map grows too large
   if (forwardedMessages.size > FORWARDED_EVICTION_SIZE) {
     evictOldestEntries(FORWARDED_EVICTION_SIZE / 2);
   }

@@ -25,13 +25,13 @@ import { type CommandContext } from "../lib/cmdWrap.js";
 /**
  * Rate limiter for flag command (per moderator per guild).
  *
- * - Active cooldown: 2 seconds (prevents spam)
+ * - Active cooldown: 15 seconds (prevents spam flagging)
  * - Entry TTL: 1 hour (memory cleanup)
  * - Cleanup interval: 5 minutes
  *
  * Memory: Max ~50-500 entries x 120 bytes = ~6-60 KB
  */
-const FLAG_RATE_LIMIT_MS = 2000;
+const FLAG_RATE_LIMIT_MS = 15 * 1000; // 15 seconds - prevents spam flagging
 const FLAG_COOLDOWN_TTL_MS = 60 * 60 * 1000; // 1 hour - entries expire after this
 const flagCooldowns = new Map<string, number>();
 
