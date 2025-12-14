@@ -81,7 +81,7 @@ export const TICKET_ROLES: TicketRolesConfig = {
   headshot: "929950578379993108",
   halfbody: "1402298352560902224",
   emoji: "1414982808631377971",
-  fullbody: null, // Aspirational. Someday we'll have full-body commissions.
+  fullbody: "1449799905421033595",
 };
 
 // =============================================================================
@@ -163,6 +163,7 @@ export const TICKET_ROLE_NAMES: Record<string, string> = {
   "929950578379993108": "OC Headshot Ticket",
   "1402298352560902224": "OC Half-body Ticket",
   "1414982808631377971": "OC Emoji Ticket",
+  "1449799905421033595": "OC Full-body Ticket",
 };
 
 // Deriving the union from the config object. Add a new field there,

@@ -59,6 +59,7 @@
 9. [Ticket Guide](#9-ticket-guide)
    - [Rules for Handling Tickets](#rules-for-handling-tickets)
    - [Ticket Types](#ticket-types)
+   - [Commissions Verification Guide](#commissions-verification-guide)
 10. [Server Artist Program](#10-server-artist-program)
     - [Overview](#overview)
     - [How the Queue Works](#how-the-queue-works)
@@ -715,19 +716,155 @@ This program allows fellow artists to verify their artwork which gains them acce
 
 Please be mindful, there are many scammers that try to verify. It's important that you consult with other staff members if you are unsure about verifying artwork.
 
-**What to look for:**
-
-- **Check profile** for any links in their bio, avatar descriptors, account age. These are common types of errors you may see that align with most common types of art scammers.
-
-- **Look at signature styles** - A lot of the time, the artwork that is provided can be inconsistent and not match linework. Some Artists will plant their stolen artwork into a graphic design software that make it look like they drew the real thing.
-
-- **AI Generation** - With AI becoming more accessible for consumer use, Scammers like to utilize AI generated artwork, and claim their artwork. Look for errors in their artwork such as more fingers between same art pieces, missing tooth, different color in different areas. AI struggles with consistency, and it can be easy to spot sometimes.
-
-- **Verify with commission pages, social medias, or Speed paints** - All these are common ways to verify someone's legitimacy. Some scammers can't provide these or at least with minimal effort.
-
-Always consult with another team member if you are unsure.
-
 *Access: Moderators and Senior Moderators*
+
+---
+
+### Commissions Verification Guide
+
+> *Last Revision: December 14, 2025*
+
+Online art commissioning has grown dramatically, particularly within furry, VR, and indie creative communities. Alongside this growth, fraud has become more sophisticated (AI-generated art, stolen assets, ghosting after deposits). This section provides clear, community-vetted standards to protect both clients and creators.
+
+#### Universal Principles
+
+**Core Requirements:**
+- Reasonable proof of authorship must be provided upon request
+- Refusal of minimum evidence is grounds to terminate the transaction
+- Commissions >$200 require written or clearly documented terms
+- Payments >$350 must use buyer-protected methods or escrow
+
+**Red Flags (Instant Denial Indicators):**
+- Account <6 months old with no traceable history
+- Sudden style/quality jumps between pieces
+- Resistance to standard proof requests
+- Demand for Friends & Family, crypto, gift cards, etc.
+- AI detection triggers
+- DM advertising
+
+**Green Flags (Positive Indicators):**
+- Multi-year consistent public portfolio
+- Voluntary sharing of WIPs/process
+- Specific, verifiable client feedback
+- Speedpaints
+- Use of milestone payments and written agreements
+
+---
+
+#### 2D Artwork Verification
+
+**Minimum Acceptable Evidence (at least TWO required):**
+
+1. **Recorded timelapse** — Minimum 30 seconds, no unexplained cuts
+2. **Layered source file** — .psd, .clip, .sai2, etc. showing dated layers and logical workflow
+3. **Work-in-progress photo** — Handwritten current date + client identifier beside the artwork
+
+**AI-Generated Content Policy:**
+
+| AI Usage Level | Allowed? | Required Disclosure & Proofs | Consequence of Non-Disclosure |
+|----------------|----------|------------------------------|-------------------------------|
+| No AI involvement | Yes (default) | Standard proof trio | None |
+| AI used only as reference | No | Declare upfront + provide full proof trio | Treated as undisclosed AI |
+| 100% AI-generated | **Prohibited** | Not allowed | Decline Verification |
+
+**Supporting Verification Methods:**
+- Reverse-image search (TinEye, SauceNAO)
+- Metadata/layer inspection
+- Visual artifact checks (symmetrical errors, melting details)
+- AI detection tools (HIVE, SightEngine, Wasitai, or `/isitreal`)
+
+---
+
+#### Manual Visual Verification Guide
+
+When reviewing artwork for AI indicators, look for these common artifacts:
+
+| Category | Common Artifacts to Look For | Why It's a Red Flag |
+|----------|------------------------------|---------------------|
+| **Anatomical Errors** | Extra/missing fingers/toes/digits, fused limbs, impossible joint bends, asymmetrical faces/eyes/ears, warped paws or muzzles | AI struggles with consistent anatomy in anthro/furry designs |
+| **Hands/Paws & Details** | Blobby or multi-fingered hands, unnatural claw placement, "melting" fingers | Persistent AI weakness despite improvements |
+| **Textures & Fur** | Overly smooth/shiny plastic-like skin, inconsistent fur direction/flow, blurry or repeating patterns | Lacks natural variation of hand-drawn/painted fur |
+| **Backgrounds & Composition** | Nonsensical elements (floating objects, physics violations like impossible shadows/lighting), mismatched perspectives | AI prioritizes subject over coherent scene |
+| **Stylistic Inconsistencies** | Sudden glossy/over-saturated look, unnatural color blending, symmetrical errors in asymmetric poses | Diffusion model hallmarks (e.g., excessive shine) |
+| **Other Tells** | Incoherent accessories (warped clothing/jewelry), weird reflections, or "dream-like" distortions | Logic gaps in complex interactions |
+
+---
+
+#### Alt Commission Types
+
+##### 3D Artwork & Prints (VRChat Modeling)
+
+3D commissions (models, rigs, animations) and physical prints (badges, stickers, posters) require adapted proof.
+
+**Minimum Acceptable Evidence (at least TWO required):**
+- Full Blender/Maya/ZBrush/etc. scene file (.blend, .fbx with history, .zpr) showing dated modification timestamps and logical layer/outliner organization
+- Recorded sculpting/modeling timelapse or screen capture (minimum 1 minute, sped up acceptable if raw file provided)
+- For prints: photograph of the physical print-proof next to a handwritten note with current date + client's username
+- Viewport wireframe + UV layout screenshots at multiple stages
+
+**Green Flags:**
+- Public GitHub/GitLab repo or ArtStation process breakdown
+- Previous clients able to confirm receipt of physical items
+
+**Red Flags:**
+- Perfectly clean topology with no signs of manual retopology
+- Identical UV seams or vertex counts to known stolen marketplace assets
+- Refusal to share scene file "because it's too big" or "trade secret"
+
+##### Music Commissions
+
+**Minimum Acceptable Evidence (at least TWO required):**
+- DAW project file (.flp, .als, .logicx, .band) with dated tracks and visible workflow
+- Screen-recorded session of at least 45 seconds showing arrangement from empty project or clear continuation
+- Stem export pack matching the final mix
+- Photo of MIDI controller/keyboard setup with handwritten date + client name visible in frame
+
+**Red Flags:**
+- Identical waveform to leaked sample packs or Splice presets without disclosure
+- Refusal to share project file claiming "I work only with samples I can't share"
+- Sudden jump from lo-fi phone recordings to professional orchestral quality with no prior examples
+
+##### Fursuits & Physical Props
+
+Physical crafts have the advantage of being inherently non-AI, but ghosting and quality scams remain common.
+
+**Minimum Acceptable Evidence:**
+- Dated duct-tape dummy (DTD) photos with measuring tape and client measurements written on tape
+- In-progress photos of carving foam, fur cutting layout, resin casting, or sewing at multiple stages with handwritten date + client name in every photo
+- Video walkthrough of finished suit/prop with clear lighting (minimum 20 seconds)
+- Shipping tracking number + proof of insurance for items over $500
+
+**Green Flags:**
+- Workshop tour video or consistent background in progress photos over months
+- Public maker badge on Refsheet/Toyhouse or previous suit meet photos with owners
+
+---
+
+#### Contract Requirements
+
+For commissions >$200, minimum contract terms should include:
+
+- **Scope of work** & reference images
+- **Delivery deadlines** or estimated timeframe
+- **Refund policy** for artist cancellation or extended delays
+- **Rights** (commercial/use rights explicitly stated)
+- **Work history length** requirements
+
+---
+
+#### Verification Quick Reference
+
+**Must have (2+):**
+- Timelapse OR layered file OR dated WIP photo with handwriting
+
+**Green Flags:**
+- Old account, consistent style, voluntary WIPs, speedpaints, testimonials
+
+**Instant Denial:**
+- New account + high prices
+- Refuses timelapse/file/photo
+- Style not consistent across portfolio
+- DM spam advertising
 
 #### VRChat World Bug Report
 
