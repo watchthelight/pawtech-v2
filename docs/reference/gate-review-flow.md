@@ -540,3 +540,21 @@ CREATE INDEX idx_action_log_timestamp ON action_log(timestamp);
 1. **Cascade deletes**: Ensure `action_log` rows deleted when application deleted.
 2. **Validate foreign keys**: Check all `user_id` references exist in Discord before operations.
 3. **Backup before decisions**: Daily snapshots of `review_action` table for rollback.
+
+---
+
+## See Also
+
+### Related Guides
+- [GATEKEEPER-GUIDE.md](../GATEKEEPER-GUIDE.md) — Staff guide for gate system usage
+- [Modmail System](modmail-system.md) — DM routing for applicant communication
+- [Logging and ModStats](logging-and-modstats.md) — Audit trail and moderator analytics
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) — Complete command reference
+- [Database Schema](database-schema.md) — Full schema documentation
+- [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
+
+### Navigation
+- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [Troubleshooting](../operations/troubleshooting.md) — Common issues and fixes

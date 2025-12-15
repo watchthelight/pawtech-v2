@@ -262,3 +262,21 @@ Potential improvements:
 - Custom templates: Configurable opening/closing messages
 - Auto-close: Close threads after inactivity timeout
 - Webhooks: Route messages via webhooks for better attribution
+
+---
+
+## See Also
+
+### Related Guides
+- [Modmail System (Reference)](../reference/modmail-system.md) — Technical architecture details
+- [GATEKEEPER-GUIDE.md](../GATEKEEPER-GUIDE.md) — Gate system basics for staff
+- [Gate Review Flow](../reference/gate-review-flow.md) — Application review workflow
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) — Complete command reference
+- [MOD-HANDBOOK.md](../MOD-HANDBOOK.md) — Staff policies and escalation
+- [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
+
+### Navigation
+- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [Troubleshooting](../operations/troubleshooting.md) — Common issues and fixes

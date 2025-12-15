@@ -386,3 +386,22 @@ The permission system always checks bypass conditions first:
 | Owner Only | [BO/SD] | `/database`, `/poke` |
 | Discord Perm | ManageMessages | `/send`, `/purge` |
 | Discord Perm | ManageRoles | `/roles`, `/artistqueue`, `/redeemreward` |
+
+---
+
+## See Also
+
+### Tier-Specific Guides
+- [Gatekeeper Guide](docs/GATEKEEPER-GUIDE.md) — Gate system permissions
+- [Moderator Guide](docs/MODERATOR-GUIDE.md) — Event management permissions
+- [Admin Guide](docs/ADMIN-GUIDE.md) — Configuration permissions
+- [Leadership Guide](docs/LEADERSHIP-GUIDE.md) — Audit and management permissions
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](BOT-HANDBOOK.md) — Complete command reference
+- [MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md) — Staff policies and escalation
+- [ROLES.md](docs/ROLES.md) — Server role IDs
+
+### Navigation
+- [Staff Documentation Index](docs/INDEX.md) — Find any document
+- [CHANGELOG.md](CHANGELOG.md) — Version history

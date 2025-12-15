@@ -183,8 +183,16 @@ When you advance to **Leadership** (Community Manager and above), you'll unlock:
 
 ## See Also
 
+### Previous & Next Tiers
 - [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Previous tier (event management)
-- [LEADERSHIP-GUIDE.md](LEADERSHIP-GUIDE.md) — Next tier guide
+- [LEADERSHIP-GUIDE.md](LEADERSHIP-GUIDE.md) — Next tier: audits and oversight
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete command reference
 - [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
-- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete technical reference
+- [PERMS-MATRIX.md](../PERMS-MATRIX.md) — Permission reference (see Administrator section)
+
+### Navigation
+- [Staff Documentation Index](INDEX.md) — Find any document quickly
+- [MOD-QUICKREF.md](../MOD-QUICKREF.md) — Commands at a glance
 - [CHANGELOG.md](../CHANGELOG.md) — Version history and updates

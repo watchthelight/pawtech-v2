@@ -6,6 +6,10 @@ This documentation covers the architecture, configuration, operation, and develo
 
 ---
 
+> **🔰 Staff?** Start with the [Staff Documentation Index](INDEX.md) — find commands, guides, and permissions by your role tier.
+
+---
+
 ## Staff Handbooks
 
 | Document | Description |

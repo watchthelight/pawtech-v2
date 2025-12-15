@@ -234,9 +234,17 @@ These commands are restricted to Bot Owner and Server Dev only:
 
 ## See Also
 
+### Previous Tiers
 - [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — Previous tier (configuration and automation)
-- [GATEKEEPER-GUIDE.md](GATEKEEPER-GUIDE.md) — Entry-level guide (foundations)
-- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Mid-level guide (events)
+- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Event management tier
+- [GATEKEEPER-GUIDE.md](GATEKEEPER-GUIDE.md) — Entry-level tier (foundations)
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete command reference
 - [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
-- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete technical reference
+- [PERMS-MATRIX.md](../PERMS-MATRIX.md) — Permission reference (see Leadership section)
+
+### Navigation
+- [Staff Documentation Index](INDEX.md) — Find any document quickly
+- [MOD-QUICKREF.md](../MOD-QUICKREF.md) — Commands at a glance
 - [CHANGELOG.md](../CHANGELOG.md) — Version history and updates

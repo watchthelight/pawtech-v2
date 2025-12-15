@@ -87,7 +87,9 @@ Server audits (leadership only):
 
 - **[BOT-HANDBOOK.md](BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
 - **[MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)** — Staff policies, escalation, and moderation protocols
+- **[PERMS-MATRIX.md](PERMS-MATRIX.md)** — Complete permission reference
 - **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent changes
+- **[Staff Documentation Index](docs/INDEX.md)** — Find any document quickly
 
 ### Tier-Specific Guides
 

@@ -10,7 +10,9 @@ Everything you need to know about the bot — what it does, who can use it, and 
 |----------|-------------|
 | [MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md) | Staff policies, escalation guidelines, and moderation protocols |
 | [MOD-QUICKREF.md](MOD-QUICKREF.md) | Quick reference card for common tasks |
+| [PERMS-MATRIX.md](PERMS-MATRIX.md) | Complete permission reference for all commands |
 | [CHANGELOG.md](CHANGELOG.md) | Full version history and release notes |
+| [Staff Documentation Index](docs/INDEX.md) | Find any document quickly |
 
 ### Tier-Specific Guides
 

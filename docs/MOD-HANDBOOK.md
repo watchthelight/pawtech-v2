@@ -1286,6 +1286,17 @@ Flagged users show warning badges on their applications, alerting reviewers to l
 
 ## See Also
 
-- **[BOT-HANDBOOK.md](/BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
-- **[MOD-QUICKREF.md](/MOD-QUICKREF.md)** — Quick reference for everyday tasks
-- **[CHANGELOG.md](/CHANGELOG.md)** — Version history and recent changes
+### Bot Documentation
+- **[BOT-HANDBOOK.md](../BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
+- **[MOD-QUICKREF.md](../MOD-QUICKREF.md)** — Quick reference for everyday tasks
+- **[PERMS-MATRIX.md](../PERMS-MATRIX.md)** — Complete permission reference
+
+### Tier-Specific Guides
+- **[GATEKEEPER-GUIDE.md](GATEKEEPER-GUIDE.md)** — For Gatekeeper and Junior Mod
+- **[MODERATOR-GUIDE.md](MODERATOR-GUIDE.md)** — For Moderator and Senior Mod
+- **[ADMIN-GUIDE.md](ADMIN-GUIDE.md)** — For Administrator and Senior Admin
+- **[LEADERSHIP-GUIDE.md](LEADERSHIP-GUIDE.md)** — For CM, CDL, and Server Owner
+
+### Navigation
+- **[Staff Documentation Index](INDEX.md)** — Find any document quickly
+- **[CHANGELOG.md](../CHANGELOG.md)** — Version history and recent changes

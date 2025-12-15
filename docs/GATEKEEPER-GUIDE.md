@@ -162,7 +162,15 @@ When you advance to **Moderator**, you'll unlock:
 
 ## See Also
 
-- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Next tier guide
+### Next Steps
+- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Next tier: events and activity tools
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete command reference
 - [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
-- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete technical reference
+- [PERMS-MATRIX.md](../PERMS-MATRIX.md) — Permission reference (see Gatekeeper section)
+
+### Navigation
+- [Staff Documentation Index](INDEX.md) — Find any document quickly
+- [MOD-QUICKREF.md](../MOD-QUICKREF.md) — Commands at a glance
 - [CHANGELOG.md](../CHANGELOG.md) — Version history and updates

@@ -554,3 +554,21 @@ CREATE INDEX idx_open_modmail_created_at ON open_modmail(created_at);
 1. **Auto-close after 7 days**: Implement scheduled job (cron or Discord scheduled event).
 2. **Archive old closed threads**: Delete threads closed >90 days ago (retain transcripts in DB).
 3. **Purge orphaned DB rows**: Daily cleanup of threads that no longer exist in Discord.
+
+---
+
+## See Also
+
+### Related Guides
+- [Modmail Guide (How-To)](../how-to/modmail-guide.md) — Step-by-step usage guide
+- [Gate Review Flow](gate-review-flow.md) — Application review workflow
+- [Logging and ModStats](logging-and-modstats.md) — Action logging and metrics
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) — Complete command reference
+- [Database Schema](database-schema.md) — Full schema documentation
+- [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
+
+### Navigation
+- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [Troubleshooting](../operations/troubleshooting.md) — Common issues and fixes

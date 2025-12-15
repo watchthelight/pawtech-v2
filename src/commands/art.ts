@@ -35,6 +35,7 @@ import {
   JOB_STATUSES,
   type ArtJobRow,
   type JobStatus,
+  type JobByRecipientResult,
 } from "../features/artJobs/index.js";
 
 // The slash command builder graveyard: where dreams of a simple API go to die.
@@ -230,6 +231,15 @@ function isServerArtist(member: GuildMember, guildId: string): boolean {
 }
 
 /**
+ * Result type for findJob function.
+ */
+type FindJobResult =
+  | { status: "found"; job: ArtJobRow }
+  | { status: "not_found" }
+  | { status: "no_identifier" }
+  | { status: "multiple"; count: number; jobs: ArtJobRow[] };
+
+/**
  * Find a job by ID or user+type
  *
  * Two ways to identify a job: by the artist's local job number, or by
@@ -243,20 +253,28 @@ function findJob(
   guildId: string,
   artistId: string,
   interaction: ChatInputCommandInteraction
-): ArtJobRow | null {
+): FindJobResult {
   const jobId = interaction.options.getInteger("id");
   const user = interaction.options.getUser("user");
   const ticketType = interaction.options.getString("type");
 
   if (jobId) {
-    return getJobByArtistNumber(guildId, artistId, jobId);
+    const job = getJobByArtistNumber(guildId, artistId, jobId);
+    return job ? { status: "found", job } : { status: "not_found" };
   }
 
   if (user && ticketType) {
-    return getJobByRecipient(guildId, artistId, user.id, ticketType);
+    const result = getJobByRecipient(guildId, artistId, user.id, ticketType);
+    if (result.status === "found") {
+      return { status: "found", job: result.job };
+    }
+    if (result.status === "multiple") {
+      return { status: "multiple", count: result.count, jobs: result.jobs };
+    }
+    return { status: "not_found" };
   }
 
-  return null;
+  return { status: "no_identifier" };
 }
 
 /**
@@ -381,7 +399,7 @@ async function handleJobs(
     .setTitle("Your Art Jobs")
     .setDescription(lines.join("\n"))
     .setColor(0x2f0099)
-    .setFooter({ text: `${jobs.length} active job${jobs.length === 1 ? "" : "s"}` });
+    .setFooter({ text: `${jobs.length} active job${jobs.length === 1 ? "" : "s"} • Use /art finish id:1 (just the number, no zeros)` });
 
   await interaction.editReply({ embeds: [embed] });
 }
@@ -413,14 +431,36 @@ async function handleBump(
     return;
   }
 
-  const job = findJob(guildId, member.id, interaction);
-  if (!job) {
+  const jobResult = findJob(guildId, member.id, interaction);
+
+  if (jobResult.status === "no_identifier") {
     await interaction.reply({
-      content: "Job not found. Provide either `id` or both `user` and `type`.",
+      content: "Provide either `id` or both `user` and `type`.",
       ephemeral: true,
     });
     return;
   }
+
+  if (jobResult.status === "not_found") {
+    await interaction.reply({
+      content: "Job not found. Check your job number with `/art jobs`.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (jobResult.status === "multiple") {
+    const jobList = jobResult.jobs
+      .map((j) => `• **#${formatJobNumber(j.artist_job_number)}** — ${formatJobDescription(j)}`)
+      .join("\n");
+    await interaction.reply({
+      content: `You have ${jobResult.count} matching jobs for that user+type. Use the job ID instead:\n\n${jobList}\n\nExample: \`/art bump id:${jobResult.jobs[0].artist_job_number}\``,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const job = jobResult.job;
 
   if (job.status === "done") {
     await interaction.reply({
@@ -487,14 +527,36 @@ async function handleFinish(
     return;
   }
 
-  const job = findJob(guildId, member.id, interaction);
-  if (!job) {
+  const jobResult = findJob(guildId, member.id, interaction);
+
+  if (jobResult.status === "no_identifier") {
     await interaction.reply({
-      content: "Job not found. Provide either `id` or both `user` and `type`.",
+      content: "Provide either `id` or both `user` and `type`.",
       ephemeral: true,
     });
     return;
   }
+
+  if (jobResult.status === "not_found") {
+    await interaction.reply({
+      content: "Job not found. Check your job number with `/art jobs`.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (jobResult.status === "multiple") {
+    const jobList = jobResult.jobs
+      .map((j) => `• **#${formatJobNumber(j.artist_job_number)}** — ${formatJobDescription(j)}`)
+      .join("\n");
+    await interaction.reply({
+      content: `You have ${jobResult.count} matching jobs for that user+type. Use the job ID instead:\n\n${jobList}\n\nExample: \`/art finish id:${jobResult.jobs[0].artist_job_number}\``,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const job = jobResult.job;
 
   if (job.status === "done") {
     await interaction.reply({
@@ -548,15 +610,36 @@ async function handleView(
     return;
   }
 
-  const job = findJob(guildId, member.id, interaction);
-  if (!job) {
+  const jobResult = findJob(guildId, member.id, interaction);
+
+  if (jobResult.status === "no_identifier") {
     await interaction.reply({
-      content: "Job not found. Provide either `id` or both `user` and `type`.",
+      content: "Provide either `id` or both `user` and `type`.",
       ephemeral: true,
     });
     return;
   }
 
+  if (jobResult.status === "not_found") {
+    await interaction.reply({
+      content: "Job not found. Check your job number with `/art jobs`.",
+      ephemeral: true,
+    });
+    return;
+  }
+
+  if (jobResult.status === "multiple") {
+    const jobList = jobResult.jobs
+      .map((j) => `• **#${formatJobNumber(j.artist_job_number)}** — ${formatJobDescription(j)}`)
+      .join("\n");
+    await interaction.reply({
+      content: `You have ${jobResult.count} matching jobs for that user+type. Use the job ID instead:\n\n${jobList}\n\nExample: \`/art view id:${jobResult.jobs[0].artist_job_number}\``,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  const job = jobResult.job;
   const assignedAt = Math.floor(new Date(job.assigned_at).getTime() / 1000);
 
   const fields = isSpecialJob(job)

@@ -601,3 +601,21 @@ Run after every deployment:
 1. **Auto-retry failed cards**: Queue failed logging channel posts in DB; retry on next boot.
 2. **Self-healing permissions**: Bot detects missing permissions, posts alert in admin channel with fix instructions.
 3. **Database repair script**: `npm run repair-db` → VACUUM, integrity check, foreign key check, report issues.
+
+---
+
+## See Also
+
+### Related Guides
+- [Deployment Config](deployment-config.md) — Environment and configuration setup
+- [Database Schema](../reference/database-schema.md) — Schema and migration guide
+- [Logging and ModStats](../reference/logging-and-modstats.md) — Audit logging system
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) — Complete command reference
+- [MOD-HANDBOOK.md](../MOD-HANDBOOK.md) — Staff policies
+- [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
+
+### Navigation
+- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [CHANGELOG.md](../../CHANGELOG.md) — Version history and updates

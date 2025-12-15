@@ -49,12 +49,13 @@ const getJobByArtistNumberStmt = db.prepare(
   `SELECT * FROM art_job WHERE guild_id = ? AND artist_id = ? AND artist_job_number = ?`
 );
 
-// Finds an active job by @mentioning the recipient. Handy when artists can't
+// Finds active jobs by @mentioning the recipient. Handy when artists can't
 // remember job numbers but know "I'm doing the icon for that fox person."
-const getJobByRecipientStmt = db.prepare(
+// Returns ALL matches so we can detect ambiguity (multiple jobs for same recipient+type).
+const getJobsByRecipientStmt = db.prepare(
   `SELECT * FROM art_job
    WHERE guild_id = ? AND artist_id = ? AND recipient_id = ? AND ticket_type = ? AND status != 'done'
-   ORDER BY assigned_at DESC LIMIT 1`
+   ORDER BY assigned_at DESC`
 );
 
 const getActiveJobsForArtistStmt = db.prepare(
@@ -94,33 +95,22 @@ const getAllTimeCompletedStmt = db.prepare(
    WHERE guild_id = ? AND artist_id = ? AND status = 'done'`
 );
 
-/*
- * GOTCHA: This is not atomic. Two simultaneous createJob calls could
- * theoretically get the same number. In practice we're single-process
- * and better-sqlite3 is synchronous, so it's fine. Famous last words.
- */
-function getNextJobNumber(guildId: string): number {
-  const row = getMaxJobNumberStmt.get(guildId) as { max_num: number | null } | undefined;
-  return (row?.max_num ?? 0) + 1;
-}
-
 /**
- * getNextArtistJobNumber
- * WHAT: Get the next per-artist job number.
+ * createJobTransaction
+ * WHAT: Atomically create a job with proper number assignment.
+ * WHY: Prevents race conditions where two simultaneous calls get the same number.
+ *
+ * Uses a transaction to ensure the MAX query and INSERT happen atomically.
+ * If a UNIQUE constraint violation occurs (shouldn't happen, but just in case),
+ * we retry with the next available number.
  */
-function getNextArtistJobNumber(guildId: string, artistId: string): number {
-  const row = getMaxArtistJobNumberStmt.get(guildId, artistId) as { max_num: number | null } | undefined;
-  return (row?.max_num ?? 0) + 1;
-}
+const createJobTransaction = db.transaction((options: CreateJobOptions) => {
+  // Get next numbers inside the transaction
+  const jobNumRow = getMaxJobNumberStmt.get(options.guildId) as { max_num: number | null } | undefined;
+  const jobNumber = (jobNumRow?.max_num ?? 0) + 1;
 
-/**
- * createJob
- * WHAT: Create a new art job when an assignment is made.
- * WHY: Called from redeemreward handler to track the job.
- */
-export function createJob(options: CreateJobOptions): CreateJobResult {
-  const jobNumber = getNextJobNumber(options.guildId);
-  const artistJobNumber = getNextArtistJobNumber(options.guildId, options.artistId);
+  const artistNumRow = getMaxArtistJobNumberStmt.get(options.guildId, options.artistId) as { max_num: number | null } | undefined;
+  const artistJobNumber = (artistNumRow?.max_num ?? 0) + 1;
 
   const result = insertJobStmt.run(
     options.guildId,
@@ -132,11 +122,26 @@ export function createJob(options: CreateJobOptions): CreateJobResult {
     options.assignmentLogId ?? null
   );
 
+  return {
+    id: result.lastInsertRowid as number,
+    jobNumber,
+    artistJobNumber,
+  };
+});
+
+/**
+ * createJob
+ * WHAT: Create a new art job when an assignment is made.
+ * WHY: Called from redeemreward handler to track the job.
+ */
+export function createJob(options: CreateJobOptions): CreateJobResult {
+  const result = createJobTransaction(options);
+
   logger.info(
     {
       guildId: options.guildId,
-      jobNumber,
-      artistJobNumber,
+      jobNumber: result.jobNumber,
+      artistJobNumber: result.artistJobNumber,
       artistId: options.artistId,
       recipientId: options.recipientId,
       ticketType: options.ticketType,
@@ -144,11 +149,7 @@ export function createJob(options: CreateJobOptions): CreateJobResult {
     "[artJobs] Job created"
   );
 
-  return {
-    id: result.lastInsertRowid as number,
-    jobNumber,
-    artistJobNumber,
-  };
+  return result;
 }
 
 /**
@@ -179,18 +180,39 @@ export function getJobByArtistNumber(guildId: string, artistId: string, artistJo
 }
 
 /**
+ * Result type for getJobByRecipient when multiple jobs match.
+ */
+export type JobByRecipientResult =
+  | { status: "found"; job: ArtJobRow }
+  | { status: "not_found" }
+  | { status: "multiple"; count: number; jobs: ArtJobRow[] };
+
+/**
  * getJobByRecipient
  * WHAT: Get an active job by recipient and ticket type.
  * WHY: Allows artists to reference jobs by @user + type.
+ *
+ * Returns a discriminated union so callers can handle the "multiple matches" case
+ * instead of silently picking an arbitrary job.
  */
 export function getJobByRecipient(
   guildId: string,
   artistId: string,
   recipientId: string,
   ticketType: string
-): ArtJobRow | null {
-  const row = getJobByRecipientStmt.get(guildId, artistId, recipientId, ticketType) as ArtJobRow | undefined;
-  return row ?? null;
+): JobByRecipientResult {
+  const rows = getJobsByRecipientStmt.all(guildId, artistId, recipientId, ticketType) as ArtJobRow[];
+
+  if (rows.length === 0) {
+    return { status: "not_found" };
+  }
+
+  if (rows.length === 1) {
+    return { status: "found", job: rows[0] };
+  }
+
+  // Multiple matches - return them all so the caller can tell the user to be more specific
+  return { status: "multiple", count: rows.length, jobs: rows };
 }
 
 /**

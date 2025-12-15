@@ -569,3 +569,21 @@ GROUP BY bucket;
 1. **Anonymize old logs**: After 1 year, redact user_id/moderator_id (keep aggregates only).
 2. **GDPR compliance**: Implement `/data-delete` to purge user's action logs on request.
 3. **Access control**: Restrict `/analytics-export` to owners only (includes raw user IDs).
+
+---
+
+## See Also
+
+### Related Guides
+- [Gate Review Flow](gate-review-flow.md) — Application workflow that generates logs
+- [Modmail System](modmail-system.md) — Ticket lifecycle logging
+- [ADMIN-GUIDE.md](../ADMIN-GUIDE.md) — Admin guide for stats management
+
+### Reference Documentation
+- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) — Complete command reference
+- [Database Schema](database-schema.md) — Full schema documentation
+- [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
+
+### Navigation
+- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [Troubleshooting](../operations/troubleshooting.md) — Common issues and fixes
