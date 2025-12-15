@@ -1,59 +1,46 @@
 # Backend Changelog
 
-## November 2025 - Major Codebase Audit
+## November 2025 - Major Code Cleanup
 
-### Dead Code Removal
-- Removed unused `tracer.ts`, `RedisNotifyLimiter`, event wrappers (~150 lines)
-- Deleted dead `forumThreadNotify.ts` (~230 lines)
-- Removed unused functions: `execRaw`, `storeScan`, `buildCandidateSelectMenu`, UI helpers
+### Removed Unused Code
+- Deleted unused files and functions (380+ lines total)
+- Removed old tracer, event wrappers, and forum notification code
+- Cleaned up unused UI helper functions
 
-### Security Fixes
-- Added SQL identifier validation preventing injection attacks
-- Added column allowlist for ALTER TABLE operations
-- Fixed XSS in linked roles by escaping user content
-- Added CSRF protection to OAuth with state validation
-- Added rate limiting to OAuth endpoints
-- Added pre-flight bot permission & hierarchy checks for role config
+### Security
+- Fixed SQL injection risks with input validation
+- Fixed cross-site scripting (XSS) in linked roles
+- Added CSRF protection to OAuth login
+- Added rate limits to prevent abuse
+- Added permission checks before changing roles
 
-### Memory Leak Prevention
-- Fixed modmail message tracking with bounded Map (~500KB max)
-- Fixed uncleaned intervals with `.unref()`
-- Created reusable `LRUCache` utility with size limits and TTL
-- Replaced unbounded Maps with LRU caches (config, logging, flagger, drafts)
+### Memory & Performance
+- Fixed memory leaks in modmail tracking (limited to 500KB)
+- Fixed memory leaks in background timers
+- Added LRU caches to prevent unlimited memory growth
+- Added database indexes for faster queries
+- Fixed slow gate shortcode lookups
 
-### Error Handling & Observability
-- Wrapped `interactionCreate` and `messageCreate` with `wrapEvent`
-- Added debug logging to 50+ empty catch handlers
-- Migrated to structured Pino logging across commands
-- Added audit trail failure logging with retry support
-- Added scheduler health monitoring with alerting
+### Error Handling
+- Added better error tracking to catch blocks
+- Improved logging throughout the bot
+- Added retry support for failed operations
+- Added health checks for scheduled tasks
 
-### Database & Performance
-- Added composite indexes for modmail tickets and applications
-- Fixed cache invalidation race condition in logging store
-- Fixed full table scan in gate shortcode check - scoped to guild
-- Moved schema checks from runtime to startup
+### Code Quality
+- Removed duplicate code
+- Fixed unsafe type conversions
+- Made timestamp handling consistent
+- Moved hardcoded values to constants
 
-### Type Safety & Code Quality
-- Consolidated duplicate claim implementations
-- Extracted shared `requireAdminOrLeadership` helper
-- Fixed unsafe `as any` casts with proper type guards
-- Standardized `claimed_at` field type and timestamp formats
+### Configuration
+- Moved artist rotation settings to database
+- Moved category IDs to database
+- Removed hardcoded role and guild IDs
+- Made more settings configurable per server
 
-### Configuration Improvements
-- Moved artist rotation IDs to database config
-- Moved poke category IDs to database config
-- Removed hardcoded role/guild IDs - now configurable per guild
-- Made movie night threshold configurable
-
-### Code Cleanup
-- Consolidated tracing systems (tracer.ts → reqctx.ts)
-- Standardized ephemeral reply patterns
-- Extracted magic numbers to named constants
-- Simplified null checks using optional chaining
-
-### Reliability
-- Fixed race condition in artist rotation queue with atomic transactions
-- Fixed `perm_reject` status inconsistency
-- Added panic mode check to gate verification
-- Added fault tolerance with `Promise.allSettled` for analytics
+### Bug Fixes
+- Fixed race condition in artist rotation queue
+- Fixed status inconsistencies in applications
+- Added panic mode support to gate verification
+- Improved error handling in analytics

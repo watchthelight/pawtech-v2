@@ -1,113 +1,64 @@
 # Pawtropolis Tech Documentation
 
-> A production-ready Discord moderation bot for transparent, auditable community gating.
-
-This documentation covers the architecture, configuration, operation, and development of the Pawtropolis Tech Gatekeeper bot.
+> Discord bot for community moderation and gating.
 
 ---
 
-> **Staff?** Start with the [Bot Handbook](../BOT-HANDBOOK.md) — pick your role and find what you need.
+## For Staff
+
+**Start here:** [BOT-HANDBOOK.md](/BOT-HANDBOOK.md)
+
+The Bot Handbook has everything you need - commands, features, and how to use them.
+
+**Other Handbooks:**
+- [MOD-HANDBOOK.md](MOD-HANDBOOK.md) - Staff policies and moderation rules
+- [MOD-QUICKREF.md](/MOD-QUICKREF.md) - Quick command reference
+- [CHANGELOG.md](/CHANGELOG.md) - Version history and updates
 
 ---
 
-## Staff Handbooks
-
-| Document | Description |
-|----------|-------------|
-| [BOT-HANDBOOK.md](/BOT-HANDBOOK.md) | **Complete bot usage guide** — all commands, features, and troubleshooting |
-| [MOD-HANDBOOK.md](MOD-HANDBOOK.md) | **Staff policies** — escalation guidelines, moderation protocols, and training |
-| [MOD-QUICKREF.md](/MOD-QUICKREF.md) | **Quick reference** — commands at a glance for everyday tasks |
-| [CHANGELOG.md](/CHANGELOG.md) | **Version history** — full release notes and recent changes |
-
----
-
-## Quick Links
-
-| Need to... | Go to |
-|------------|-------|
-| Get started | [Executive Summary](overview/executive-summary.md) |
-| Understand the system | [System Architecture](architecture/system-overview.md) |
-| Use commands | [BOT-HANDBOOK.md](/BOT-HANDBOOK.md) |
-| Deploy the bot | [Deployment Config](operations/deployment-config.md) |
-| Fix issues | [Troubleshooting](operations/troubleshooting.md) |
-
----
-
-## Documentation Structure
+## Technical Documentation
 
 ### Overview
-
-Introduction to the project and high-level concepts.
-
-- [Executive Summary](overview/executive-summary.md) - Project goals, philosophy, and feature overview
-- [License FAQ](overview/license-faq.md) - Licensing terms and usage rights
+- [Executive Summary](overview/executive-summary.md) - What this bot does and why
+- [License FAQ](overview/license-faq.md) - License and usage rights
 
 ### Architecture
-
-System design and technical architecture.
-
-- [System Overview](architecture/system-overview.md) - Components, data flow, and design decisions
+- [System Overview](architecture/system-overview.md) - How the bot works
 
 ### Reference
-
-Detailed feature and API documentation.
-
-- [Slash Commands](reference/slash-commands.md) - Complete command reference with examples
-- [Gate Review Flow](reference/gate-review-flow.md) - Application submission and review workflow
-- [Modmail System](reference/modmail-system.md) - DM-to-thread routing and ticket lifecycle
-- [Logging and ModStats](reference/logging-and-modstats.md) - Audit logging and moderator analytics
-- [Database Schema](reference/database-schema.md) - SQLite schema and migration guide
+- [Slash Commands](reference/slash-commands.md) - All commands with examples
+- [Gate Review Flow](reference/gate-review-flow.md) - How member applications work
+- [Modmail System](reference/modmail-system.md) - DM routing and tickets
+- [Logging and ModStats](reference/logging-and-modstats.md) - Audit logs and stats
+- [Database Schema](reference/database-schema.md) - Database structure
 - [Send Command](reference/send-command.md) - Anonymous staff messaging
 
 ### How-To Guides
-
-Step-by-step tutorials for common tasks.
-
-- [Modmail Guide](how-to/modmail-guide.md) - How to use the modmail system
-- [Backfill Activity](how-to/backfill-activity.md) - Backfilling message activity data
+- [Modmail Guide](how-to/modmail-guide.md) - Using the modmail system
+- [Backfill Activity](how-to/backfill-activity.md) - Backfilling message data
 
 ### Operations
-
-Deployment, configuration, and maintenance.
-
-- [Deployment Config](operations/deployment-config.md) - Environment variables and configuration
-- [Troubleshooting](operations/troubleshooting.md) - Common issues and solutions
+- [Deployment Config](operations/deployment-config.md) - Setup and environment
+- [Troubleshooting](operations/troubleshooting.md) - Common problems and fixes
 
 ### Roadmap
-
-- [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Ideas for future development
-- [Rejected Ideas](roadmap/REJECTED.md) - Previously considered but not implemented
-
----
-
-## Inline Documentation
-
-Additional documentation is located within source directories:
-
-| Location | Purpose |
-|----------|---------|
-| [`/src/commands/README.md`](/src/commands/README.md) | Slash command implementation guide |
-| [`/src/config/README.md`](/src/config/README.md) | Configuration store patterns |
-| [`/src/constants/README.md`](/src/constants/README.md) | Sample data and constants |
-| [`/src/db/README.md`](/src/db/README.md) | Database layer documentation |
-| [`/migrations/README.md`](/migrations/README.md) | Database migration guide |
+- [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Future ideas
+- [Rejected Ideas](roadmap/REJECTED.md) - Ideas we decided against
 
 ---
 
-## Archived Documentation
+## More Documentation
 
-Historical and implementation-specific documents are preserved in [`/_archive/`](_archive/README.md).
+**In the code:**
+- [`/src/commands/README.md`](/src/commands/README.md) - How to add commands
+- [`/src/config/README.md`](/src/config/README.md) - Config patterns
+- [`/src/constants/README.md`](/src/constants/README.md) - Sample data
+- [`/src/db/README.md`](/src/db/README.md) - Database layer
+- [`/migrations/README.md`](/migrations/README.md) - Database migrations
 
-These include:
-- PR implementation notes
-- Deployment fix records
-- One-time migration guides
-
----
-
-## Contributing
-
-See the main [README.md](/README.md) for contribution guidelines and development setup.
+**Archived:**
+- [`/_archive/`](_archive/README.md) - Old implementation notes and deployment records
 
 ---
 

@@ -1,32 +1,25 @@
-# Command Implementation Checklist
+# Command Checklist
 
-## Reply Visibility
+## When to Use Ephemeral vs Public
 
-Before merging a new command, verify:
+**Ephemeral (only you see it):**
+- Errors and validation messages
+- Personal confirmations
+- Status checks
+- Private info
 
-- [ ] Validation errors use `ephemeral: true`
-- [ ] Operation errors use `ephemeral: true`
-- [ ] Moderation actions use `ephemeral: false` (explicit)
-- [ ] Status queries use `ephemeral: true`
-- [ ] Team reports/analytics use `ephemeral: false` (explicit)
-- [ ] User confirmations use `ephemeral: true`
-- [ ] Privacy-critical commands never leak actor identity
+**Public (everyone sees it):**
+- Mod actions (for transparency)
+- Team reports and stats
+- Long-running job notifications
 
-## Code Review Questions
+## Quick Check
 
-1. **Does this command perform a moderation action?**
-   - Yes -> Public replies for visibility
-   - No -> Proceed to #2
+1. Is this a mod action? → Public
+2. Is this a team report? → Public
+3. Is this a status check or error? → Ephemeral
 
-2. **Does this command return team-wide information?**
-   - Yes -> Public replies for sharing
-   - No -> Proceed to #3
-
-3. **Is this a status/info query or user confirmation?**
-   - Yes -> Ephemeral replies to avoid clutter
-   - No -> Review case-by-case
-
-## Common Patterns
+## Code Patterns
 
 ```typescript
 // Guild-only check (ephemeral error)

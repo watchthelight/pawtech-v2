@@ -1,282 +1,145 @@
-# Modmail System
+# Modmail Guide
 
-## Overview
+Talk with applicants privately through Discord threads.
 
-The Modmail system provides a private communication channel between staff and applicants via Discord private threads. It enables staff to communicate with applicants without exposing their personal DMs.
+## What It Does
 
-## Features
+Modmail lets staff message applicants without using personal DMs. Messages go through a private thread that only staff can see.
 
-- **Private Threads**: Create private threads in the review channel for staff-applicant communication
-- **Bidirectional Routing**: Messages automatically route between the thread and the applicant's DMs
-- **Thread Management**: Open, close, and reopen threads with proper status tracking
-- **Review Card Integration**: Modmail button appears on review cards when claimed
-- **Status Display**: Review cards show current modmail status (Open/Closed with thread link)
+Key features:
+- Private threads in the review channel
+- Messages auto-forward between thread and applicant DMs
+- Open, close, and reopen threads
+- Shows on review cards when an app is claimed
 
-## Flow
+## How to Use
 
-### Opening Modmail
+### Open Modmail
 
-1. **Via Review Card Button**:
-   - Claim an application first
-   - Click the "Modmail" button on the review card
-   - A private thread is created in the review channel
-   - The moderator who clicked is automatically added to the thread
-   - The applicant receives a DM notification
+**From Review Card:**
+1. Claim the application first
+2. Click "Modmail" button
+3. A private thread opens
+4. You're auto-added to the thread
+5. Applicant gets a DM notification
 
-2. **Via Context Menu**:
-   - Right-click on a review card message
-   - Select "Modmail: Open" from the context menu
-   - Same flow as button
+**From Context Menu:**
+1. Right-click the review card
+2. Select "Modmail: Open"
 
-3. **Thread Contents**:
-   - Starter embed with applicant info:
-     - Applicant tag and mention
-     - Application code (hex6)
-     - Account creation date
-     - Avatar thumbnail
-   - "Close" button
-   - "Copy Lens Link" button (for reverse image search)
+**What's in the thread:**
+- Applicant info (tag, app code, join date, avatar)
+- "Close" button
+- "Copy Lens Link" button (for image search)
 
-### Message Routing
+### Send Messages
 
-**Thread → DM**:
-- Any non-bot message in the modmail thread is forwarded to the applicant's DM
-- Format: `**From Staff ({tag}):**\n{content}`
-- First attachment URL is included
-- If DM delivery fails, a warning is posted in the thread
+**You write in thread → Applicant gets DM:**
+- Any message you send in the thread goes to the applicant
+- Shows as: "From Staff (YourName): message"
+- Includes first attachment if you add one
+- If DM fails, you'll see a warning in the thread
 
-**DM → Thread**:
-- Any DM from the applicant (with an open ticket) is forwarded to the thread
-- Format: `**Applicant (<@{userId}>):**\n{content}`
-- First attachment URL is included
-- Bot tracks forwarded messages to prevent echo loops
+**Applicant writes DM → You see in thread:**
+- Applicant's DM appears in the thread
+- Shows as: "Applicant (@user): message"
+- Includes first attachment if they add one
 
-### Closing Modmail
+### Close Modmail
 
-**Via Button**:
-- Click "Close" in the thread's starter embed
-- Thread is locked and archived
-- DB status updated to `closed`
-- Applicant receives closure notification DM
+**Use the button:**
+- Click "Close" in the thread
+- Thread locks and archives
+- Applicant gets a notification
 
-**Via Command**:
+**Use the command:**
 ```
 /modmail close [thread]
 ```
-- If `thread` is omitted, uses the current thread
-- Same behavior as button
+- Leave `thread` blank to close the current thread
+- Same result as the button
 
-### Reopening Modmail
+### Reopen Modmail
 
 ```
 /modmail reopen [user] [thread]
 ```
 
-**Within 7 Days**:
-- Thread is unlocked and unarchived
-- DB status updated to `open`
-- Applicant receives reopen notification DM
+**If closed less than 7 days ago:**
+- Unlocks and unarchives the same thread
+- Applicant gets a notification
 
-**After 7 Days**:
-- Creates a new thread transparently
-- Keeps association with original application code
+**If closed more than 7 days ago:**
+- Creates a new thread
+- Keeps the same application code
 
-## Permissions
+## Permissions Needed
 
-### Required Bot Permissions
+**Bot needs:**
+- Manage Threads
+- Send Messages in Threads
+- View Channel
+- Send Messages (for DMs)
 
-- **ManageThreads**: Create and manage private threads
-- **SendMessagesInThreads**: Post messages in threads
-- **ViewChannel**: See the review channel
-- **SendMessages**: Send DMs to applicants
+**You need one of:**
+- Manage Guild permission
+- Reviewer Role
 
-### Required User Permissions
+## Technical Details
 
-One of:
-- **Manage Guild** permission
-- **Reviewer Role** (configured in guild settings)
+**Database:** Each modmail thread is tracked in the database with:
+- Guild ID and user ID
+- Application code
+- Thread ID
+- Status (open or closed)
+- Timestamps
 
-## Database Schema
+**Important:** Only one open thread per user per server.
 
-```sql
-CREATE TABLE modmail_ticket (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  guild_id TEXT NOT NULL,
-  user_id TEXT NOT NULL,
-  app_code TEXT,                -- hex6 for convenience
-  review_message_id TEXT,       -- original review card
-  thread_id TEXT,               -- staff thread
-  status TEXT NOT NULL DEFAULT 'open', -- 'open' | 'closed'
-  created_at TEXT NOT NULL DEFAULT (datetime('now')),
-  closed_at TEXT
-);
-
-CREATE UNIQUE INDEX idx_modmail_open_unique
-ON modmail_ticket(guild_id, user_id, status)
-WHERE status = 'open';
-```
-
-**Constraint**: Only one open ticket per user per guild (enforced by unique index).
-
-## Commands
+## Command Reference
 
 ### `/modmail close [thread]`
-
-Close a modmail thread.
-
-**Parameters**:
-- `thread` (optional): Thread ID to close. If omitted, uses current thread.
-
-**Permissions**: Manage Guild or Reviewer Role
-
-**Effects**:
-- Sets DB status to `closed`
-- Locks and archives thread
-- DMs applicant with closure notice
+Close a thread. Leave `thread` blank to close the current one.
 
 ### `/modmail reopen [user] [thread]`
+Reopen a closed thread. Specify the user or thread ID.
 
-Reopen a closed modmail thread.
+### Context Menu: "Modmail: Open"
+Right-click a review card and select this to open modmail.
 
-**Parameters**:
-- `user` (optional): User to reopen modmail for (finds most recent closed ticket)
-- `thread` (optional): Specific thread ID to reopen
+## Common Problems
 
-**Permissions**: Manage Guild or Reviewer Role
+### Applicant DMs are off
+- You'll see a warning in the thread
+- Thread still opens
+- Messages won't deliver until they enable DMs
 
-**Effects**:
-- If within 7 days: unlocks and unarchives thread
-- If after 7 days: creates new thread
-- DMs applicant with reopen notice
+### Bot missing permissions
+- Error: "Bot is missing ManageThreads or SendMessagesInThreads permission"
+- No thread created
+- Fix bot permissions and try again
 
-## Context Menu
+### You don't have permission
+- Error: "You do not have permission for this"
+- Need Manage Guild or Reviewer Role
 
-**"Modmail: Open"** (Message Command)
+### Thread already open
+- Error: "Modmail thread already exists"
+- Only one open thread per user at a time
+- Close the existing thread first
 
-Right-click on any review card message and select this option to open modmail for that applicant.
+## Review Card Integration
 
-**Permissions**: Manage Guild or Reviewer Role
+The "Modmail" button shows on review cards when:
+- Application is claimed
+- Not yet approved/rejected/kicked
 
-## Failure Modes
+Review cards show modmail status:
+- "Modmail: Open: #modmail-A1B2C3"
+- "Modmail: Closed"
 
-### DM Delivery Failures
+## Related Docs
 
-**When Opening**:
-- If applicant has DMs disabled, a warning is posted in the thread
-- Thread still opens successfully
-- Staff can proceed with thread messages (they won't deliver until DMs are enabled)
-
-**When Routing**:
-- Thread → DM: Warning posted in thread if delivery fails
-- DM → Thread: Fails silently (logged); applicant won't get feedback if thread is closed
-
-### Permission Failures
-
-**Missing Bot Permissions**:
-- Returns error message to staff: "Bot is missing ManageThreads or SendMessagesInThreads permission."
-- Does not create ticket in DB
-- Logs error for debugging
-
-**Missing User Permissions**:
-- Returns ephemeral error: "You do not have permission for this."
-- No ticket created
-
-### Multiple Open Tickets
-
-**Prevented by DB Constraint**:
-- Unique index ensures only one open ticket per user per guild
-- Attempting to open second ticket returns: "Modmail thread already exists: <#threadId>"
-
-## Logging
-
-All modmail operations use `[modmail]` prefix in logs:
-
-```javascript
-logger.info({ ticketId, threadId, userId }, "[modmail] thread opened");
-logger.warn({ err, ticketId }, "[modmail] failed to DM applicant on close");
-```
-
-**Key Events**:
-- `[modmail] thread opened`: New ticket created
-- `[modmail] thread closed`: Ticket closed
-- `[modmail] thread reopened`: Ticket reopened
-- `[modmail] routed thread → DM`: Message forwarded to applicant
-- `[modmail] routed DM → thread`: Message forwarded to thread
-- `[modmail] failed to route thread → DM`: DM delivery failed
-- `[modmail] failed to DM applicant on open`: Opening notification failed
-
-## Integration with Review Cards
-
-### Button Visibility
-
-The "Modmail" button appears on the review card:
-- **Only when claimed** by a reviewer
-- **Not on terminal states** (approved/rejected/kicked)
-- In the same row as Accept/Reject/Kick buttons
-
-### Status Display
-
-Review cards show modmail status in an inline field:
-
-```
-Modmail: Open: #modmail-A1B2C3
-```
-
-or
-
-```
-Modmail: Closed
-```
-
-**Location**: Inline field after Status field
-
-## Testing Checklist
-
-- [ ] Open modmail from review card button
-- [ ] Open modmail from context menu
-- [ ] Send message in thread → verify DM delivery
-- [ ] Send DM → verify thread delivery
-- [ ] Verify attachments are forwarded
-- [ ] Close via button → verify lock/archive/DM
-- [ ] Close via command → verify same behavior
-- [ ] Reopen within 7 days → verify unlock/unarchive
-- [ ] Reopen after 7 days → verify new thread
-- [ ] Test with DMs disabled → verify warnings
-- [ ] Test permission failures → verify error messages
-- [ ] Test duplicate open attempt → verify constraint error
-- [ ] Verify echo loop prevention (forwarded messages not re-forwarded)
-
-## Security Considerations
-
-1. **Privacy**: Threads are private; only staff and thread members can see messages
-2. **Audit Trail**: All messages logged; ticket lifecycle tracked in DB
-3. **Permission Gating**: All actions require staff permissions
-4. **No Applicant Access**: Applicants never join the thread directly
-5. **Rate Limiting**: Relies on Discord's native rate limits for DMs
-
-## Future Enhancements
-
-Potential improvements:
-- Transcripts: Export thread history to file
-- Multiple threads: Allow multiple concurrent threads per applicant
-- Custom templates: Configurable opening/closing messages
-- Auto-close: Close threads after inactivity timeout
-- Webhooks: Route messages via webhooks for better attribution
-
----
-
-## See Also
-
-### Related Guides
-- [Modmail System (Reference)](../reference/modmail-system.md) — Technical architecture details
-- [GATEKEEPER-GUIDE.md](../GATEKEEPER-GUIDE.md) — Gate system basics for staff
-- [Gate Review Flow](../reference/gate-review-flow.md) — Application review workflow
-
-### Reference Documentation
-- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) — Complete command reference
-- [MOD-HANDBOOK.md](../MOD-HANDBOOK.md) — Staff policies and escalation
-- [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
-
-### Navigation
-- [Bot Handbook](../../BOT-HANDBOOK.md) — Start here for all docs
-- [Troubleshooting](../operations/troubleshooting.md) — Common issues and fixes
+- [Modmail System Reference](../reference/modmail-system.md) - Technical details
+- [BOT-HANDBOOK.md](../../BOT-HANDBOOK.md) - All commands
+- [Troubleshooting](../operations/troubleshooting.md) - Fix problems

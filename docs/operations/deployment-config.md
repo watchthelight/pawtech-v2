@@ -1,12 +1,12 @@
-# Deployment, Configuration, and Environment
+# Deployment and Configuration
 
-## Technology Stack
+## Tech Stack
 
 ### Node.js and TypeScript
 
-- **Node Version**: 20.x LTS (ES modules, top-level await, native fetch)
-- **TypeScript**: 5.x with strict mode enabled
-- **Package Manager**: npm (lockfile: `package-lock.json`)
+- Node: 20.x
+- TypeScript: 5.x with strict mode
+- Package Manager: npm
 
 **tsconfig.json**:
 
@@ -31,7 +31,7 @@
 
 ### Build with tsup
 
-**Why tsup**: Fast esbuild-based bundler optimized for Node.js libraries; handles TypeScript transforms without config overhead.
+tsup is a fast bundler for TypeScript projects.
 
 **tsup.config.ts**:
 
@@ -55,16 +55,16 @@ export default defineConfig({
 **Build Commands**:
 
 ```bash
-npm run build       # tsup (production build)
-npm run dev         # tsup --watch (hot reload)
-npm run typecheck   # tsc --noEmit (validate types without building)
+npm run build       # Build for production
+npm run dev         # Build with hot reload
+npm run typecheck   # Check types without building
 ```
 
-**Output**: `dist/index.js` (ESM bundle, ~2MB minified)
+Output: `dist/index.js`
 
-## Environment Variables Contract
+## Environment Variables
 
-### Required Variables
+### Required
 
 | Variable        | Type   | Description                               | Example                         |
 | --------------- | ------ | ----------------------------------------- | ------------------------------- |
@@ -73,7 +73,7 @@ npm run typecheck   # tsc --noEmit (validate types without building)
 | `GUILD_ID`      | string | Discord server ID (right-click → Copy ID) | `1234567890123456789`           |
 | `DATABASE_URL`  | string | Path to SQLite database file              | `./data/data.db`                |
 
-### Optional Variables
+### Optional
 
 | Variable          | Type   | Description                                 | Default / Notes            |
 | ----------------- | ------ | ------------------------------------------- | -------------------------- |
@@ -114,45 +114,45 @@ OTEL_ENABLED=false
 # OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 ```
 
-### Loading Environment Variables (dotenvx)
+### Loading Environment Variables
 
-**Why dotenvx**: Enhanced dotenv with encryption support and multiple environment files.
+The bot uses dotenvx to load environment variables from `.env` files.
 
 ```typescript
 // src/index.ts
 import { config } from "@dotenvx/dotenvx";
-config(); // Loads .env file into process.env
+config(); // Load .env file
 
-// Validate required vars
+// Check required variables
 const requiredVars = ["DISCORD_TOKEN", "CLIENT_ID", "GUILD_ID", "DATABASE_URL"];
 for (const varName of requiredVars) {
   if (!process.env[varName]) {
-    console.error(`❌ Missing required environment variable: ${varName}`);
+    console.error(`Missing: ${varName}`);
     process.exit(1);
   }
 }
 
-console.log("✅ Environment loaded successfully");
+console.log("Environment loaded");
 ```
 
-**Multiple Environment Files**:
+**Multiple files**:
 
 ```bash
-.env                 # Default (gitignored)
-.env.development     # Dev overrides
-.env.production      # Prod overrides (deploy only)
-.env.example         # Template for contributors (committed)
+.env                 # Default (not in git)
+.env.development     # Development settings
+.env.production      # Production settings
+.env.example         # Template (in git)
 ```
 
-**Load specific env**:
+**Load specific file**:
 
 ```bash
-NODE_ENV=production npm start  # Loads .env.production then .env
+NODE_ENV=production npm start
 ```
 
 ## Command Sync Script
 
-**Purpose**: Register slash commands with Discord API. Must run after any command definition changes.
+This registers your slash commands with Discord. Run this after changing any command.
 
 **Script**: `scripts/commands.ts`
 
@@ -316,42 +316,35 @@ const rest = new REST({ version: "10" }).setToken(process.env.DISCORD_TOKEN!);
 
 (async () => {
   try {
-    console.log(`Registering ${commands.length} guild commands...`);
+    console.log(`Registering ${commands.length} commands...`);
 
     await rest.put(Routes.applicationGuildCommands(process.env.CLIENT_ID!, process.env.GUILD_ID!), {
       body: commands,
     });
 
-    console.log("✅ Commands registered successfully.");
+    console.log("Commands registered.");
   } catch (error) {
-    console.error("❌ Command registration failed:", error);
+    console.error("Registration failed:", error);
     process.exit(1);
   }
 })();
 ```
 
-**Run on Deploy**:
+**Run on deploy**:
 
 ```bash
-npm run commands  # tsx scripts/commands.ts
+npm run commands
 ```
 
-**Clear All Commands** (if needed):
+**Clear all commands**:
 
 ```bash
-# Clear guild commands
 npm run commands:clear
-
-# Script: scripts/clear-commands.ts
-await rest.put(
-  Routes.applicationGuildCommands(CLIENT_ID, GUILD_ID),
-  { body: [] }
-);
 ```
 
 ## Sentry Configuration
 
-### Initialization
+Sentry tracks errors and performance issues.
 
 ```typescript
 // src/telemetry/sentry.ts
@@ -370,33 +363,29 @@ if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== "placeholder") {
       Sentry.modulesIntegration(),
     ],
     beforeSend(event, hint) {
-      // Filter out known issues
+      // Ignore DM errors
       if (event.exception?.values?.[0]?.type === "DiscordAPIError[50007]") {
-        return null; // Don't report "Cannot send DM" errors
+        return null;
       }
       return event;
     },
   });
 
-  console.log("✅ Sentry initialized");
+  console.log("Sentry initialized");
 } else {
-  console.warn("⚠️ Sentry DSN not configured; telemetry disabled.");
+  console.warn("Sentry disabled");
 }
 ```
 
-### Known Issue: 403 Unauthorized
+### Known Issue: 403 Error
 
-**Error**:
+If you get a 403 error, the DSN may be invalid.
 
-```
-[Sentry] Failed to send event: 403 Forbidden
-```
+**To fix**:
 
-**Diagnosis**:
-
-1. Verify DSN in Sentry UI: Settings → Projects → [Your Project] → Client Keys
-2. Check project permissions (must have admin access)
-3. Test with `curl`:
+1. Check your DSN in Sentry: Settings → Projects → Client Keys
+2. Make sure you have admin permissions
+3. Test with curl:
    ```bash
    curl -X POST "https://o<org>.ingest.sentry.io/api/<project>/store/" \
      -H "X-Sentry-Auth: Sentry sentry_key=<key>, sentry_version=7" \
@@ -404,16 +393,16 @@ if (process.env.SENTRY_DSN && process.env.SENTRY_DSN !== "placeholder") {
      -d '{"message":"test"}'
    ```
 
-**Temporary Workaround** (disable Sentry):
+**To disable Sentry**:
 
 ```bash
 # .env
-SENTRY_DSN=  # Leave blank to disable
+SENTRY_DSN=
 ```
 
-## OpenTelemetry Toggles
+## OpenTelemetry
 
-### Enable Tracing
+OpenTelemetry provides detailed tracing data.
 
 ```typescript
 // src/telemetry/otel.ts
@@ -430,17 +419,17 @@ if (process.env.OTEL_ENABLED === "true") {
   });
 
   sdk.start();
-  console.log("✅ OpenTelemetry tracing enabled");
+  console.log("OpenTelemetry enabled");
 
   process.on("SIGTERM", () => {
-    sdk.shutdown().then(() => console.log("Tracing terminated"));
+    sdk.shutdown().then(() => console.log("Tracing stopped"));
   });
 } else {
-  console.log("⚠️ OpenTelemetry disabled (set OTEL_ENABLED=true to enable)");
+  console.log("OpenTelemetry disabled");
 }
 ```
 
-**Environment Variables**:
+**Environment variables**:
 
 ```bash
 OTEL_ENABLED=true
@@ -448,11 +437,11 @@ OTEL_EXPORTER_OTLP_ENDPOINT=http://localhost:4318
 OTEL_SERVICE_NAME=pawtropolis-bot
 ```
 
-## Process Supervision
+## Running the Bot
 
-### Systemd Service (Linux)
+### Systemd (Linux)
 
-**Unit File**: `/etc/systemd/system/pawtropolis.service`
+Create `/etc/systemd/system/pawtropolis.service`:
 
 ```ini
 [Unit]
@@ -471,7 +460,7 @@ RestartSec=10
 StandardOutput=journal
 StandardError=journal
 
-# Security
+# Security settings
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
@@ -481,19 +470,17 @@ ReadWritePaths=/opt/pawtropolis/data
 WantedBy=multi-user.target
 ```
 
-**Management Commands**:
+**Commands**:
 
 ```bash
-sudo systemctl enable pawtropolis   # Auto-start on boot
-sudo systemctl start pawtropolis    # Start service
+sudo systemctl enable pawtropolis   # Start on boot
+sudo systemctl start pawtropolis    # Start bot
 sudo systemctl status pawtropolis   # Check status
-sudo systemctl restart pawtropolis  # Restart after deploy
-journalctl -u pawtropolis -f        # Tail logs
+sudo systemctl restart pawtropolis  # Restart bot
+journalctl -u pawtropolis -f        # View logs
 ```
 
 ### PM2 (Alternative)
-
-**Install**:
 
 ```bash
 npm install -g pm2
@@ -528,50 +515,22 @@ module.exports = {
 
 ```bash
 pm2 start ecosystem.config.js --env production
-pm2 startup              # Generate startup script
-pm2 save                 # Save process list
+pm2 startup              # Start on boot
+pm2 save                 # Save running apps
 pm2 logs pawtropolis     # View logs
 pm2 restart pawtropolis  # Restart
-pm2 monit                # Monitor resources
+pm2 monit                # Monitor
 ```
 
-## Deployment Checklist
+## Deployment Steps
 
-| Step | Command/Action                               | Verification                     |
-| ---- | -------------------------------------------- | -------------------------------- |
-| 1    | `git pull origin main`                       | Check branch: `git status`       |
-| 2    | `npm ci`                                     | Verify lockfile: `npm list`      |
-| 3    | `npm run typecheck`                          | No errors in output              |
-| 4    | `npm run build`                              | Check `dist/index.js` exists     |
-| 5    | Backup DB: `cp data.db data.db.backup`       | Verify backup size matches       |
-| 6    | `npm run migrate`                            | Check schema version incremented |
-| 7    | `npm run commands`                           | Verify "N commands registered"   |
-| 8    | `systemctl restart pawtropolis`              | Check status: `systemctl status` |
-| 9    | Smoke test: Run `/health` in Discord         | Verify uptime reset to 0s        |
-| 10   | Monitor logs: `journalctl -u pawtropolis -f` | No errors for 5 minutes          |
-
-## Actionable Recommendations
-
-### Immediate Actions
-
-1. **Fix Sentry 403**: Rotate DSN or disable until project permissions resolved.
-2. **Validate env on startup**: Exit if required vars missing (already implemented above).
-3. **Auto-sync commands**: Add `npm run commands` to `ExecStartPre` in systemd unit.
-
-### Deployment Improvements
-
-1. **Blue-green deployment**: Run two instances; switch traffic after health check passes.
-2. **Automated backups**: Cron job to backup DB before deploy (`0 2 * * * cp data.db backups/data_$(date +\%Y\%m\%d).db`).
-3. **Rollback script**: Automate restore from backup + git revert + restart.
-
-### Observability Enhancements
-
-1. **Health endpoint**: HTTP server on port 3000 returning `/health` (uptime, DB stats).
-2. **Structured logging**: Replace `console.log` with JSON logs (timestamp, level, context).
-3. **Alert on crashes**: Systemd OnFailure hook to notify admin channel via webhook.
-
-### Security Hardening
-
-1. **Encrypt .env**: Use dotenvx encryption (`dotenvx encrypt`) for secrets.
-2. **Rotate tokens**: Monthly Discord token rotation (regenerate in Developer Portal).
-3. **Least privilege**: Run bot as dedicated user with minimal filesystem permissions.
+1. `git pull origin main` - Get latest code
+2. `npm ci` - Install dependencies
+3. `npm run typecheck` - Check for errors
+4. `npm run build` - Build the bot
+5. `cp data.db data.db.backup` - Backup database
+6. `npm run migrate` - Update database
+7. `npm run commands` - Register commands
+8. `systemctl restart pawtropolis` - Restart bot
+9. Run `/health` in Discord - Test bot
+10. `journalctl -u pawtropolis -f` - Watch logs

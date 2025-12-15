@@ -1,17 +1,13 @@
 # How-To Guides
 
-This section contains step-by-step tutorials for common tasks.
+Step-by-step guides for common tasks.
 
-## Contents
+## Available Guides
 
-- [Modmail Guide](modmail-guide.md) - How to use the modmail system for staff-applicant communication
-- [Backfill Activity](backfill-activity.md) - How to backfill message activity data
+- [Modmail Guide](modmail-guide.md) - Use the modmail system to talk with applicants
+- [Backfill Activity](backfill-activity.md) - Load past message data for activity tracking
 
-## Purpose
+## Other Docs
 
-How-to guides walk you through specific tasks with clear, sequential steps. Use these when you need to accomplish a particular goal.
-
-## See Also
-
-- [Reference Documentation](/docs/reference/) - Detailed feature specifications
-- [Troubleshooting](/docs/operations/troubleshooting.md) - When things go wrong
+- [Reference Documentation](/docs/reference/) - Detailed feature info
+- [Troubleshooting](/docs/operations/troubleshooting.md) - Fix common problems

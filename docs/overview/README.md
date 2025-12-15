@@ -1,17 +1,15 @@
 # Overview
 
-This section contains introductory documentation for the Pawtropolis Tech project.
+Introduction to the Pawtropolis Tech project.
 
-## Contents
+## What's Here
 
-- [Executive Summary](executive-summary.md) - Project goals, core philosophy, and feature overview
-- [License FAQ](license-faq.md) - Licensing terms and usage rights under ANW-1.0
+- **[Executive Summary](executive-summary.md)** - What the bot does and why
+- **[License FAQ](license-faq.md)** - How you can use this code
 
-## Purpose
+New to the project? Start with the Executive Summary.
 
-These documents provide context for understanding the project's purpose, design philosophy, and intended use cases. Start here if you are new to the project.
+## More Info
 
-## See Also
-
-- [System Architecture](/docs/architecture/system-overview.md) - Technical design details
-- [Main README](/README.md) - Quick start and development setup
+- [System Architecture](/docs/architecture/system-overview.md) - How it works
+- [Main README](/README.md) - Setup and development

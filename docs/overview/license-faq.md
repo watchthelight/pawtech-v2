@@ -1,25 +1,23 @@
-# License FAQ (ANW-1.0)
+# License FAQ
 
-## Can I use snippets?
-Yes. You can copy small excerpts as long as you stay within the limits in Section 3 of LICENSE and give attribution.
+## Can I use code snippets?
+Yes. You can copy small pieces as long as you follow the limits in Section 3 of the LICENSE file and give credit.
 
-## What counts as substantial?
-Anything beyond the Excerpt limits in Section 3 of LICENSE - hitting any of those caps counts as substantial.
+## What's too much?
+Anything beyond the limits in Section 3. If you hit any of those caps, it's too much.
 
-## Commercial use?
-Allowed for permitted excerpts, provided you follow the attribution requirements.
+## Can I use it commercially?
+Yes, for small excerpts only. You must give credit.
 
-## Open source compat?
-This license isn't OSI-approved; treat the project as source-available.
+## Is this open source?
+Not officially. It's source-available, but not OSI-approved.
 
-## How to attribute?
-Include a NOTICE like:
+## How do I give credit?
 
 ```
 Pawtropolis Tech Gatekeeper
 Copyright (c) 2025 watchthelight (Bash)
 https://github.com/watchthelight/pawtropolis-tech
 
-Portions of this work may be used under Excerpt limits with attribution.
-See LICENSE (Attribution-No Wholesale Copying License, ANW-1.0).
+Portions used under ANW-1.0 license excerpt limits.
 ```
