@@ -1,166 +1,34 @@
-# Pawtropolis Tech Bot Handbook
+# Bot Handbook
 
-Everything you need to know about the bot — what it does, who can use it, and how.
-
----
-
-## Related Documentation
-
-| Document | Description |
-|----------|-------------|
-| [MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md) | Staff policies, escalation guidelines, and moderation protocols |
-| [MOD-QUICKREF.md](MOD-QUICKREF.md) | Quick reference card for common tasks |
-| [PERMS-MATRIX.md](PERMS-MATRIX.md) | Complete permission reference for all commands |
-| [CHANGELOG.md](CHANGELOG.md) | Full version history and release notes |
-| [Staff Documentation Index](docs/INDEX.md) | Find any document quickly |
-
-### Tier-Specific Guides
-
-| Guide | For Who | What's Covered |
-|-------|---------|----------------|
-| [GATEKEEPER-GUIDE.md](docs/GATEKEEPER-GUIDE.md) | Gatekeeper, Junior Mod | Gate system, claims, flagging, AI detection |
-| [MODERATOR-GUIDE.md](docs/MODERATOR-GUIDE.md) | Moderator, Senior Mod | Movie night, activity heatmaps, bot presence |
-| [ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) | Administrator, Senior Admin | Server config, role automation, panic mode |
-| [LEADERSHIP-GUIDE.md](docs/LEADERSHIP-GUIDE.md) | CM, CDL, Server Owner | Audits, data management, artist rotation |
+How to use the bot. Pick your role, find what you need.
 
 ---
 
-## New to the Team? Start Here
+## Start Here
 
-**If you're a new moderator**, you don't need to read this entire handbook on day one.
+| Your Role | Read This |
+|-----------|-----------|
+| Gatekeeper / Junior Mod | [Gatekeeper Guide](docs/GATEKEEPER-GUIDE.md) |
+| Moderator / Senior Mod | [Moderator Guide](docs/MODERATOR-GUIDE.md) |
+| Admin / Senior Admin | [Admin Guide](docs/ADMIN-GUIDE.md) |
+| CM / CDL / Owner | [Leadership Guide](docs/LEADERSHIP-GUIDE.md) |
 
-**Your 10-minute setup:**
-1. **Read your tier guide first** — pick the one that matches your role:
-   - [GATEKEEPER-GUIDE.md](docs/GATEKEEPER-GUIDE.md) — Gatekeeper and Junior Mod
-   - [MODERATOR-GUIDE.md](docs/MODERATOR-GUIDE.md) — Moderator and Senior Mod
-   - [ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md) — Administrator and Senior Admin
-   - [LEADERSHIP-GUIDE.md](docs/LEADERSHIP-GUIDE.md) — CM, CDL, Server Owner
-2. Use **[MOD-QUICKREF.md](MOD-QUICKREF.md)** for daily tasks
-3. Try `/listopen` and `/health` to get comfortable with the bot
-4. Bookmark this handbook — come back when you need details
-
-**Sections marked with 📚** are reference material. You can skip them until you need them.
+**Other docs:** [Quick Reference](MOD-QUICKREF.md) &#8226; [Staff Policies](docs/MOD-HANDBOOK.md) &#8226; [Permissions](PERMS-MATRIX.md) &#8226; [Changelog](CHANGELOG.md)
 
 ---
 
-## Table of Contents
+## Contents
 
-### 1. [Gate System (Application Review)](#gate-system-application-review)
-- 1.1 [How Applications Work](#how-applications-work)
-- 1.2 [What the Claim System Does](#what-the-claim-system-does)
-- 1.3 [/gate](#gate) — Setup and configure the application system
-- 1.4 [/accept](#accept) — Approve an application
-- 1.5 [/reject](#reject) — Reject an application
-- 1.6 [/kick](#kick) — Kick an applicant
-- 1.7 [/unclaim](#unclaim) — Release a claimed application
-- 1.8 [/listopen](#listopen) — View pending applications
-- 1.9 [/search](#search) — Look up application history
-- 1.10 [/unblock](#unblock) — Remove permanent rejection
-
-### 2. [Moderator Tools](#moderator-tools)
-- 2.1 [How the Stats System Works](#how-the-stats-system-works)
-- 2.2 [Understanding Response Times](#understanding-response-times)
-- 2.3 [/modstats](#modstats) — View moderator analytics and leaderboards
-- 2.4 [Anomaly Detection: What It Means](#anomaly-detection-what-it-means)
-- 2.5 [/modhistory](#modhistory) — Detailed mod action history (leadership)
-- 2.6 [/analytics](#analytics) — Visual activity charts
-- 2.7 [/analytics-export](#analytics-export) — Export data as CSV
-- 2.8 [/flag](#flag) — Flag suspicious users
-- 2.9 [/audit](#audit) — Server audit commands (members and NSFW)
-- 2.10 [/isitreal](#isitreal) — Detect AI-generated images
-- 2.11 [/approval-rate](#approval-rate) — Server-wide approval stats
-- 2.12 [/resetdata](#resetdata) — Reset all metrics (nuclear option)
-  - 2.12.1 [Why Would You Reset Metrics?](#why-would-you-reset-metrics)
-  - 2.12.2 [What Gets Reset](#what-gets-reset)
-  - 2.12.3 [How the Epoch System Works](#how-the-epoch-system-works)
-  - 2.12.4 [Security Measures](#security-measures)
-- 2.13 [/sample](#sample) — Preview UI components for training
-  - 2.13.1 [/sample reviewcard](#sample-reviewcard)
-  - 2.13.2 [The Different Statuses](#the-different-statuses)
-  - 2.13.3 [Using Real Users in Samples](#using-real-users-in-samples)
-
-### 3. [Artist Rotation](#artist-rotation)
-- 3.1 [How the Queue Works](#how-the-queue-works)
-- 3.2 [How Skipping Works](#how-skipping-works)
-- 3.3 [Sync System](#sync-system)
-- 3.4 [/artistqueue](#artistqueue) — Manage the artist queue
-- 3.5 [/redeemreward](#redeemreward) — Assign art rewards
-- 3.6 [Art Job Tracking System](#art-job-tracking-system)
-- 3.7 [/art](#art) — Manage art jobs (artists, recipients, and staff)
-
-### 4. [Movie Night](#movie-night)
-- 4.1 [How It Works](#how-it-works-1)
-- 4.2 [How Time Tracking Works](#how-time-tracking-works)
-- 4.3 [Tier Roles](#tier-roles)
-- 4.4 [/movie](#movie) — Movie night attendance commands
-
-### 5. [Role Automation](#role-automation)
-- 5.1 [How Role Automation Works](#how-role-automation-works)
-- 5.2 [How It Integrates with Amaribot](#how-it-integrates-with-amaribot)
-- 5.3 [Level Tiers vs Level Rewards](#level-tiers-vs-level-rewards)
-- 5.4 [/roles](#roles) — Configure role mappings
-- 5.5 [/panic](#panic) — Emergency role automation shutoff
-
-### 6. [Configuration](#configuration)
-- 6.1 [How Configuration Works](#how-configuration-works)
-- 6.2 [/config](#config) — Server-wide settings
-- 6.3 [Understanding Each Setting](#understanding-each-setting)
-  - 6.3.1 [Logging Channel](#logging-channel)
-  - 6.3.2 [Flags Channel and Threshold](#flags-channel-and-threshold)
-  - 6.3.3 [Dad Mode](#dad-mode)
-  - 6.3.4 [Skull Mode](#skull-mode)
-  - 6.3.5 [Ping Dev on App](#ping-dev-on-app)
-  - 6.3.6 [Mod Roles](#mod-roles)
-  - 6.3.7 [Review Roles Mode](#review-roles-mode)
-- 6.4 [/review-set-notify-config](#review-set-notify-config) — Forum notifications
-- 6.5 [/review-get-notify-config](#review-get-notify-config) — View notification settings
-- 6.6 [/review-set-listopen-output](#review-set-listopen-output) — Listopen visibility
-
-### 7. [Utility & Admin](#utility--admin)
-- 7.1 [/help](#help) — Interactive help system
-  - 7.1.1 [Browsing by Category](#browsing-by-category)
-  - 7.1.2 [Searching Commands](#searching-commands)
-  - 7.1.3 [Quick vs Full Mode](#quick-vs-full-mode)
-- 7.2 [/update](#update) — Bot presence and profile
-  - 7.2.1 [Activity Types](#activity-types)
-  - 7.2.2 [Banner Updates](#banner-updates)
-  - 7.2.3 [Avatar Updates](#avatar-updates)
-- 7.3 [/send](#send) — Post messages as the bot
-  - 7.3.1 [Understanding the Silent Option](#understanding-the-silent-option)
-- 7.4 [/purge](#purge) — Bulk delete messages
-  - 7.4.1 [How Purge Works](#how-purge-works)
-  - 7.4.2 [Important Limitations](#important-limitations)
-- 7.5 [/health](#health) — Bot status check
-- 7.6 [/activity](#activity) — Server activity heatmap
-  - 7.6.1 [What the Heatmap Shows](#what-the-heatmap-shows)
-- 7.7 [/backfill](#backfill) — Rebuild activity data
-  - 7.7.1 [When to Use Backfill](#when-to-use-backfill)
-  - 7.7.2 [How It Works](#how-it-works-2)
-- 7.8 [/poke](#poke) — Multi-channel ping (owner)
-- 7.9 [/database](#database) — Database management
-  - 7.9.1 [Database Check](#database-check)
-  - 7.9.2 [Database Recover](#database-recover)
-
-### 8. [Permission Reference](#permission-reference)
-- 8.1 [What counts as "Staff"?](#what-counts-as-staff)
-
-### 9. [Troubleshooting](#troubleshooting)
-- 9.1 [Quick Troubleshooting Decision Tree](#quick-troubleshooting-decision-tree)
-- 9.2 [Common Problems and Solutions](#common-problems-and-solutions)
-  - 9.2.1 [Buttons not working](#the-buttons-on-applications-arent-working)
-  - 9.2.2 [User left before review](#someone-left-before-i-could-acceptreject-them)
-  - 9.2.3 [Accidental permanent rejection](#i-accidentally-permanently-rejected-someone)
-  - 9.2.4 [Role automation issues](#role-automation-is-doing-something-weird)
-  - 9.2.5 [Bot not responding](#the-bot-isnt-responding-at-all)
-  - 9.2.6 [Config changes not taking effect](#config-changes-arent-taking-effect)
-  - 9.2.7 [Logging not working](#logging-isnt-working)
-  - 9.2.8 [Stats or history wrong](#application-stats-or-history-are-wrong)
-- 9.3 [When to Ask for Help](#when-to-ask-for-help)
-- 9.4 [Information to Include When Asking for Help](#information-to-include-when-asking-for-help)
-
-### 10. [Quick Reference](#quick-reference)
-- 10.1 [Commands you'll use all the time](#commands-youll-use-all-the-time)
-- 10.2 [Emergency commands](#emergency-commands)
+1. [Gate System](#gate-system-application-review) — Reviewing applications
+2. [Mod Tools](#moderator-tools) — Stats, flags, audits
+3. [Artist Rotation](#artist-rotation) — Art queue and jobs
+4. [Movie Night](#movie-night) — Event tracking
+5. [Role Automation](#role-automation) — Auto-assign roles
+6. [Configuration](#configuration) — Bot settings
+7. [Utility Commands](#utility--admin) — Help, send, purge, etc.
+8. [Permissions](#permission-reference) — Who can do what
+9. [Troubleshooting](#troubleshooting) — Fix common problems
+10. [Quick Reference](#quick-reference) — Commands at a glance
 
 ---
 

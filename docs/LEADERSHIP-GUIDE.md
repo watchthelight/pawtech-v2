@@ -1,21 +1,8 @@
 # Leadership Guide
 
-> **Your role:** You're at the top. Leadership handles server-wide audits, data management, bot branding, and oversight of the entire moderation operation.
->
-> **Prerequisites:** [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — Make sure you're comfortable with configuration and role automation first.
+You handle server audits, data management, and oversight of the whole operation.
 
----
-
-## Quick Links
-
-| Document | What it's for |
-|----------|---------------|
-| [MOD-QUICKREF.md](../MOD-QUICKREF.md) | Daily reference for common tasks |
-| [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) | Full technical documentation |
-| [PERMS-MATRIX.md](../PERMS-MATRIX.md) | Complete permission reference |
-| [MOD-HANDBOOK.md](MOD-HANDBOOK.md) | Staff policies and escalation |
-| [ADMIN-GUIDE.md](ADMIN-GUIDE.md) | Previous tier (configuration) |
-| [CHANGELOG.md](../CHANGELOG.md) | Version history |
+**Prerequisite:** [Admin Guide](ADMIN-GUIDE.md) | **Other docs:** [Quick Reference](../MOD-QUICKREF.md) &#8226; [Bot Handbook](../BOT-HANDBOOK.md)
 
 ---
 
@@ -234,17 +221,6 @@ These commands are restricted to Bot Owner and Server Dev only:
 
 ## See Also
 
-### Previous Tiers
-- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) — Previous tier (configuration and automation)
-- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Event management tier
-- [GATEKEEPER-GUIDE.md](GATEKEEPER-GUIDE.md) — Entry-level tier (foundations)
+**Previous:** [Admin Guide](ADMIN-GUIDE.md) &#8226; [Moderator Guide](MODERATOR-GUIDE.md) &#8226; [Gatekeeper Guide](GATEKEEPER-GUIDE.md)
 
-### Reference Documentation
-- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete command reference
-- [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
-- [PERMS-MATRIX.md](../PERMS-MATRIX.md) — Permission reference (see Leadership section)
-
-### Navigation
-- [Staff Documentation Index](INDEX.md) — Find any document quickly
-- [MOD-QUICKREF.md](../MOD-QUICKREF.md) — Commands at a glance
-- [CHANGELOG.md](../CHANGELOG.md) — Version history and updates
+**Reference:** [Bot Handbook](../BOT-HANDBOOK.md) &#8226; [Staff Policies](MOD-HANDBOOK.md) &#8226; [Permissions](../PERMS-MATRIX.md)

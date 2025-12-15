@@ -617,5 +617,5 @@ Run after every deployment:
 - [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
 
 ### Navigation
-- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [Bot Handbook](../../BOT-HANDBOOK.md) — Start here for all docs
 - [CHANGELOG.md](../../CHANGELOG.md) — Version history and updates

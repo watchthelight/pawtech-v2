@@ -1,21 +1,8 @@
 # Administrator Guide
 
-> **Your role:** You run the show. Administrators configure how the bot behaves, manage role automation, and have emergency controls when things go wrong.
->
-> **Prerequisites:** [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Make sure you're solid on event management first.
+You configure bot settings, manage role automation, and handle emergencies.
 
----
-
-## Quick Links
-
-| Document | What it's for |
-|----------|---------------|
-| [MOD-QUICKREF.md](../MOD-QUICKREF.md) | Daily reference for common tasks |
-| [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) | Full technical documentation |
-| [PERMS-MATRIX.md](../PERMS-MATRIX.md) | Complete permission reference |
-| [MOD-HANDBOOK.md](MOD-HANDBOOK.md) | Staff policies and escalation |
-| [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) | Previous tier (event management) |
-| [CHANGELOG.md](../CHANGELOG.md) | Version history |
+**Prerequisite:** [Moderator Guide](MODERATOR-GUIDE.md) | **Other docs:** [Quick Reference](../MOD-QUICKREF.md) &#8226; [Bot Handbook](../BOT-HANDBOOK.md)
 
 ---
 
@@ -183,16 +170,6 @@ When you advance to **Leadership** (Community Manager and above), you'll unlock:
 
 ## See Also
 
-### Previous & Next Tiers
-- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Previous tier (event management)
-- [LEADERSHIP-GUIDE.md](LEADERSHIP-GUIDE.md) — Next tier: audits and oversight
+**Previous:** [Moderator Guide](MODERATOR-GUIDE.md) | **Next:** [Leadership Guide](LEADERSHIP-GUIDE.md)
 
-### Reference Documentation
-- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete command reference
-- [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
-- [PERMS-MATRIX.md](../PERMS-MATRIX.md) — Permission reference (see Administrator section)
-
-### Navigation
-- [Staff Documentation Index](INDEX.md) — Find any document quickly
-- [MOD-QUICKREF.md](../MOD-QUICKREF.md) — Commands at a glance
-- [CHANGELOG.md](../CHANGELOG.md) — Version history and updates
+**Reference:** [Bot Handbook](../BOT-HANDBOOK.md) &#8226; [Staff Policies](MOD-HANDBOOK.md) &#8226; [Permissions](../PERMS-MATRIX.md)

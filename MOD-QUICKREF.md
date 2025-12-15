@@ -83,17 +83,8 @@ Server audits (leadership only):
 
 ---
 
-## Related Documentation
+## See Also
 
-- **[BOT-HANDBOOK.md](BOT-HANDBOOK.md)** — Full technical documentation for all bot commands
-- **[MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)** — Staff policies, escalation, and moderation protocols
-- **[PERMS-MATRIX.md](PERMS-MATRIX.md)** — Complete permission reference
-- **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent changes
-- **[Staff Documentation Index](docs/INDEX.md)** — Find any document quickly
+**Main docs:** [Bot Handbook](BOT-HANDBOOK.md) &#8226; [Staff Policies](docs/MOD-HANDBOOK.md) &#8226; [Permissions](PERMS-MATRIX.md)
 
-### Tier-Specific Guides
-
-- **[GATEKEEPER-GUIDE.md](docs/GATEKEEPER-GUIDE.md)** — For Gatekeeper and Junior Mod
-- **[MODERATOR-GUIDE.md](docs/MODERATOR-GUIDE.md)** — For Moderator and Senior Mod
-- **[ADMIN-GUIDE.md](docs/ADMIN-GUIDE.md)** — For Administrator and Senior Admin
-- **[LEADERSHIP-GUIDE.md](docs/LEADERSHIP-GUIDE.md)** — For CM, CDL, and Server Owner
+**By role:** [Gatekeeper](docs/GATEKEEPER-GUIDE.md) &#8226; [Moderator](docs/MODERATOR-GUIDE.md) &#8226; [Admin](docs/ADMIN-GUIDE.md) &#8226; [Leadership](docs/LEADERSHIP-GUIDE.md)

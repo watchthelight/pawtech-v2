@@ -278,5 +278,5 @@ Potential improvements:
 - [PERMS-MATRIX.md](../../PERMS-MATRIX.md) — Permission reference
 
 ### Navigation
-- [Staff Documentation Index](../INDEX.md) — Find any document quickly
+- [Bot Handbook](../../BOT-HANDBOOK.md) — Start here for all docs
 - [Troubleshooting](../operations/troubleshooting.md) — Common issues and fixes

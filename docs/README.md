@@ -6,7 +6,7 @@ This documentation covers the architecture, configuration, operation, and develo
 
 ---
 
-> **🔰 Staff?** Start with the [Staff Documentation Index](INDEX.md) — find commands, guides, and permissions by your role tier.
+> **Staff?** Start with the [Bot Handbook](../BOT-HANDBOOK.md) — pick your role and find what you need.
 
 ---
 

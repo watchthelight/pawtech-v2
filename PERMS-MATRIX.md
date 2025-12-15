@@ -1,30 +1,14 @@
 # Permission Matrix
 
-Complete reference for all role-based permissions in Pawtropolis Tech.
+Who can use what commands.
 
 ---
 
-## Table of Contents
+## Contents
 
-- [Role Hierarchy](#role-hierarchy)
-- [Special Bypass Roles](#special-bypass-roles)
-- [Permission Types](#permission-types)
-- [Commands by Permission Level](#commands-by-permission-level)
-  - [Public Commands](#public-commands-anyone)
-  - [Gatekeeper Only](#gatekeeper-only-gk)
-  - [Gatekeeper+](#gatekeeper-gk-and-above)
-  - [Junior Moderator+](#junior-moderator-jm)
-  - [Moderator+](#moderator-m)
-  - [Senior Moderator+](#senior-moderator-sm)
-  - [Administrator+](#administrator-a)
-  - [Senior Administrator+](#senior-administrator-sa)
-  - [Community Manager+](#community-manager-cm)
-  - [Bot Owner / Server Dev Only](#bot-owner--server-dev-only)
-  - [Discord Permission Based](#discord-permission-based)
-  - [Server Artist Role](#server-artist-role)
-- [Review Card Buttons](#review-card-buttons)
-- [Permission Denied Messages](#permission-denied-messages)
-- [Technical Reference](#technical-reference)
+- [Role Hierarchy](#role-hierarchy) — Staff ranks
+- [Commands by Level](#commands-by-permission-level) — What each role can do
+- [Quick Reference](#quick-reference-card) — One-page summary
 
 ---
 
@@ -403,5 +387,5 @@ The permission system always checks bypass conditions first:
 - [ROLES.md](docs/ROLES.md) — Server role IDs
 
 ### Navigation
-- [Staff Documentation Index](docs/INDEX.md) — Find any document
+- [Bot Handbook](BOT-HANDBOOK.md) — Start here for all docs
 - [CHANGELOG.md](CHANGELOG.md) — Version history

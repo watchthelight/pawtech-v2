@@ -1,20 +1,8 @@
 # Gatekeeper Guide
 
-> **Your role:** You're the first line of defense. Gatekeepers review applications from people trying to join the server and decide who gets in.
->
-> **Prerequisites:** None — this is your starting point!
+You review applications and decide who gets into the server.
 
----
-
-## Quick Links
-
-| Document | What it's for |
-|----------|---------------|
-| [MOD-QUICKREF.md](../MOD-QUICKREF.md) | Daily reference for common tasks |
-| [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) | Full technical documentation |
-| [PERMS-MATRIX.md](../PERMS-MATRIX.md) | Complete permission reference |
-| [MOD-HANDBOOK.md](MOD-HANDBOOK.md) | Staff policies and escalation |
-| [CHANGELOG.md](../CHANGELOG.md) | Version history |
+**Other docs:** [Quick Reference](../MOD-QUICKREF.md) &#8226; [Bot Handbook](../BOT-HANDBOOK.md) &#8226; [Staff Policies](MOD-HANDBOOK.md)
 
 ---
 
@@ -162,15 +150,6 @@ When you advance to **Moderator**, you'll unlock:
 
 ## See Also
 
-### Next Steps
-- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) — Next tier: events and activity tools
+**Next:** [Moderator Guide](MODERATOR-GUIDE.md)
 
-### Reference Documentation
-- [BOT-HANDBOOK.md](../BOT-HANDBOOK.md) — Complete command reference
-- [MOD-HANDBOOK.md](MOD-HANDBOOK.md) — Staff policies and escalation
-- [PERMS-MATRIX.md](../PERMS-MATRIX.md) — Permission reference (see Gatekeeper section)
-
-### Navigation
-- [Staff Documentation Index](INDEX.md) — Find any document quickly
-- [MOD-QUICKREF.md](../MOD-QUICKREF.md) — Commands at a glance
-- [CHANGELOG.md](../CHANGELOG.md) — Version history and updates
+**Reference:** [Bot Handbook](../BOT-HANDBOOK.md) &#8226; [Staff Policies](MOD-HANDBOOK.md) &#8226; [Permissions](../PERMS-MATRIX.md)
