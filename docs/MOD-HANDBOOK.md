@@ -1,44 +1,73 @@
 # Staff Handbook
 
-The central guide for all Pawtropolis staff. Policies, procedures, and standards.
+**This is the main staff documentation.** Everything you need is here or linked from here.
 
 ---
 
-## Start Here
+## What do you need?
 
-| Your Role | Read This First |
-|-----------|-----------------|
-| New Staff | Sections 1-3 (Intro, Roles, Conduct) |
-| Reviewing Tickets | [Commissions Verification](#commissions-verification) |
-| Handling Incidents | [Moderation Protocols](#moderation-protocols) |
-| Art Program Staff | [Server Artist Program](#server-artist-program) |
-
-**Other docs:** [Bot Commands](../BOT-HANDBOOK.md) &#8226; [Quick Reference](../MOD-QUICKREF.md) &#8226; [Permissions](../PERMS-MATRIX.md)
-
----
-
-## Contents
-
-1. [Introduction](#introduction)
-2. [Staff Roles](#staff-roles)
-3. [Conduct & Expectations](#conduct--expectations)
-4. [**Commissions Verification**](#commissions-verification) ← New system for reviewing artist applications
-5. [Moderation Protocols](#moderation-protocols)
-6. [Incident Reporting](#incident-reporting)
-7. [Community Rules](#community-rules)
-8. [Training Guide](#training-guide)
-9. [Cross Banning & Drama](#cross-banning--drama)
-10. [Ticket Guide](#ticket-guide)
-11. [Server Artist Program](#server-artist-program)
-12. [Audit Tools](#audit-tools)
+| I need to... | Go here |
+|--------------|---------|
+| **Verify an artist application** | [Commissions Verification](#commissions-verification) |
+| **Use bot commands** | [Bot Handbook](../BOT-HANDBOOK.md) |
+| **Handle a moderation issue** | [Moderation Protocols](#moderation-protocols) |
+| **Report an incident** | [Incident Reporting](#incident-reporting) |
+| **Learn about the art program** | [Server Artist Program](#server-artist-program) |
+| **Check what commands I can use** | [Permissions Matrix](../PERMS-MATRIX.md) |
+| **Quick command lookup** | [Quick Reference](../MOD-QUICKREF.md) |
 
 ---
 
-## Introduction
+## New Staff? Start here:
 
-Welcome to the team. This handbook covers everything you need to know about being staff here.
+1. Read [Staff Roles](#staff-roles) — understand the hierarchy
+2. Read [Conduct & Expectations](#conduct--expectations) — what we expect from you
+3. Read [Training Guide](#training-guide) — how onboarding works
 
-By joining, you agree to follow these standards.
+---
+
+## 🆕 Commissions Verification System
+
+**New as of December 2025.** This is how we verify artist applications to prevent fraud and AI art.
+
+→ [Jump to Commissions Verification](#commissions-verification)
+
+Key features:
+- Red/green flag checklists
+- AI detection guide
+- Proof requirements for 2D, 3D, music, and fursuits
+- Quick reference card
+
+---
+
+## Role-Specific Guides
+
+| Your Role | Guide |
+|-----------|-------|
+| Gatekeeper / Junior Mod | [Gatekeeper Guide](GATEKEEPER-GUIDE.md) |
+| Moderator / Senior Mod | [Moderator Guide](MODERATOR-GUIDE.md) |
+| Admin / Senior Admin | [Admin Guide](ADMIN-GUIDE.md) |
+| CM / CDL / Owner | [Leadership Guide](LEADERSHIP-GUIDE.md) |
+
+---
+
+## Full Contents
+
+1. [Staff Roles](#staff-roles)
+2. [Conduct & Expectations](#conduct--expectations)
+3. [Commissions Verification](#commissions-verification) ← **NEW**
+4. [Moderation Protocols](#moderation-protocols)
+5. [Incident Reporting](#incident-reporting)
+6. [Community Rules](#community-rules)
+7. [Training Guide](#training-guide)
+8. [Cross Banning & Drama](#cross-banning--drama)
+9. [Ticket Guide](#ticket-guide)
+10. [Server Artist Program](#server-artist-program)
+11. [Audit Tools](#audit-tools)
+
+---
+
+## Staff Roles
 
 ---
 
