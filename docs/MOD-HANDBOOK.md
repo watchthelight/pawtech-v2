@@ -69,10 +69,6 @@ Key features:
 
 ## Staff Roles
 
----
-
-## Staff Roles
-
 ### Community Manager(s)
 
 - Leads and supervises the entire staff team.
