@@ -1,46 +1,48 @@
-# Pawtropolis Moderation Handbook
+# Staff Handbook
 
-> Last Updated: December 2025
-
----
-
-## Related Documentation
-
-| Document | Description |
-|----------|-------------|
-| [BOT-HANDBOOK.md](/BOT-HANDBOOK.md) | Complete technical guide to all bot commands and features |
-| [MOD-QUICKREF.md](/MOD-QUICKREF.md) | Quick reference card for common moderation tasks |
-| [CHANGELOG.md](/CHANGELOG.md) | Full version history and release notes |
+The central guide for all Pawtropolis staff. Policies, procedures, and standards.
 
 ---
 
-## Table of Contents
+## Start Here
 
-1. [Introduction](#1-introduction)
-2. [Staff Structure & Role Descriptions](#2-staff-structure--role-descriptions)
-3. [Staff Conduct & Expectations](#3-staff-conduct--expectations)
-4. [Moderation Protocols](#4-moderation-protocols)
-5. [Incident Reporting & Escalation](#5-incident-reporting--escalation)
-6. [Community Rules Reference](#6-community-rules-reference)
-7. [Training Guide](#7-training-guide)
-8. [Cross Banning & Outside Drama](#8-cross-banning--outside-drama)
-9. [Ticket Guide](#9-ticket-guide)
-10. [Server Artist Program](#10-server-artist-program)
-11. [Server Audit Tools](#11-server-audit-tools)
+| Your Role | Read This First |
+|-----------|-----------------|
+| New Staff | Sections 1-3 (Intro, Roles, Conduct) |
+| Reviewing Tickets | [Commissions Verification](#commissions-verification) |
+| Handling Incidents | [Moderation Protocols](#moderation-protocols) |
+| Art Program Staff | [Server Artist Program](#server-artist-program) |
+
+**Other docs:** [Bot Commands](../BOT-HANDBOOK.md) &#8226; [Quick Reference](../MOD-QUICKREF.md) &#8226; [Permissions](../PERMS-MATRIX.md)
 
 ---
 
-## 1. Introduction
+## Contents
 
-Welcome to the Pawtropolis Moderation Team.
-
-This handbook outlines the responsibilities, expectations, and procedures for all staff roles. It serves as the central guide for staff behavior, moderation policy, and internal operations.
-
-By joining the team, you agree to uphold the values and standards defined here.
+1. [Introduction](#introduction)
+2. [Staff Roles](#staff-roles)
+3. [Conduct & Expectations](#conduct--expectations)
+4. [**Commissions Verification**](#commissions-verification) ← New system for reviewing artist applications
+5. [Moderation Protocols](#moderation-protocols)
+6. [Incident Reporting](#incident-reporting)
+7. [Community Rules](#community-rules)
+8. [Training Guide](#training-guide)
+9. [Cross Banning & Drama](#cross-banning--drama)
+10. [Ticket Guide](#ticket-guide)
+11. [Server Artist Program](#server-artist-program)
+12. [Audit Tools](#audit-tools)
 
 ---
 
-## 2. Staff Structure & Role Descriptions
+## Introduction
+
+Welcome to the team. This handbook covers everything you need to know about being staff here.
+
+By joining, you agree to follow these standards.
+
+---
+
+## Staff Roles
 
 ### Community Manager(s)
 
@@ -74,7 +76,7 @@ By joining the team, you agree to uphold the values and standards defined here.
 
 ---
 
-## 3. Staff Conduct & Expectations
+## Conduct & Expectations
 
 As a staff member of the community, you are held at higher expectations. This includes you being a role model towards other community members. You should be helpful and friendly to community members. It's what makes users want to come back.
 
@@ -141,7 +143,7 @@ Keep decision-making observable. Whenever possible, explain actions taken in mod
 
 ---
 
-## 4. Moderation Protocols
+## Moderation Protocols
 
 ### Warning Level System
 
@@ -242,7 +244,7 @@ Mutes: Muting can be an effective tool to halt users in their tracks from commit
 
 ---
 
-## 5. Incident Reporting & Escalation
+## Incident Reporting
 
 **Purpose:** This section ensures all staff respond fairly, consistently, and with clear documentation. It protects users, holds staff accountable, and prevents miscommunication.
 
@@ -378,7 +380,7 @@ Regardless of this tree, C-4 violations should be properly logged in ban-log.
 
 ---
 
-## 6. Community Rules Reference
+## Community Rules
 
 This section summarizes the rules you are enforcing. Knowing these helps you make consistent moderation decisions.
 
@@ -470,7 +472,7 @@ Verified Artists may post commission ads in the commissions channel with these l
 
 ---
 
-## 7. Training Guide
+## Training Guide
 
 ### Purpose
 
@@ -536,7 +538,7 @@ For questions or concerns about training, reach out to a Senior Moderator or hig
 
 ---
 
-## 8. Cross Banning & Outside Drama
+## Cross Banning & Drama
 
 ### Vision
 
@@ -610,7 +612,7 @@ If someone is experiencing harassment or serious issues outside of our server, w
 
 ---
 
-## 9. Ticket Guide
+## Ticket Guide
 
 Welcome to the ticket guide. Tickets is a great way for users to utilize private conversations with staff for different variants of support. This section will explain how our tickets work and handled.
 
@@ -671,13 +673,15 @@ Please be mindful, there are many scammers that try to verify. It's important th
 
 ---
 
-### Commissions Verification Guide
+## Commissions Verification
 
-> *Last Revision: December 14, 2025*
+How to verify artist applications. This is one of the most important things you'll do as staff.
 
-Online art commissioning has grown dramatically, particularly within furry, VR, and indie creative communities. Alongside this growth, fraud has become more sophisticated (AI-generated art, stolen assets, ghosting after deposits). This section provides clear, community-vetted standards to protect both clients and creators.
+> *Last updated: December 2025*
 
-#### Universal Principles
+Online art commissioning has grown a lot. But so has fraud — AI art, stolen work, and scammers who disappear after getting paid. This section gives you clear standards to protect both artists and clients.
+
+### Universal Principles
 
 **Core Requirements:**
 - Reasonable proof of authorship must be provided upon request
@@ -702,7 +706,7 @@ Online art commissioning has grown dramatically, particularly within furry, VR, 
 
 ---
 
-#### 2D Artwork Verification
+### 2D Artwork Verification
 
 **Minimum Acceptable Evidence (at least TWO required):**
 
@@ -726,7 +730,7 @@ Online art commissioning has grown dramatically, particularly within furry, VR, 
 
 ---
 
-#### Manual Visual Verification Guide
+### Spotting AI Art (Visual Guide)
 
 When reviewing artwork for AI indicators, look for these common artifacts:
 
@@ -741,7 +745,7 @@ When reviewing artwork for AI indicators, look for these common artifacts:
 
 ---
 
-#### Alt Commission Types
+### Other Commission Types
 
 ##### 3D Artwork & Prints (VRChat Modeling)
 
@@ -791,7 +795,7 @@ Physical crafts have the advantage of being inherently non-AI, but ghosting and 
 
 ---
 
-#### Contract Requirements
+### Contract Requirements
 
 For commissions >$200, minimum contract terms should include:
 
@@ -803,7 +807,7 @@ For commissions >$200, minimum contract terms should include:
 
 ---
 
-#### Verification Quick Reference
+### Quick Reference
 
 **Must have (2+):**
 - Timelapse OR layered file OR dated WIP photo with handwriting
@@ -823,7 +827,7 @@ With the new launch of our VRChat World, there are bugs to come. These tickets a
 
 ---
 
-## 10. Server Artist Program
+## Server Artist Program
 
 The Server Artist Program is a reward system where verified artists in the community take turns creating art for members who have earned art rewards through community engagement.
 
@@ -1026,7 +1030,7 @@ Assign an art reward to a user.
 
 ---
 
-## 11. Server Audit Tools
+## Audit Tools
 
 ### Overview
 

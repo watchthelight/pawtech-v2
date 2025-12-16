@@ -1,19 +1,22 @@
 # Bot Handbook
 
-How to use the bot. Pick your role, find what you need.
+All bot commands and how to use them.
+
+> **Looking for staff policies?** The [Staff Handbook](docs/MOD-HANDBOOK.md) is the central guide for policies, verification, and procedures.
 
 ---
 
 ## Start Here
 
-| Your Role | Read This |
-|-----------|-----------|
+| Your Role | Guide |
+|-----------|-------|
 | Gatekeeper / Junior Mod | [Gatekeeper Guide](docs/GATEKEEPER-GUIDE.md) |
 | Moderator / Senior Mod | [Moderator Guide](docs/MODERATOR-GUIDE.md) |
 | Admin / Senior Admin | [Admin Guide](docs/ADMIN-GUIDE.md) |
 | CM / CDL / Owner | [Leadership Guide](docs/LEADERSHIP-GUIDE.md) |
+| Verifying Artists | [Commissions Verification](docs/MOD-HANDBOOK.md#commissions-verification) |
 
-**Other docs:** [Quick Reference](MOD-QUICKREF.md) &#8226; [Staff Policies](docs/MOD-HANDBOOK.md) &#8226; [Permissions](PERMS-MATRIX.md) &#8226; [Changelog](CHANGELOG.md)
+**Other docs:** [Staff Handbook](docs/MOD-HANDBOOK.md) &#8226; [Quick Reference](MOD-QUICKREF.md) &#8226; [Permissions](PERMS-MATRIX.md)
 
 ---
 
