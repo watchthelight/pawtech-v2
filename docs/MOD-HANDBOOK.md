@@ -51,19 +51,24 @@ Key features:
 
 ---
 
-## Full Contents
+## All Sections
 
-1. [Staff Roles](#staff-roles)
-2. [Conduct & Expectations](#conduct--expectations)
-3. [Commissions Verification](#commissions-verification) ← **NEW**
-4. [Moderation Protocols](#moderation-protocols)
-5. [Incident Reporting](#incident-reporting)
-6. [Community Rules](#community-rules)
-7. [Training Guide](#training-guide)
-8. [Cross Banning & Drama](#cross-banning--drama)
-9. [Ticket Guide](#ticket-guide)
-10. [Server Artist Program](#server-artist-program)
-11. [Audit Tools](#audit-tools)
+**Basics**
+- [Staff Roles](#staff-roles)
+- [Conduct & Expectations](#conduct--expectations)
+- [Training Guide](#training-guide)
+
+**Key Systems**
+- [Commissions Verification](#commissions-verification) ← **NEW**
+- [Moderation Protocols](#moderation-protocols)
+- [Incident Reporting](#incident-reporting)
+
+**Reference**
+- [Community Rules](#community-rules)
+- [Cross Banning & Drama](#cross-banning--drama)
+- [Ticket Guide](#ticket-guide)
+- [Server Artist Program](#server-artist-program)
+- [Audit Tools](#audit-tools)
 
 ---
 
