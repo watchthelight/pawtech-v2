@@ -403,7 +403,7 @@ export async function openPublicModmailThreadFor(params: {
     // Try to DM the applicant
     try {
       await user.send({
-        content: `Hi, a moderator opened a modmail thread regarding your application to **${interaction.guild.name}**.`,
+        content: `Hi, a moderator opened a modmail thread regarding your application to **${interaction.guild.name}**. You may provide answers to the questions in this DM. Any message sent will be shared with staff only and kept strictly confidential. Verification can continue once modmail has been closed by staff.`,
         allowedMentions: SAFE_ALLOWED_MENTIONS,
       });
     } catch (err) {
