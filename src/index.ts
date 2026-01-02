@@ -725,6 +725,13 @@ client.once(Events.ClientReady, async () => {
 });
 
 client.on("guildCreate", wrapEvent("guildCreate", async (guild) => {
+  // Only allow Pawtropolis - auto-leave any other server
+  const ALLOWED_GUILD = "896070888594759740";
+  if (guild.id !== ALLOWED_GUILD) {
+    logger.info({ guildId: guild.id, guildName: guild.name }, "[guild] auto-leaving unauthorized server");
+    await guild.leave();
+    return;
+  }
   await syncCommandsToGuild(guild.id);
 }));
 

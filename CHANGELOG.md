@@ -9,6 +9,11 @@ All changes to Pawtropolis Tech are tracked here.
 ### Added
 
 - **Unclaim Button** - Review cards have an "Unclaim" button that requires typing "UNCLAIM" to confirm. Only the person who claimed it can unclaim.
+- **Incident Log** - Added `INCIDENTS.md` to track production incidents and resolutions
+
+### Security
+
+- **Guild Allowlist** - Bot now only operates in Pawtropolis (guild ID `896070888594759740`). Automatically leaves any other server it's added to. See INC-001 in `INCIDENTS.md`.
 
 ### Changed
 
