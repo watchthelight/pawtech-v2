@@ -466,11 +466,15 @@ export async function updateMovieTierRole(guild: Guild, userId: string): Promise
 
       if (addResult.action === "add") {
         // They just earned a new tier role
-        dmMessage += `, so you got the <@&${targetTier.role_id}> role! 🎬`;
+        // Use role name in DMs since role mentions don't render outside the guild
+        const roleName = guild.roles.cache.get(targetTier.role_id)?.name ?? targetTier.tier_name;
+        dmMessage += `, so you got the **${roleName}** role! 🎬`;
       } else if (nextTier) {
         // They didn't get a new role, show progress to next tier
         const needed = nextTier.threshold - qualifiedCount;
-        dmMessage += `, you need **${needed}** more movie${needed > 1 ? "s" : ""} to get <@&${nextTier.role_id}>!`;
+        // Use role name in DMs since role mentions don't render outside the guild
+        const nextRoleName = guild.roles.cache.get(nextTier.role_id)?.name ?? nextTier.tier_name;
+        dmMessage += `, you need **${needed}** more movie${needed > 1 ? "s" : ""} to get **${nextRoleName}**!`;
       } else {
         // They have the highest tier already
         dmMessage += `! You've reached the highest movie tier! 🏆`;

@@ -15,6 +15,10 @@ All changes to Pawtropolis Tech are tracked here.
 
 - **Guild Allowlist** - Bot now only operates in Pawtropolis (guild ID `896070888594759740`). Automatically leaves any other server it's added to. See INC-001 in `INCIDENTS.md`.
 
+### Fixed
+
+- **Movie Night DM Role Display** - DMs now show the actual role name (e.g., "Movie Buff") instead of "@unknown-role" since role mentions don't render in DMs
+
 ### Changed
 
 - **Permission System Redesign** - Commands now use specific role names instead of generic "staff" permissions. Each command requires a minimum role level. Bot owners and server devs can bypass all restrictions. Error messages show which roles you need. See `PERMS-MATRIX.md` for details.
