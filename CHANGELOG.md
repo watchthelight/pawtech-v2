@@ -13,6 +13,7 @@ All changes to Pawtropolis Tech are tracked here.
   - `docs/internal-info/CHANNELS.md` - All 225 channels with categories, types, and permission overwrites
   - `docs/internal-info/CONFLICTS.md` - Security analysis identifying 7 issues (2 critical, 1 high, 4 medium)
   - `docs/internal-info/SERVER-INFO.md` - Server metadata, settings, and statistics
+  - `/audit security` - Bot command to regenerate documentation on-demand
   - `scripts/audit-server-full.ts` - Re-runnable script to regenerate documentation
 - **Unclaim Button** - Review cards have an "Unclaim" button that requires typing "UNCLAIM" to confirm. Only the person who claimed it can unclaim.
 - **Incident Log** - Added `INCIDENTS.md` to track production incidents and resolutions

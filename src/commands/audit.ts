@@ -1,9 +1,10 @@
 /**
  * Pawtropolis Tech — src/commands/audit.ts
  *
- * Server audit commands with two subcommands:
+ * Server audit commands with three subcommands:
  * - /audit members - Scan for bot-like accounts using multiple heuristics
  * - /audit nsfw - Scan member avatars for NSFW content using Google Vision API
+ * - /audit security - Generate server permission/security documentation
  *
  * Restricted to specific roles (Community Manager + Bot Developer).
  */
@@ -48,6 +49,7 @@ import {
   type AuditSession,
 } from "../store/auditSessionStore.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
+import { generateAuditDocs } from "../features/serverAuditDocs.js";
 
 // Allowed role IDs (Community Manager + Server Dev)
 // Uses centralized ROLE_IDS from roles.ts for consistency
@@ -84,6 +86,9 @@ export const data = new SlashCommandBuilder()
             { name: "Flagged members only", value: "flagged" }
           )
       )
+  )
+  .addSubcommand((sub) =>
+    sub.setName("security").setDescription("Generate server permission/security documentation")
   );
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
@@ -106,17 +111,67 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   const canBypass = shouldBypass(user.id);
 
   if (!hasAllowedRole && !canBypass) {
+    const descriptions: Record<string, string> = {
+      nsfw: "Scans member avatars for NSFW content using Google Vision API.",
+      members: "Scans for bot-like accounts using multiple heuristics.",
+      security: "Generates server permission/security documentation.",
+    };
     await postPermissionDenied(interaction, {
       command: `audit ${subcommand}`,
-      description: subcommand === "nsfw"
-        ? "Scans member avatars for NSFW content using Google Vision API."
-        : "Scans for bot-like accounts using multiple heuristics.",
+      description: descriptions[subcommand] || "Server audit command.",
       requirements: [{ type: "roles", roleIds: ALLOWED_ROLES }],
     });
     logger.warn(
       { userId: user.id, guildId },
       "[audit] Unauthorized user attempted to run audit"
     );
+    return;
+  }
+
+  // Handle security subcommand (generates docs, doesn't need session tracking)
+  if (subcommand === "security") {
+    await interaction.deferReply({ ephemeral: true });
+
+    try {
+      logger.info({ userId: user.id, guildId }, "[audit:security] Starting security audit");
+
+      const result = await generateAuditDocs(guild);
+
+      const embed = new EmbedBuilder()
+        .setTitle("✅ Security Audit Complete")
+        .setDescription("Server documentation has been regenerated.")
+        .setColor(0x22C55E)
+        .addFields(
+          { name: "Roles", value: result.roleCount.toLocaleString(), inline: true },
+          { name: "Channels", value: result.channelCount.toLocaleString(), inline: true },
+          { name: "Issues Found", value: result.issueCount.toLocaleString(), inline: true },
+          {
+            name: "Issue Breakdown",
+            value: [
+              `🔴 Critical: ${result.criticalCount}`,
+              `🟠 High: ${result.highCount}`,
+              `🟡 Medium: ${result.mediumCount}`,
+              `🟢 Low: ${result.lowCount}`,
+            ].join("\n"),
+            inline: false,
+          },
+          { name: "Output", value: `\`${result.outputDir}\``, inline: false }
+        )
+        .setFooter({ text: "See docs/internal-info/ for full details" })
+        .setTimestamp();
+
+      await interaction.editReply({ embeds: [embed] });
+
+      logger.info(
+        { userId: user.id, guildId, ...result },
+        "[audit:security] Security audit complete"
+      );
+    } catch (err) {
+      logger.error({ err, userId: user.id, guildId }, "[audit:security] Failed to generate docs");
+      await interaction.editReply({
+        content: `❌ Failed to generate documentation: ${err instanceof Error ? err.message : "Unknown error"}`,
+      });
+    }
     return;
   }
 
