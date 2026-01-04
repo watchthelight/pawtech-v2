@@ -2,9 +2,9 @@
 
 All changes to Pawtropolis Tech are tracked here.
 
-**Versions:** [Unreleased](#unreleased) | [4.8.0](#480---2025-12-08) | [4.7.1](#471---2025-12-03) | [4.7.0](#470---2025-12-03) | [4.6.0](#460---2025-12-03) | [4.5.0](#450---2025-12-02) | [4.4.4](#444---2025-12-03) | [4.4.3](#443---2025-12-03) | [4.4.2](#442---2025-12-03) | [4.4.1](#441---2025-12-03) | [4.4.0](#440---2025-12-03) | [4.3.0](#430---2025-12-02) | [4.2.0](#420---2025-12-01) | [4.1.0](#410---2025-12-01) | [4.0.3](#403---2025-12-01) | [4.0.2](#402---2025-12-01) | [4.0.1](#401---2025-12-01) | [4.0.0](#400---2025-12-01) | [Earlier versions](#earlier-versions)
+**Versions:** [4.9.0](#490---2026-01-04) | [4.8.0](#480---2025-12-08) | [4.7.1](#471---2025-12-03) | [4.7.0](#470---2025-12-03) | [4.6.0](#460---2025-12-03) | [4.5.0](#450---2025-12-02) | [4.4.4](#444---2025-12-03) | [4.4.3](#443---2025-12-03) | [4.4.2](#442---2025-12-03) | [4.4.1](#441---2025-12-03) | [4.4.0](#440---2025-12-03) | [4.3.0](#430---2025-12-02) | [4.2.0](#420---2025-12-01) | [4.1.0](#410---2025-12-01) | [4.0.3](#403---2025-12-01) | [4.0.2](#402---2025-12-01) | [4.0.1](#401---2025-12-01) | [4.0.0](#400---2025-12-01) | [Earlier versions](#earlier-versions)
 
-## [Unreleased]
+## [4.9.0] - 2026-01-04
 
 ### Added
 
@@ -67,6 +67,12 @@ All changes to Pawtropolis Tech are tracked here.
 
 ### Changed
 
+- **Repository Renamed** - Repo renamed from `pawtech-v2` to `pawtropolis-tech`. All URLs and references updated throughout codebase.
+- **Documentation Unified Events** - All staff docs now reference both movie and game nights under unified "Events" section:
+  - BOT-HANDBOOK: Combined Movie Night + Game Night into single Events section
+  - MODERATOR-GUIDE, MOD-QUICKREF: Updated with both event types and commands
+  - ADMIN-GUIDE: Added game tier role commands
+- **Badge Files Reorganized** - Moved badge JSON files from root to `.github/badges/` for cleaner project structure
 - **Modmail Open Message** - Now includes clearer instructions: explains that replies go to staff only, are confidential, and verification continues after modmail closes
 - **Permission System Redesign** - Commands now use specific role names instead of generic "staff" permissions. Each command requires a minimum role level. Bot owners and server devs can bypass all restrictions. Error messages show which roles you need. See `PERMS-MATRIX.md` for details.
 - **Analytics Command Consolidation** - Unified analytics commands under `/stats`:
