@@ -6,14 +6,22 @@
 
 ## For Staff
 
-**Start here:** [BOT-HANDBOOK.md](/BOT-HANDBOOK.md)
+**Start here:** [BOT-HANDBOOK.md](BOT-HANDBOOK.md)
 
 The Bot Handbook has everything you need - commands, features, and how to use them.
 
 **Other Handbooks:**
 - [MOD-HANDBOOK.md](MOD-HANDBOOK.md) - Staff policies and moderation rules
-- [MOD-QUICKREF.md](/MOD-QUICKREF.md) - Quick command reference
-- [CHANGELOG.md](/CHANGELOG.md) - Version history and updates
+- [MOD-QUICKREF.md](MOD-QUICKREF.md) - Quick command reference
+- [PERMS-MATRIX.md](PERMS-MATRIX.md) - Permission matrix for commands
+- [INCIDENTS.md](INCIDENTS.md) - Production incidents log
+- [CHANGELOG.md](../CHANGELOG.md) - Version history and updates
+
+**By Role:**
+- [GATEKEEPER-GUIDE.md](GATEKEEPER-GUIDE.md) - For Gatekeepers and Junior Mods
+- [MODERATOR-GUIDE.md](MODERATOR-GUIDE.md) - For Moderators and Senior Mods
+- [ADMIN-GUIDE.md](ADMIN-GUIDE.md) - For Admins and Senior Admins
+- [LEADERSHIP-GUIDE.md](LEADERSHIP-GUIDE.md) - For CM, CDL, and Server Owner
 
 ---
 
@@ -48,7 +56,7 @@ The Bot Handbook has everything you need - commands, features, and how to use th
 - [Security Conflicts](internal-info/CONFLICTS.md) - Permission conflicts and security issues
 - [Server Info](internal-info/SERVER-INFO.md) - Server metadata and statistics
 
-> **Re-generate:** `npx dotenvx run -- tsx scripts/audit-server-full.ts`
+> **Re-generate:** Use `/audit security` in Discord or run `npx dotenvx run -- tsx scripts/audit-server-full.ts`
 
 ### Roadmap
 - [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Future ideas
@@ -59,11 +67,9 @@ The Bot Handbook has everything you need - commands, features, and how to use th
 ## More Documentation
 
 **In the code:**
-- [`/src/commands/README.md`](/src/commands/README.md) - How to add commands
-- [`/src/config/README.md`](/src/config/README.md) - Config patterns
-- [`/src/constants/README.md`](/src/constants/README.md) - Sample data
-- [`/src/db/README.md`](/src/db/README.md) - Database layer
-- [`/migrations/README.md`](/migrations/README.md) - Database migrations
+- [`src/commands/README.md`](../src/commands/README.md) - How to add commands
+- [`src/constants/README.md`](../src/constants/README.md) - Sample data
+- [`src/db/README.md`](../src/db/README.md) - Database layer
 
 **Archived:**
 - [`/_archive/`](_archive/README.md) - Old implementation notes and deployment records

@@ -2,7 +2,7 @@
 
 All bot commands and how to use them.
 
-> **Looking for staff policies?** The [Staff Handbook](docs/MOD-HANDBOOK.md) is the central guide for policies, verification, and procedures.
+> **Looking for staff policies?** The [Staff Handbook](MOD-HANDBOOK.md) is the central guide for policies, verification, and procedures.
 
 ---
 
@@ -10,13 +10,13 @@ All bot commands and how to use them.
 
 | Your Role | Guide |
 |-----------|-------|
-| Gatekeeper / Junior Mod | [Gatekeeper Guide](docs/GATEKEEPER-GUIDE.md) |
-| Moderator / Senior Mod | [Moderator Guide](docs/MODERATOR-GUIDE.md) |
-| Admin / Senior Admin | [Admin Guide](docs/ADMIN-GUIDE.md) |
-| CM / CDL / Owner | [Leadership Guide](docs/LEADERSHIP-GUIDE.md) |
-| Verifying Artists | [Commissions Verification](docs/MOD-HANDBOOK.md#commissions-verification) |
+| Gatekeeper / Junior Mod | [Gatekeeper Guide](GATEKEEPER-GUIDE.md) |
+| Moderator / Senior Mod | [Moderator Guide](MODERATOR-GUIDE.md) |
+| Admin / Senior Admin | [Admin Guide](ADMIN-GUIDE.md) |
+| CM / CDL / Owner | [Leadership Guide](LEADERSHIP-GUIDE.md) |
+| Verifying Artists | [Commissions Verification](MOD-HANDBOOK.md#commissions-verification) |
 
-**Other docs:** [Staff Handbook](docs/MOD-HANDBOOK.md) &#8226; [Quick Reference](MOD-QUICKREF.md) &#8226; [Permissions](PERMS-MATRIX.md)
+**Other docs:** [Staff Handbook](MOD-HANDBOOK.md) &#8226; [Quick Reference](MOD-QUICKREF.md) &#8226; [Permissions](PERMS-MATRIX.md)
 
 ---
 
@@ -2601,6 +2601,6 @@ The more details you provide, the faster support can help you.
 
 ## See Also
 
-- **[MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)** — Staff policies, escalation guidelines, and moderation protocols
+- **[MOD-HANDBOOK.md](MOD-HANDBOOK.md)** — Staff policies, escalation guidelines, and moderation protocols
 - **[MOD-QUICKREF.md](MOD-QUICKREF.md)** — Quick reference for everyday tasks
-- **[CHANGELOG.md](CHANGELOG.md)** — Version history and recent changes
+- **[CHANGELOG.md](../CHANGELOG.md)** — Version history and recent changes

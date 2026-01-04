@@ -266,7 +266,7 @@ After deployment and command registration, configure the gate system:
   - All attempts are audit-logged to the configured logging channel
   - The provided password is never logged or persisted
 
-For full command reference, see [docs/context/03_Slash_Commands_and_UX.md](docs/context/03_Slash_Commands_and_UX.md).
+For full command reference, see [docs/BOT-HANDBOOK.md](docs/BOT-HANDBOOK.md).
 
 ---
 

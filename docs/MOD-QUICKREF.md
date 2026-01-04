@@ -1,6 +1,6 @@
 # Pawtech Quick Reference
 
-> For full documentation, see [BOT-HANDBOOK.md](BOT-HANDBOOK.md) and [MOD-HANDBOOK.md](docs/MOD-HANDBOOK.md)
+> For full documentation, see [BOT-HANDBOOK.md](BOT-HANDBOOK.md) and [MOD-HANDBOOK.md](MOD-HANDBOOK.md)
 
 ---
 
@@ -85,6 +85,6 @@ Server audits (leadership only):
 
 ## See Also
 
-**Main docs:** [Bot Handbook](BOT-HANDBOOK.md) &#8226; [Staff Policies](docs/MOD-HANDBOOK.md) &#8226; [Permissions](PERMS-MATRIX.md)
+**Main docs:** [Bot Handbook](BOT-HANDBOOK.md) &#8226; [Staff Policies](MOD-HANDBOOK.md) &#8226; [Permissions](PERMS-MATRIX.md)
 
-**By role:** [Gatekeeper](docs/GATEKEEPER-GUIDE.md) &#8226; [Moderator](docs/MODERATOR-GUIDE.md) &#8226; [Admin](docs/ADMIN-GUIDE.md) &#8226; [Leadership](docs/LEADERSHIP-GUIDE.md)
+**By role:** [Gatekeeper](GATEKEEPER-GUIDE.md) &#8226; [Moderator](MODERATOR-GUIDE.md) &#8226; [Admin](ADMIN-GUIDE.md) &#8226; [Leadership](LEADERSHIP-GUIDE.md)
