@@ -52,9 +52,10 @@ import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js"
 import { generateAuditDocs, commitAndPushDocs, analyzeSecurityOnly, type SecurityIssue } from "../features/serverAuditDocs.js";
 import { acknowledgeIssue, unacknowledgeIssue, getAcknowledgedIssues } from "../store/acknowledgedSecurityStore.js";
 
-// Allowed role IDs (Senior Admin + Community Manager + Server Dev)
+// Allowed role IDs (Admin+ and Server Dev)
 // Uses centralized ROLE_IDS from roles.ts for consistency
 const ALLOWED_ROLES = [
+  ROLE_IDS.ADMIN,
   ROLE_IDS.SENIOR_ADMIN,
   ROLE_IDS.COMMUNITY_MANAGER,
   ROLE_IDS.SERVER_DEV,

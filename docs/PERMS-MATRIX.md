@@ -159,6 +159,11 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/config movie` | `threshold` | Movie night settings |
 | `/config poke` | `add-category`, `remove-category`, `list` | Poke system config |
 | `/art leaderboard` | — | View artist statistics |
+| `/audit members` | — | Scan server for suspicious bot accounts |
+| `/audit nsfw` | — | Scan all member avatars for NSFW content |
+| `/audit security` | — | Generate server permission/security documentation |
+| `/audit acknowledge` | — | Acknowledge a security finding |
+| `/audit unacknowledge` | — | Remove acknowledgment from a finding |
 
 ---
 
@@ -175,11 +180,6 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/config toggleapis` | Toggle API services on/off |
 | `/review-set-notify-config` | Configure forum notifications |
 | `/review-get-notify-config` | View notification settings |
-| `/audit members` | Scan server for suspicious bot accounts |
-| `/audit nsfw` | Scan all member avatars for NSFW content |
-| `/audit security` | Generate server permission/security documentation |
-| `/audit acknowledge` | Acknowledge a security finding |
-| `/audit unacknowledge` | Remove acknowledgment from a finding |
 
 ---
 
@@ -365,9 +365,9 @@ The permission system always checks bypass conditions first:
 | Junior Mod+ | JM+ | `/flag`, `/isitreal` |
 | Moderator+ | M+ | `/movie`, `/event` |
 | Senior Mod+ | SM+ | `/stats activity`, `/skullmode` |
-| Administrator+ | A+ | `/config` |
+| Administrator+ | A+ | `/config`, `/audit` |
 | Senior Admin+ | SA+ | `/panic`, `/stats export/reset` |
-| Community Manager+ | CM+ | `/audit`, `/backfill`, `/gate setup` |
+| Community Manager+ | CM+ | `/backfill`, `/gate setup` |
 | Owner Only | [BO/SD] | `/database`, `/poke` |
 | Discord Perm | ManageMessages | `/send`, `/purge` |
 | Discord Perm | ManageRoles | `/roles`, `/artistqueue`, `/redeemreward` |
