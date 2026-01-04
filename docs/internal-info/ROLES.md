@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T20:16:14.606Z
+**Generated:** 2026-01-04T20:29:36.365Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 219
 
