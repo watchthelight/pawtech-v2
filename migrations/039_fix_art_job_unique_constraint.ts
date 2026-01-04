@@ -11,7 +11,7 @@
 
 import { db } from "../src/db/db.js";
 
-export function migrate(): void {
+export function migrate039FixArtJobUniqueConstraint(): void {
   // Step 1: Find and fix any existing duplicates before adding constraint
   const duplicates = db.prepare(`
     SELECT guild_id, artist_id, artist_job_number, COUNT(*) as cnt

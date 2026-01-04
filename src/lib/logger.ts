@@ -13,7 +13,7 @@
  * Pawtropolis Tech Gatekeeper
  * Copyright (c) 2025 watchthelight (Bash) <admin@watchthelight.org>
  * License: LicenseRef-ANW-1.0
- * Repo: https://github.com/watchthelight/pawtech-v2
+ * Repo: https://github.com/watchthelight/pawtropolis-tech
  */
 import pino from "pino";
 

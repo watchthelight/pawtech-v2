@@ -78,6 +78,6 @@ The Bot Handbook has everything you need - commands, features, and how to use th
 
 ## Support
 
-- **Issues**: [GitHub Issues](https://github.com/watchthelight/pawtech-v2/issues)
+- **Issues**: [GitHub Issues](https://github.com/watchthelight/pawtropolis-tech/issues)
 - **Author**: watchthelight (Bash)
 - **Email**: admin@watchthelight.org

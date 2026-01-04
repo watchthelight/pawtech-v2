@@ -14,8 +14,8 @@
 
 <p align="center">
   <!-- CI Status -->
-  <a href="https://github.com/watchthelight/pawtech-v2/actions/workflows/ci.yml">
-    <img src="https://github.com/watchthelight/pawtech-v2/actions/workflows/ci.yml/badge.svg" alt="CI">
+  <a href="https://github.com/watchthelight/pawtropolis-tech/actions/workflows/ci.yml">
+    <img src="https://github.com/watchthelight/pawtropolis-tech/actions/workflows/ci.yml/badge.svg" alt="CI">
   </a>
   <!-- Dynamic Badges from Gist -->
   <img src="https://img.shields.io/endpoint?url=https://gist.githubusercontent.com/watchthelight/0866e5418ac20ee43515b318ddcdc324/raw/badge-coverage.json" alt="Coverage">
@@ -57,8 +57,8 @@ Pawtropolis Tech is a server-owned verification system that modernizes community
 
 ```bash
 # Clone and install
-git clone https://github.com/watchthelight/pawtech-v2.git
-cd pawtech-v2
+git clone https://github.com/watchthelight/pawtropolis-tech.git
+cd pawtropolis-tech
 npm install
 
 # Configure environment

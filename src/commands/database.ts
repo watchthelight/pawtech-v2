@@ -180,7 +180,7 @@ function isRunningOnRemote(): boolean {
     hostname.includes("aws") ||
     hostname.includes("ec2") ||
     cwd.includes("/home/ubuntu") ||
-    cwd.includes("pawtech-v2")
+    cwd.includes("pawtropolis-tech")
   );
 }
 
@@ -274,7 +274,7 @@ async function executeCheck(ctx: CommandContext<ChatInputCommandInteraction>) {
   try {
     // Check if we have remote config from env
     const remoteAliasRaw = process.env.REMOTE_ALIAS || "pawtech";
-    const remotePathRaw = process.env.REMOTE_PATH || "/home/ubuntu/pawtech-v2";
+    const remotePathRaw = process.env.REMOTE_PATH || "/home/ubuntu/pawtropolis-tech";
 
     // Skip remote checks if we're already running on remote
     if (runningOnRemote) {

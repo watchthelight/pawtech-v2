@@ -15,13 +15,13 @@
   "license": "LicenseRef-ANW-1.0",
   "repository": {
     "type": "git",
-    "url": "https://github.com/watchthelight/pawtech-v2.git"
+    "url": "https://github.com/watchthelight/pawtropolis-tech.git"
   },
   "bugs": {
-    "url": "https://github.com/watchthelight/pawtech-v2/issues",
+    "url": "https://github.com/watchthelight/pawtropolis-tech/issues",
     "email": "admin@watchthelight.org"
   },
-  "homepage": "https://github.com/watchthelight/pawtech-v2#readme",
+  "homepage": "https://github.com/watchthelight/pawtropolis-tech#readme",
   "scripts": {
     "dev": "npx @dotenvx/dotenvx run -- tsx watch src/index.ts",
     "build": "tsup && npm run scan:legacy",

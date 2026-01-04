@@ -204,7 +204,7 @@ npm run migrate
 Migrations run automatically on deployment:
 
 ```bash
-ssh pawtech "cd /home/ubuntu/pawtech-v2 && npm run migrate"
+ssh pawtech "cd /home/ubuntu/pawtropolis-tech && npm run migrate"
 ```
 
 ### Rollback
@@ -302,7 +302,7 @@ npm run migrate:dry
 
 ```bash
 # Copy production database
-scp pawtech:/home/ubuntu/pawtech-v2/data/data.db ./data/data-prod-copy.db
+scp pawtech:/home/ubuntu/pawtropolis-tech/data/data.db ./data/data-prod-copy.db
 
 # Test migration
 DB_PATH=./data/data-prod-copy.db npm run migrate

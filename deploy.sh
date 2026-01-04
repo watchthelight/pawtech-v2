@@ -67,7 +67,7 @@ npm run build
 
 # Step 3: Create tarball
 echo "Step 3/6: Creating deployment tarball..."
-tar -czf ${TARBALL} dist package.json package-lock.json
+tar -czf ${TARBALL} dist migrations package.json package-lock.json
 
 # Step 4: Upload to remote
 echo "Step 4/6: Uploading to remote server..."
