@@ -55,7 +55,7 @@ import { acknowledgeIssue, unacknowledgeIssue, getAcknowledgedIssues } from "../
 // Allowed role IDs (Admin+ and Server Dev)
 // Uses centralized ROLE_IDS from roles.ts for consistency
 const ALLOWED_ROLES = [
-  ROLE_IDS.ADMIN,
+  ROLE_IDS.ADMINISTRATOR,
   ROLE_IDS.SENIOR_ADMIN,
   ROLE_IDS.COMMUNITY_MANAGER,
   ROLE_IDS.SERVER_DEV,
