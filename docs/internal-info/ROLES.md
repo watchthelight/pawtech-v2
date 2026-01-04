@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T16:39:51.674Z
+**Generated:** 2026-01-04T19:42:34.929Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 219
 
@@ -103,7 +103,7 @@
 | 138 | Donator | #e834f5 | 3 |  | - |
 | 137 | Booster Fur | #e834f5 | 30 | Integration | - |
 | 136 | VIP Fur | #ffa9e4 | 23 |  | - |
-| 135 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Community ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5760 |  | - |
+| 135 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Community ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5755 |  | - |
 | 134 | OG Verified 2D Artist | #369876 | 11 |  | - |
 | 133 | Verified 2D Artist | #52e5ff | 164 |  | - |
 | 132 | Verified 3D Artist | #368192 | 0 |  | - |
@@ -123,18 +123,18 @@
 | 118 | Active Fur ‹‹ LVL 20 ›› | #c24c28 | 38 |  | - |
 | 117 | Engaged Fur ‹‹ LVL 15 ›› | #d47a35 | 30 |  | - |
 | 116 | Chatty Fur ‹‹ LVL 10 ›› | #e9a64d | 94 |  | - |
-| 115 | Beginner Fur ‹‹ LVL 5 ›› | #e3b16e | 267 |  | - |
-| 114 | Newcomer Fur ‹‹ LVL 1 ›› | #d6a77a | 710 |  | - |
+| 115 | Beginner Fur ‹‹ LVL 5 ›› | #e3b16e | 268 |  | - |
+| 114 | Newcomer Fur ‹‹ LVL 1 ›› | #d6a77a | 709 |  | - |
 | 113 | OG Citizen | #ffb833 | 115 |  | - |
 | 112 | Community Contributor | #2b89ac | 84 |  | - |
-| 111 | Community Member | #e69f74 | 2675 |  | - |
+| 111 | Community Member | #e69f74 | 2673 |  | - |
 | 110 | Pings Ok | #ce3355 | 627 |  | - |
 | 109 | Important Pings only | #ce3355 | 245 |  | - |
 | 108 | No Pings | #ce3355 | 71 |  | - |
 | 107 | DM's Open | #ce3355 | 763 |  | - |
 | 106 | Important DM's Only | #ce3355 | 141 |  | - |
 | 105 | DM's Closed | #ce3355 | 28 |  | - |
-| 104 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5782 |  | - |
+| 104 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5777 |  | - |
 | 103 | Fur Voter [ 2x EXP ] | #fab2fd | 3 |  | - |
 | 102 | Spooktober 2025 Participant | #f58d3d | 28 |  | - |
 | 101 | Cinematic Royalty | #6a0dad | 0 |  | - |
@@ -174,7 +174,7 @@
 | 67 | OC Half-body Ticket | #d4843d | 8 |  | - |
 | 66 | OC Emoji Ticket | #4cadd0 | 0 |  | - |
 | 65 | OC Headshot Ticket | #aa65ff | 12 |  | - |
-| 64 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀‎About Me⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5732 |  | - |
+| 64 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀‎About Me⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5727 |  | - |
 | 63 | He/Him | #8cbeff | 1812 |  | - |
 | 62 | She/Her | #8cbeff | 1361 |  | - |
 | 61 | They/Them | #8cbeff | 694 |  | - |
@@ -215,7 +215,7 @@
 | 26 | Asia | #ffbfa8 | 183 |  | - |
 | 25 | South America | #ffbfa8 | 208 |  | - |
 | 24 | Africa | #ffbfa8 | 98 |  | - |
-| 23 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀Pings Roles⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5688 |  | - |
+| 23 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀Pings Roles⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5683 |  | - |
 | 22 | Announcements | #df713b | 755 |  | - |
 | 21 | World Updates | #73cac6 | 20 |  | - |
 | 20 | Community Updates | #3498db | 529 |  | - |
@@ -236,9 +236,9 @@
 | 5 | Verified Art | #fff3ad | 173 |  | - |
 | 4 | Art Comms | #fff3ad | 137 |  | - |
 | 3 | Art Adopts | #fff3ad | 101 |  | - |
-| 2 | [ The Pawtropolis Community ] | #ffa5fa | 5759 |  | - |
+| 2 | [ The Pawtropolis Community ] | #ffa5fa | 5754 |  | - |
 | 1 | everyone. | default | 0 |  | - |
-| 0 | @everyone | default | 5808 |  | - |
+| 0 | @everyone | default | 5803 |  | - |
 
 ---
 

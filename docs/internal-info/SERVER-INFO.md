@@ -1,6 +1,6 @@
 # Server Information — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T16:39:51.686Z
+**Generated:** 2026-01-04T19:42:34.937Z
 
 ---
 
@@ -12,7 +12,7 @@
 | Server ID | `896070888594759740` |
 | Owner | wwerew0lf (`958507309548584982`) |
 | Created | 10/8/2021 |
-| Member Count | 5,808 |
+| Member Count | 5,803 |
 | Description | A 100% SFW place designed for new people to voice their word without the drama or negativity. Join Pawtropolis Today! |
 
 ---
