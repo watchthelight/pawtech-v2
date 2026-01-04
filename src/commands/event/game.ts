@@ -107,7 +107,7 @@ async function handleStart(interaction: ChatInputCommandInteraction): Promise<vo
   if (retroactiveCount > 0) {
     embed.addFields({
       name: "Already in VC",
-      value: `${retroactiveCount} user${retroactiveCount > 1 ? "s" : ""} already in the channel have been credited`,
+      value: `${retroactiveCount} user${retroactiveCount > 1 ? "s" : ""} already in the channel — tracking started`,
     });
   }
 
