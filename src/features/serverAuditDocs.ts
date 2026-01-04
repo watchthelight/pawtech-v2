@@ -13,6 +13,12 @@ import {
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
 import { execSync } from "node:child_process";
+import { createHash } from "node:crypto";
+import {
+  getAcknowledgedIssues,
+  clearStaleAcknowledgments,
+  type AcknowledgedIssue,
+} from "../store/acknowledgedSecurityStore.js";
 
 // All permission flags we care about for the matrix
 const PERMISSION_FLAGS = [
@@ -102,7 +108,7 @@ interface ChannelData {
   overwrites: ChannelOverwrite[];
 }
 
-interface SecurityIssue {
+export interface SecurityIssue {
   severity: "critical" | "high" | "medium" | "low";
   id: string;
   title: string;
@@ -110,6 +116,10 @@ interface SecurityIssue {
   issue: string;
   risk: string;
   recommendation: string;
+  // Stable identifier for acknowledgment (e.g., "role:123456789:admin")
+  issueKey: string;
+  // Hash of relevant permissions for change detection
+  permissionHash: string;
 }
 
 interface ServerData {
@@ -139,6 +149,7 @@ export interface AuditResult {
   highCount: number;
   mediumCount: number;
   lowCount: number;
+  acknowledgedCount: number;
   outputDir: string;
   commitUrl?: string;
 }
@@ -194,6 +205,14 @@ function getExplicitContentFilterName(level: number): string {
 // Helper to get MFA level name
 function getMfaLevelName(level: number): string {
   return level === 0 ? "Not required" : "Required for moderation";
+}
+
+/**
+ * Compute a short hash of permission-relevant data for change detection.
+ * If permissions change, the hash changes, invalidating acknowledgments.
+ */
+function computePermissionHash(data: string): string {
+  return createHash("md5").update(data).digest("hex").slice(0, 16);
 }
 
 // Fetch all role data
@@ -334,11 +353,20 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
   const issues: SecurityIssue[] = [];
   let issueId = 1;
 
+  // Helper to get severity prefix for display ID
+  const severityPrefix = (sev: "critical" | "high" | "medium" | "low") => {
+    const map = { critical: "CRIT", high: "HIGH", medium: "MED", low: "LOW" };
+    return map[sev];
+  };
+
   for (const role of roles) {
     if (role.permissions.includes("Administrator") && role.name !== "@everyone") {
+      const severity = role.managed ? "medium" : "critical";
+      // Hash role ID + permissions for change detection
+      const hashData = `${role.id}:${role.permissions.sort().join(",")}`;
       issues.push({
-        severity: role.managed ? "medium" : "critical",
-        id: `CRIT-${String(issueId++).padStart(3, "0")}`,
+        severity,
+        id: `${severityPrefix(severity)}-${String(issueId++).padStart(3, "0")}`,
         title: `Administrator Permission on ${role.managed ? "Bot" : "User"} Role`,
         affected: `Role: ${role.name} (${role.id})`,
         issue: `This role has full Administrator permission, bypassing all permission checks.`,
@@ -348,6 +376,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
         recommendation: role.managed
           ? `Review if bot actually needs Administrator. Most bots work with specific permissions.`
           : `Consider using specific permissions instead of Administrator. Audit who has this role.`,
+        issueKey: `role:${role.id}:admin`,
+        permissionHash: computePermissionHash(hashData),
       });
     }
   }
@@ -360,6 +390,9 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
     const hasManageWebhooks = role.permissions.includes("ManageWebhooks");
     const hasMentionEveryone = role.permissions.includes("MentionEveryone");
 
+    // Hash role ID + relevant permissions for each check type
+    const roleHashData = `${role.id}:${role.permissions.sort().join(",")}`;
+
     if (hasBan && hasManageRoles && !role.permissions.includes("Administrator")) {
       issues.push({
         severity: "high",
@@ -369,6 +402,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
         issue: `Role has both BanMembers and ManageRoles permissions.`,
         risk: `Users can potentially escalate privileges by assigning themselves roles up to this role's position.`,
         recommendation: `Ensure role is high in hierarchy and only trusted staff have it. Consider splitting permissions.`,
+        issueKey: `role:${role.id}:escalation`,
+        permissionHash: computePermissionHash(roleHashData),
       });
     }
 
@@ -381,6 +416,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
         issue: `Role can create/edit webhooks.`,
         risk: `Webhooks can impersonate any user or bot. ${role.memberCount} member(s) can create fake messages.`,
         recommendation: `Limit ManageWebhooks to trusted staff only. Audit webhook usage.`,
+        issueKey: `role:${role.id}:webhook`,
+        permissionHash: computePermissionHash(roleHashData),
       });
     }
 
@@ -393,6 +430,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
         issue: `${role.memberCount} members can mention @everyone/@here.`,
         risk: `Potential for spam or disruption.`,
         recommendation: `Consider restricting to staff roles or specific channels only.`,
+        issueKey: `role:${role.id}:mention_everyone`,
+        permissionHash: computePermissionHash(roleHashData),
       });
     }
   }
@@ -403,6 +442,7 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
       DANGEROUS_PERMISSIONS.includes(p)
     );
     if (dangerousEveryonePerms.length > 0) {
+      const hashData = `everyone:${everyoneRole.permissions.sort().join(",")}`;
       issues.push({
         severity: "critical",
         id: `CRIT-${String(issueId++).padStart(3, "0")}`,
@@ -411,6 +451,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
         issue: `@everyone has: ${dangerousEveryonePerms.join(", ")}`,
         risk: `ALL server members, including new joins, have these powerful permissions.`,
         recommendation: `Remove these permissions from @everyone immediately.`,
+        issueKey: `everyone:dangerous_perms`,
+        permissionHash: computePermissionHash(hashData),
       });
     }
   }
@@ -424,6 +466,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
       const everyoneOverwrite = channel.overwrites.find((o) => o.type === "role" && o.name === "@everyone");
       const viewDenied = everyoneOverwrite?.deny.includes("ViewChannel");
       if (!viewDenied && channel.type !== "Category") {
+        // Hash channel overwrites for change detection
+        const hashData = `${channel.id}:${JSON.stringify(channel.overwrites)}`;
         issues.push({
           severity: "medium",
           id: `MED-${String(issueId++).padStart(3, "0")}`,
@@ -432,6 +476,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
           issue: `Channel name suggests it's sensitive, but @everyone ViewChannel is not explicitly denied.`,
           risk: `May be unintentionally accessible to regular members.`,
           recommendation: `Verify channel permissions are intentional. Add explicit ViewChannel deny for @everyone if private.`,
+          issueKey: `channel:${channel.id}:sensitive`,
+          permissionHash: computePermissionHash(hashData),
         });
       }
     }
@@ -440,6 +486,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
   for (const channel of channels) {
     for (const overwrite of channel.overwrites) {
       if (overwrite.type === "role" && overwrite.name.includes("Unknown Role")) {
+        // Hash channel + orphaned role ID
+        const hashData = `${channel.id}:orphan:${overwrite.id}`;
         issues.push({
           severity: "low",
           id: `LOW-${String(issueId++).padStart(3, "0")}`,
@@ -448,6 +496,8 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
           issue: `Permission overwrite exists for deleted role: ${overwrite.id}`,
           risk: `Clutter and potential confusion. No immediate security risk.`,
           recommendation: `Clean up orphaned overwrites.`,
+          issueKey: `channel:${channel.id}:orphan:${overwrite.id}`,
+          permissionHash: computePermissionHash(hashData),
         });
       }
     }
@@ -457,6 +507,40 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
   issues.sort((a, b) => severityOrder[a.severity] - severityOrder[b.severity]);
 
   return issues;
+}
+
+/**
+ * Partition issues into active and acknowledged.
+ * An issue is considered acknowledged if:
+ * 1. It exists in the acknowledged map
+ * 2. The permission hash matches (permissions haven't changed)
+ *
+ * If permissions changed since acknowledgment, the issue stays active.
+ */
+interface PartitionedIssues {
+  active: SecurityIssue[];
+  acknowledged: Array<{ issue: SecurityIssue; ack: AcknowledgedIssue }>;
+}
+
+function partitionIssues(
+  issues: SecurityIssue[],
+  acknowledged: Map<string, AcknowledgedIssue>
+): PartitionedIssues {
+  const result: PartitionedIssues = { active: [], acknowledged: [] };
+
+  for (const issue of issues) {
+    const ack = acknowledged.get(issue.issueKey);
+
+    if (ack && ack.permissionHash === issue.permissionHash) {
+      // Issue is acknowledged AND permissions haven't changed
+      result.acknowledged.push({ issue, ack });
+    } else {
+      // Not acknowledged OR permissions changed (invalidated)
+      result.active.push(issue);
+    }
+  }
+
+  return result;
 }
 
 // Generate ROLES.md
@@ -667,17 +751,23 @@ function generateChannelsDoc(channels: ChannelData[], serverInfo: ServerData): s
 }
 
 // Generate CONFLICTS.md
-function generateConflictsDoc(issues: SecurityIssue[], serverInfo: ServerData): string {
-  const critical = issues.filter((i) => i.severity === "critical");
-  const high = issues.filter((i) => i.severity === "high");
-  const medium = issues.filter((i) => i.severity === "medium");
-  const low = issues.filter((i) => i.severity === "low");
+function generateConflictsDoc(
+  partitioned: PartitionedIssues,
+  serverInfo: ServerData
+): string {
+  const { active, acknowledged } = partitioned;
+
+  const critical = active.filter((i) => i.severity === "critical");
+  const high = active.filter((i) => i.severity === "high");
+  const medium = active.filter((i) => i.severity === "medium");
+  const low = active.filter((i) => i.severity === "low");
 
   let doc = `# Permission Conflicts & Security Concerns — ${serverInfo.name}
 
 **Generated:** ${new Date().toISOString()}
 **Guild ID:** ${serverInfo.id}
-**Total Issues Found:** ${issues.length}
+**Active Issues:** ${active.length}
+**Acknowledged:** ${acknowledged.length}
 
 ## Summary
 
@@ -687,6 +777,7 @@ function generateConflictsDoc(issues: SecurityIssue[], serverInfo: ServerData): 
 | 🟠 High | ${high.length} |
 | 🟡 Medium | ${medium.length} |
 | 🟢 Low | ${low.length} |
+| ✅ Acknowledged | ${acknowledged.length} |
 
 ---
 
@@ -720,8 +811,27 @@ function generateConflictsDoc(issues: SecurityIssue[], serverInfo: ServerData): 
     }
   }
 
-  if (issues.length === 0) {
+  if (active.length === 0 && acknowledged.length === 0) {
     doc += `## ✅ No Issues Found\n\nNo permission conflicts or security concerns were detected.\n`;
+  } else if (active.length === 0 && acknowledged.length > 0) {
+    doc += `## ✅ All Issues Acknowledged\n\nAll detected issues have been reviewed and acknowledged by staff.\n\n---\n\n`;
+  }
+
+  // Acknowledged issues section
+  if (acknowledged.length > 0) {
+    doc += `## ✅ Acknowledged Issues\n\nThese issues have been reviewed by staff and marked as intentional.\n\n`;
+
+    for (const { issue, ack } of acknowledged) {
+      const ackDate = new Date(ack.acknowledgedAt * 1000).toISOString().split("T")[0];
+      doc += `### [${issue.id}] ${issue.title} *(Acknowledged)*\n\n`;
+      doc += `- **Affected:** ${issue.affected}\n`;
+      doc += `- **Issue:** ${issue.issue}\n`;
+      doc += `- **Acknowledged by:** <@${ack.acknowledgedBy}> on ${ackDate}\n`;
+      if (ack.reason) {
+        doc += `- **Reason:** ${ack.reason}\n`;
+      }
+      doc += `\n*To unacknowledge, use \`/audit unacknowledge ${issue.id}\`*\n\n---\n\n`;
+    }
   }
 
   return doc;
@@ -826,6 +936,14 @@ export async function generateAuditDocs(guild: Guild, outputDir?: string): Promi
   const serverInfo = await fetchServerInfo(guild);
   const issues = analyzeSecurityIssues(roles, channels);
 
+  // Fetch acknowledged issues and partition
+  const acknowledged = getAcknowledgedIssues(guild.id);
+  const partitioned = partitionIssues(issues, acknowledged);
+
+  // Clean up stale acknowledgments (for deleted roles/channels)
+  const validKeys = new Set(issues.map((i) => i.issueKey));
+  clearStaleAcknowledgments(guild.id, validKeys);
+
   // Ensure output directory exists
   if (!existsSync(OUTPUT_DIR)) {
     mkdirSync(OUTPUT_DIR, { recursive: true });
@@ -834,24 +952,37 @@ export async function generateAuditDocs(guild: Guild, outputDir?: string): Promi
   // Generate and write docs
   writeFileSync(join(OUTPUT_DIR, "ROLES.md"), generateRolesDoc(roles, serverInfo));
   writeFileSync(join(OUTPUT_DIR, "CHANNELS.md"), generateChannelsDoc(channels, serverInfo));
-  writeFileSync(join(OUTPUT_DIR, "CONFLICTS.md"), generateConflictsDoc(issues, serverInfo));
+  writeFileSync(join(OUTPUT_DIR, "CONFLICTS.md"), generateConflictsDoc(partitioned, serverInfo));
   writeFileSync(join(OUTPUT_DIR, "SERVER-INFO.md"), generateServerInfoDoc(serverInfo, roles, channels));
 
-  const critical = issues.filter((i) => i.severity === "critical").length;
-  const high = issues.filter((i) => i.severity === "high").length;
-  const medium = issues.filter((i) => i.severity === "medium").length;
-  const low = issues.filter((i) => i.severity === "low").length;
+  // Count active issues only (not acknowledged ones)
+  const active = partitioned.active;
+  const critical = active.filter((i) => i.severity === "critical").length;
+  const high = active.filter((i) => i.severity === "high").length;
+  const medium = active.filter((i) => i.severity === "medium").length;
+  const low = active.filter((i) => i.severity === "low").length;
 
   return {
     roleCount: roles.length,
     channelCount: channels.length,
-    issueCount: issues.length,
+    issueCount: active.length,
     criticalCount: critical,
     highCount: high,
     mediumCount: medium,
     lowCount: low,
+    acknowledgedCount: partitioned.acknowledged.length,
     outputDir: OUTPUT_DIR,
   };
+}
+
+/**
+ * Run a fresh security analysis and return issues (for acknowledge command).
+ * Does NOT write files or update docs.
+ */
+export async function analyzeSecurityOnly(guild: Guild): Promise<SecurityIssue[]> {
+  const roles = await fetchRoles(guild);
+  const channels = await fetchChannels(guild, roles);
+  return analyzeSecurityIssues(roles, channels);
 }
 
 /**

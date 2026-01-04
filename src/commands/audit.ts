@@ -49,7 +49,8 @@ import {
   type AuditSession,
 } from "../store/auditSessionStore.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
-import { generateAuditDocs, commitAndPushDocs } from "../features/serverAuditDocs.js";
+import { generateAuditDocs, commitAndPushDocs, analyzeSecurityOnly, type SecurityIssue } from "../features/serverAuditDocs.js";
+import { acknowledgeIssue, unacknowledgeIssue, getAcknowledgedIssues } from "../store/acknowledgedSecurityStore.js";
 
 // Allowed role IDs (Community Manager + Server Dev)
 // Uses centralized ROLE_IDS from roles.ts for consistency
@@ -89,6 +90,34 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub.setName("security").setDescription("Generate server permission/security documentation")
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("acknowledge")
+      .setDescription("Acknowledge a security warning as intentional")
+      .addStringOption((opt) =>
+        opt
+          .setName("issue")
+          .setDescription("Issue ID from the audit (e.g., CRIT-001 or LOW-008)")
+          .setRequired(true)
+      )
+      .addStringOption((opt) =>
+        opt
+          .setName("reason")
+          .setDescription("Why this is intentional/acceptable")
+          .setRequired(false)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("unacknowledge")
+      .setDescription("Remove acknowledgment from a security warning")
+      .addStringOption((opt) =>
+        opt
+          .setName("issue")
+          .setDescription("Issue ID to unacknowledge (e.g., CRIT-001 or LOW-008)")
+          .setRequired(true)
+      )
   );
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
@@ -115,6 +144,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       nsfw: "Scans member avatars for NSFW content using Google Vision API.",
       members: "Scans for bot-like accounts using multiple heuristics.",
       security: "Generates server permission/security documentation.",
+      acknowledge: "Acknowledges a security warning as intentional.",
+      unacknowledge: "Removes acknowledgment from a security warning.",
     };
     await postPermissionDenied(interaction, {
       command: `audit ${subcommand}`,
@@ -147,7 +178,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         .addFields(
           { name: "Roles", value: result.roleCount.toLocaleString(), inline: true },
           { name: "Channels", value: result.channelCount.toLocaleString(), inline: true },
-          { name: "Issues Found", value: result.issueCount.toLocaleString(), inline: true },
+          { name: "Active Issues", value: result.issueCount.toLocaleString(), inline: true },
           {
             name: "Issue Breakdown",
             value: [
@@ -155,6 +186,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
               `🟠 High: ${result.highCount}`,
               `🟡 Medium: ${result.mediumCount}`,
               `🟢 Low: ${result.lowCount}`,
+              `✅ Acknowledged: ${result.acknowledgedCount}`,
             ].join("\n"),
             inline: false,
           }
@@ -193,6 +225,142 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       logger.error({ err, userId: user.id, guildId }, "[audit:security] Failed to generate docs");
       await interaction.editReply({
         content: `❌ Failed to generate documentation: ${err instanceof Error ? err.message : "Unknown error"}`,
+      });
+    }
+    return;
+  }
+
+  // Handle acknowledge subcommand
+  if (subcommand === "acknowledge") {
+    await interaction.deferReply({ ephemeral: true });
+
+    const issueId = interaction.options.getString("issue", true).toUpperCase();
+    const reason = interaction.options.getString("reason") ?? undefined;
+
+    try {
+      // Run fresh analysis to get current issues
+      const issues = await analyzeSecurityOnly(guild);
+      const issue = issues.find((i) => i.id === issueId);
+
+      if (!issue) {
+        await interaction.editReply({
+          content: `❌ Issue \`${issueId}\` not found. Run \`/audit security\` first to see current issues.`,
+        });
+        return;
+      }
+
+      // Check if already acknowledged with same hash
+      const existing = getAcknowledgedIssues(guildId);
+      const existingAck = existing.get(issue.issueKey);
+      if (existingAck && existingAck.permissionHash === issue.permissionHash) {
+        await interaction.editReply({
+          content: `⚠️ Issue \`${issueId}\` is already acknowledged.\n` +
+            `**Acknowledged by:** <@${existingAck.acknowledgedBy}>\n` +
+            (existingAck.reason ? `**Reason:** ${existingAck.reason}` : ""),
+        });
+        return;
+      }
+
+      // Acknowledge the issue
+      acknowledgeIssue({
+        guildId,
+        issueKey: issue.issueKey,
+        severity: issue.severity,
+        title: issue.title,
+        permissionHash: issue.permissionHash,
+        acknowledgedBy: user.id,
+        reason,
+      });
+
+      const embed = new EmbedBuilder()
+        .setTitle("✅ Issue Acknowledged")
+        .setColor(0x22C55E)
+        .addFields(
+          { name: "Issue", value: `[${issue.id}] ${issue.title}`, inline: false },
+          { name: "Affected", value: issue.affected, inline: false },
+          { name: "Acknowledged by", value: `<@${user.id}>`, inline: true }
+        )
+        .setTimestamp();
+
+      if (reason) {
+        embed.addFields({ name: "Reason", value: reason, inline: false });
+      }
+
+      embed.setFooter({ text: "This issue will be hidden from future audits until permissions change." });
+
+      await interaction.editReply({ embeds: [embed] });
+
+      logger.info(
+        { userId: user.id, guildId, issueId, issueKey: issue.issueKey, reason },
+        "[audit:acknowledge] Issue acknowledged"
+      );
+    } catch (err) {
+      logger.error({ err, userId: user.id, guildId, issueId }, "[audit:acknowledge] Failed to acknowledge");
+      await interaction.editReply({
+        content: `❌ Failed to acknowledge issue: ${err instanceof Error ? err.message : "Unknown error"}`,
+      });
+    }
+    return;
+  }
+
+  // Handle unacknowledge subcommand
+  if (subcommand === "unacknowledge") {
+    await interaction.deferReply({ ephemeral: true });
+
+    const issueId = interaction.options.getString("issue", true).toUpperCase();
+
+    try {
+      // Run fresh analysis to get current issues
+      const issues = await analyzeSecurityOnly(guild);
+      const issue = issues.find((i) => i.id === issueId);
+
+      if (!issue) {
+        await interaction.editReply({
+          content: `❌ Issue \`${issueId}\` not found. Run \`/audit security\` first to see current issues.`,
+        });
+        return;
+      }
+
+      // Check if acknowledged
+      const existing = getAcknowledgedIssues(guildId);
+      const existingAck = existing.get(issue.issueKey);
+      if (!existingAck) {
+        await interaction.editReply({
+          content: `⚠️ Issue \`${issueId}\` is not currently acknowledged.`,
+        });
+        return;
+      }
+
+      // Unacknowledge the issue
+      const removed = unacknowledgeIssue(guildId, issue.issueKey);
+
+      if (removed) {
+        const embed = new EmbedBuilder()
+          .setTitle("🔄 Acknowledgment Removed")
+          .setColor(0xF59E0B)
+          .addFields(
+            { name: "Issue", value: `[${issue.id}] ${issue.title}`, inline: false },
+            { name: "Affected", value: issue.affected, inline: false },
+            { name: "Removed by", value: `<@${user.id}>`, inline: true }
+          )
+          .setFooter({ text: "This issue will appear in future audits again." })
+          .setTimestamp();
+
+        await interaction.editReply({ embeds: [embed] });
+
+        logger.info(
+          { userId: user.id, guildId, issueId, issueKey: issue.issueKey },
+          "[audit:unacknowledge] Acknowledgment removed"
+        );
+      } else {
+        await interaction.editReply({
+          content: `⚠️ Could not remove acknowledgment for \`${issueId}\`.`,
+        });
+      }
+    } catch (err) {
+      logger.error({ err, userId: user.id, guildId, issueId }, "[audit:unacknowledge] Failed to unacknowledge");
+      await interaction.editReply({
+        content: `❌ Failed to unacknowledge issue: ${err instanceof Error ? err.message : "Unknown error"}`,
       });
     }
     return;

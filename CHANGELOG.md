@@ -8,6 +8,30 @@ All changes to Pawtropolis Tech are tracked here.
 
 ### Added
 
+- **GitHub Actions CI/CD** - Automated quality checks on every push/PR:
+  - Typecheck, lint, format check, and test jobs
+  - Coverage reports uploaded as artifacts
+  - Build verification for production readiness
+- **Dynamic README Badges** - Auto-updating badges via GitHub Gist:
+  - Commands count, lines of code, test count, coverage percentage, version
+  - Updated automatically on push to main (every 6 hours fallback)
+  - Scripts in `scripts/generate-badge-metrics.js`
+- **Status Endpoint** - Bot now serves `/api/status` and `/api/health` endpoints:
+  - Shields.io-compatible JSON format for status badges
+  - Shows online/offline status, uptime, WebSocket latency
+  - Runs on port 3002 (configurable via `STATUS_PORT` env var)
+- **Auto-Commit Assets** - `/update banner` and `/update avatar` now auto-push to GitHub:
+  - Assets saved to `assets/` folder and committed automatically
+  - Requires `GITHUB_BOT_TOKEN`, `GITHUB_BOT_USERNAME`, `GITHUB_BOT_EMAIL`, `GITHUB_REPO` env vars
+  - Reply includes link to GitHub commit on success
+- **Professional README** - Redesigned with centered banner, avatar, and badge rows
+
+- **Security Issue Acknowledgments** - Staff can now acknowledge security warnings that are intentional:
+  - `/audit acknowledge <issue-id> [reason]` - Mark a security warning as intentional (e.g., Chat Reviver needs MentionEveryone)
+  - `/audit unacknowledge <issue-id>` - Remove acknowledgment if you change your mind
+  - Acknowledged issues appear in a separate "Acknowledged Issues" section in CONFLICTS.md
+  - Acknowledgments auto-reset when underlying permissions change (forcing re-review)
+  - Shows who acknowledged each issue and when, with optional reason
 - **Server Audit Documentation** - Comprehensive internal documentation of server structure:
   - `docs/internal-info/ROLES.md` - All 219 roles with positions, colors, member counts, and full permission matrix
   - `docs/internal-info/CHANNELS.md` - All 225 channels with categories, types, and permission overwrites

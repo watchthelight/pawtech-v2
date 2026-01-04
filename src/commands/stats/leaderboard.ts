@@ -117,7 +117,7 @@ export async function handleLeaderboard(
   const displayRows = rows.slice(0, 15);
 
   const memberIds = displayRows.map(r => r.actor_id);
-  let members: Awaited<ReturnType<typeof interaction.guild!.members.fetch>> | undefined;
+  let members: Map<string, import("discord.js").GuildMember> | undefined;
   try {
     members = await interaction.guild?.members.fetch({ user: memberIds });
   } catch {

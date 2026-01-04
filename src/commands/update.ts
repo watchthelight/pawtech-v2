@@ -25,8 +25,81 @@ import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { upsertStatus, getStatus } from "../features/statusStore.js";
 import { writeFileSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 import { logger } from "../lib/logger.js";
 import sharp from "sharp";
+
+/**
+ * Commit and push asset changes to GitHub
+ * Uses the same credentials as /audit security
+ */
+async function commitAndPushAssets(assetType: "banner" | "avatar"): Promise<{ success: boolean; commitUrl?: string; error?: string }> {
+  const token = process.env.GITHUB_BOT_TOKEN;
+  const username = process.env.GITHUB_BOT_USERNAME;
+  const email = process.env.GITHUB_BOT_EMAIL;
+  const repo = process.env.GITHUB_REPO;
+
+  if (!token || !username || !email || !repo) {
+    return {
+      success: false,
+      error: "Missing GitHub configuration",
+    };
+  }
+
+  const cwd = process.cwd();
+
+  try {
+    // Check if there are changes to commit
+    const status = execSync("git status --porcelain assets/", { cwd, encoding: "utf-8" });
+    if (!status.trim()) {
+      return { success: true, error: "No changes to commit" };
+    }
+
+    // Configure git for this commit
+    execSync(`git config user.name "${username}"`, { cwd });
+    execSync(`git config user.email "${email}"`, { cwd });
+
+    // Stage the assets
+    execSync("git add assets/", { cwd });
+
+    // Create commit message
+    const timestamp = new Date().toISOString().split("T")[0];
+    const commitMsg = `assets: update ${assetType} (${timestamp})
+
+[automated by /update ${assetType}]`;
+
+    execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { cwd });
+
+    // Get the commit hash
+    const commitHash = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8" }).trim();
+
+    // Push using token authentication
+    const remoteUrl = `https://${username}:${token}@github.com/${repo}.git`;
+    execSync(`git push ${remoteUrl} HEAD:main`, { cwd, encoding: "utf-8" });
+
+    // Reset remote to not expose token
+    execSync(`git remote set-url origin https://github.com/${repo}.git`, { cwd });
+
+    const commitUrl = `https://github.com/${repo}/commit/${commitHash}`;
+    logger.info({ assetType, commitHash }, "[update] Assets pushed to GitHub");
+
+    return { success: true, commitUrl };
+  } catch (err) {
+    // Reset git config to original user if push failed
+    try {
+      execSync('git config user.name "watchthelight"', { cwd });
+      execSync('git config user.email "admin@watchthelight.org"', { cwd });
+    } catch {
+      // Ignore reset errors
+    }
+
+    logger.warn({ err, assetType }, "[update] Failed to push assets to GitHub");
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error during git push",
+    };
+  }
+}
 
 export const data = new SlashCommandBuilder()
   .setName("update")
@@ -325,6 +398,11 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
     logger.info({ pngSize: pngBuffer.length, webpSize: webpBuffer.length }, "Banner files saved");
   });
 
+  // Push assets to GitHub so README banner updates automatically
+  const gitResult = await withStep(ctx, "push_to_github", async () => {
+    return await commitAndPushAssets("banner");
+  });
+
   // Update bot's profile banner via Discord API.
   // Note: Requires the bot account to have Nitro or be a verified bot.
   // This is different from the server banner (which requires BANNER guild feature).
@@ -362,19 +440,30 @@ async function handleBannerUpdate(ctx: CommandContext<ChatInputCommandInteractio
   });
 
   await withStep(ctx, "final_reply", async () => {
+    const lines = [
+      "✅ Banner updated successfully!",
+      "",
+      "**Updated:**",
+      "• Bot profile banner (visible immediately)",
+      "• Gate verification message (refreshed)",
+      "• Welcome message banner (next member join)",
+      "• `assets/banner.png` (saved)",
+      "• `assets/banner.webp` (saved)",
+    ];
+
+    // Add GitHub push status
+    if (gitResult.success && gitResult.commitUrl) {
+      lines.push(`• [Pushed to GitHub](${gitResult.commitUrl})`);
+    } else if (gitResult.error === "No changes to commit") {
+      lines.push("• GitHub: No changes to commit");
+    } else if (gitResult.error) {
+      lines.push(`• GitHub: Push failed (${gitResult.error})`);
+    }
+
+    lines.push("", "**Note:** Discord server banner is managed separately via Server Settings.");
+
     await interaction.editReply({
-      content: [
-        "✅ Banner updated successfully!",
-        "",
-        "**Updated:**",
-        "• Bot profile banner (visible immediately)",
-        "• Gate verification message (refreshed)",
-        "• Welcome message banner (next member join)",
-        "• `assets/banner.png` (saved)",
-        "• `assets/banner.webp` (saved)",
-        "",
-        "**Note:** Discord server banner is managed separately via Server Settings.",
-      ].join("\n"),
+      content: lines.join("\n"),
     });
   });
 }
@@ -414,10 +503,11 @@ async function handleAvatarUpdate(ctx: CommandContext<ChatInputCommandInteractio
   });
 
   // Process image - GIFs pass through unchanged, others get cropped/converted
+  const isAnimated = attachment.contentType === "image/gif";
   const avatarBuffer = await withStep(ctx, "process_image", async () => {
     // GIFs are special: sharp can process them but loses animation.
     // Discord handles animated avatars natively, so pass through as-is.
-    if (attachment.contentType === "image/gif") {
+    if (isAnimated) {
       logger.info("Keeping GIF format for animated avatar");
       return imageBuffer;
     }
@@ -433,6 +523,19 @@ async function handleAvatarUpdate(ctx: CommandContext<ChatInputCommandInteractio
     return png;
   });
 
+  // Save avatar to assets folder
+  await withStep(ctx, "save_files", async () => {
+    const assetsPath = join(process.cwd(), "assets");
+    const filename = isAnimated ? "avatar.gif" : "avatar.png";
+    writeFileSync(join(assetsPath, filename), avatarBuffer);
+    logger.info({ size: avatarBuffer.length, filename }, "Avatar file saved");
+  });
+
+  // Push assets to GitHub so README avatar updates automatically
+  const gitResult = await withStep(ctx, "push_to_github", async () => {
+    return await commitAndPushAssets("avatar");
+  });
+
   // Update bot avatar
   await withStep(ctx, "update_bot_avatar", async () => {
     if (!interaction.client.user) {
@@ -444,19 +547,31 @@ async function handleAvatarUpdate(ctx: CommandContext<ChatInputCommandInteractio
   });
 
   await withStep(ctx, "final_reply", async () => {
-    const isAnimated = attachment.contentType === "image/gif";
+    const filename = isAnimated ? "avatar.gif" : "avatar.png";
+    const lines = [
+      "✅ Avatar updated successfully!",
+      "",
+      "**Updated:**",
+      `• Bot profile picture (${isAnimated ? "animated GIF" : "static image"})`,
+      "• Visible immediately across all servers",
+      `• \`assets/${filename}\` (saved)`,
+    ];
+
+    // Add GitHub push status
+    if (gitResult.success && gitResult.commitUrl) {
+      lines.push(`• [Pushed to GitHub](${gitResult.commitUrl})`);
+    } else if (gitResult.error === "No changes to commit") {
+      lines.push("• GitHub: No changes to commit");
+    } else if (gitResult.error) {
+      lines.push(`• GitHub: Push failed (${gitResult.error})`);
+    }
+
     // The propagation delay is real - Discord's CDN caches aggressively.
     // Users might see the old avatar for up to 10 minutes in some clients.
+    lines.push("", "**Note:** Avatar changes may take a few minutes to propagate across Discord.");
+
     await interaction.editReply({
-      content: [
-        "✅ Avatar updated successfully!",
-        "",
-        "**Updated:**",
-        `• Bot profile picture (${isAnimated ? "animated GIF" : "static image"})`,
-        "• Visible immediately across all servers",
-        "",
-        "**Note:** Avatar changes may take a few minutes to propagate across Discord.",
-      ].join("\n"),
+      content: lines.join("\n"),
     });
   });
 }

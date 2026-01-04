@@ -403,14 +403,17 @@ client.once(Events.ClientReady, async () => {
     logger.error({ err }, "[startup] logging channel check failed");
   }
 
-  // ========================================
-  // WEB SERVER REMOVED - 2025-11-18
-  // ========================================
-  // The web control panel has been removed.
-  // All bot functionality remains via Discord slash commands.
-  // Archive: /home/ubuntu/archives/pawtropolis-web-archive-20251118-143353
-  // See: ARCHITECTURE-DIAGRAMS.md for system documentation
-  // ========================================
+  // ===== Status Endpoint Server =====
+  // WHAT: Simple HTTP server for status badge endpoint
+  // WHY: Provides real-time status for Shields.io dynamic badge
+  // ENDPOINT: GET /api/status returns Shields.io badge JSON
+  try {
+    const { startStatusServer, getStatusPort } = await import("./web/statusEndpoint.js");
+    startStatusServer(client);
+    logger.info({ port: getStatusPort() }, "[startup] Status endpoint started");
+  } catch (err) {
+    logger.warn({ err }, "[startup] Status endpoint failed to start - badges will show offline");
+  }
 
   // ===== Scheduler Initialization =====
   // Start mod metrics periodic refresh scheduler
