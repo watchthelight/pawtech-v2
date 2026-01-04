@@ -44,7 +44,7 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ vars.BADGE_GIST_ID }}
-          file_path: badge-commands.json
+          file_path: .github/badges/badge-commands.json
           file_type: text
 
       - name: Upload LOC badge
@@ -52,7 +52,7 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ vars.BADGE_GIST_ID }}
-          file_path: badge-loc.json
+          file_path: .github/badges/badge-loc.json
           file_type: text
 
       - name: Upload tests badge
@@ -60,7 +60,7 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ vars.BADGE_GIST_ID }}
-          file_path: badge-tests.json
+          file_path: .github/badges/badge-tests.json
           file_type: text
 
       - name: Upload coverage badge
@@ -68,7 +68,7 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ vars.BADGE_GIST_ID }}
-          file_path: badge-coverage.json
+          file_path: .github/badges/badge-coverage.json
           file_type: text
 
       - name: Upload version badge
@@ -76,5 +76,5 @@ jobs:
         with:
           token: ${{ secrets.GIST_TOKEN }}
           gist_id: ${{ vars.BADGE_GIST_ID }}
-          file_path: badge-version.json
+          file_path: .github/badges/badge-version.json
           file_type: text

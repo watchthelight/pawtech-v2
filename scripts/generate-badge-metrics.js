@@ -8,7 +8,7 @@
  * Output: badge-data.json (multiple JSON files for each badge)
  */
 
-import { readFileSync, writeFileSync, readdirSync, statSync } from "fs";
+import { readFileSync, writeFileSync, readdirSync, statSync, mkdirSync, existsSync } from "fs";
 import { join, resolve } from "path";
 import { fileURLToPath } from "url";
 import { dirname } from "path";
@@ -208,14 +208,15 @@ const badges = {
   },
 };
 
-// Write individual JSON files (Gist doesn't support nested JSON for endpoint badges)
-for (const [name, data] of Object.entries(badges)) {
-  writeFileSync(join(rootDir, `badge-${name}.json`), JSON.stringify(data, null, 2));
-  console.log(`\nWrote badge-${name}.json`);
+// Write individual JSON files to .github/badges/
+const badgesDir = join(rootDir, ".github/badges");
+if (!existsSync(badgesDir)) {
+  mkdirSync(badgesDir, { recursive: true });
 }
 
-// Also write combined file for reference
-writeFileSync(join(rootDir, "badge-data.json"), JSON.stringify(badges, null, 2));
-console.log("\nWrote badge-data.json (combined)");
+for (const [name, data] of Object.entries(badges)) {
+  writeFileSync(join(badgesDir, `badge-${name}.json`), JSON.stringify(data, null, 2));
+  console.log(`\nWrote .github/badges/badge-${name}.json`);
+}
 
-console.log("\nDone! Upload badge-*.json files to your GitHub Gist.");
+console.log("\nDone! Badge files updated in .github/badges/");
