@@ -1,8 +1,8 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T14:31:06.900Z
+**Generated:** 2026-01-04T15:22:43.199Z
 **Guild ID:** 896070888594759740
-**Total Issues Found:** 7
+**Total Issues Found:** 9
 
 ## Summary
 
@@ -10,8 +10,8 @@
 |----------|-------|
 | 🔴 Critical | 2 |
 | 🟠 High | 1 |
-| 🟡 Medium | 4 |
-| 🟢 Low | 0 |
+| 🟡 Medium | 5 |
+| 🟢 Low | 1 |
 
 ---
 
@@ -81,6 +81,26 @@
 - **Issue:** Role can create/edit webhooks.
 - **Risk:** Webhooks can impersonate any user or bot. 1 member(s) can create fake messages.
 - **Recommendation:** Limit ManageWebhooks to trusted staff only. Audit webhook usage.
+
+---
+
+### [MED-009] Potentially Sensitive Channel Accessible
+
+- **Affected:** Channel: #「🐴」3d-modeling (1450227604152914131)
+- **Issue:** Channel name suggests it's sensitive, but @everyone ViewChannel is not explicitly denied.
+- **Risk:** May be unintentionally accessible to regular members.
+- **Recommendation:** Verify channel permissions are intentional. Add explicit ViewChannel deny for @everyone if private.
+
+---
+
+## 🟢 Low Priority / Notes
+
+### [LOW-008] Wide @everyone/@here Access
+
+- **Affected:** Role: Moderation Team (987662057069482024)
+- **Issue:** 17 members can mention @everyone/@here.
+- **Risk:** Potential for spam or disruption.
+- **Recommendation:** Consider restricting to staff roles or specific channels only.
 
 ---
 
