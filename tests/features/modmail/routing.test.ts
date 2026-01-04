@@ -51,12 +51,31 @@ vi.mock("../../../src/features/modmail/transcript.js", () => ({
   formatContentWithAttachments: vi.fn((content) => content),
 }));
 
+// Mock reqctx
+vi.mock("../../../src/lib/reqctx.js", () => ({
+  enrichEvent: vi.fn(),
+}));
+
+// Mock constants
+vi.mock("../../../src/lib/constants.js", () => ({
+  SAFE_ALLOWED_MENTIONS: { parse: [] },
+}));
+
 // Import after mocks are set up
 import {
   markForwarded,
   isForwarded,
   _testing,
+  buildStaffToUserEmbed,
+  buildUserToStaffEmbed,
+  routeThreadToDm,
+  routeDmToThread,
+  handleInboundDmForModmail,
+  handleInboundThreadMessageForModmail,
 } from "../../../src/features/modmail/routing.js";
+import { getTicketByThread } from "../../../src/features/modmail/tickets.js";
+
+const mockGetTicketByThread = getTicketByThread as ReturnType<typeof vi.fn>;
 
 // ===== Size-Based Eviction Tests =====
 
@@ -276,5 +295,484 @@ describe("forwardedMessages performance", () => {
 
     // Eviction should take less than 100ms (relaxed for CI variability)
     expect(duration).toBeLessThan(100);
+  });
+});
+
+// ===== Embed Builder Tests =====
+
+describe("buildStaffToUserEmbed", () => {
+  it("creates embed with correct color", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "Hello",
+    });
+
+    expect(embed.data.color).toBe(0x2b2d31);
+  });
+
+  it("sets description from content", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "Test message",
+    });
+
+    expect(embed.data.description).toBe("Test message");
+  });
+
+  it("uses space for empty content", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "",
+    });
+
+    expect(embed.data.description).toBe(" ");
+  });
+
+  it("sets footer with guild name", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "Hello",
+      guildName: "Test Server",
+      guildIconUrl: "https://cdn.example.com/icon.png",
+    });
+
+    expect(embed.data.footer?.text).toBe("Test Server");
+    expect(embed.data.footer?.icon_url).toBe("https://cdn.example.com/icon.png");
+  });
+
+  it("uses default guild name if not provided", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "Hello",
+    });
+
+    expect(embed.data.footer?.text).toBe("Pawtropolis Tech");
+  });
+
+  it("sets image when provided", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "Hello",
+      imageUrl: "https://example.com/image.png",
+    });
+
+    expect(embed.data.image?.url).toBe("https://example.com/image.png");
+  });
+
+  it("has timestamp", () => {
+    const embed = buildStaffToUserEmbed({
+      staffDisplayName: "Mod",
+      content: "Hello",
+    });
+
+    expect(embed.data.timestamp).toBeDefined();
+  });
+});
+
+describe("buildUserToStaffEmbed", () => {
+  it("creates embed with correct color", () => {
+    const embed = buildUserToStaffEmbed({
+      userDisplayName: "User",
+      content: "Hello",
+    });
+
+    expect(embed.data.color).toBe(0x5865f2);
+  });
+
+  it("sets description from content", () => {
+    const embed = buildUserToStaffEmbed({
+      userDisplayName: "User",
+      content: "Test message",
+    });
+
+    expect(embed.data.description).toBe("Test message");
+  });
+
+  it("uses space for empty content", () => {
+    const embed = buildUserToStaffEmbed({
+      userDisplayName: "User",
+      content: "",
+    });
+
+    expect(embed.data.description).toBe(" ");
+  });
+
+  it("sets footer with user name", () => {
+    const embed = buildUserToStaffEmbed({
+      userDisplayName: "TestUser",
+      userAvatarUrl: "https://cdn.example.com/avatar.png",
+      content: "Hello",
+    });
+
+    expect(embed.data.footer?.text).toBe("TestUser");
+    expect(embed.data.footer?.icon_url).toBe("https://cdn.example.com/avatar.png");
+  });
+
+  it("sets image when provided", () => {
+    const embed = buildUserToStaffEmbed({
+      userDisplayName: "User",
+      content: "Hello",
+      imageUrl: "https://example.com/image.png",
+    });
+
+    expect(embed.data.image?.url).toBe("https://example.com/image.png");
+  });
+
+  it("has timestamp", () => {
+    const embed = buildUserToStaffEmbed({
+      userDisplayName: "User",
+      content: "Hello",
+    });
+
+    expect(embed.data.timestamp).toBeDefined();
+  });
+});
+
+// ===== Message Routing Tests =====
+
+describe("routeThreadToDm", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _testing.clearForwardedMessages();
+  });
+
+  it("skips bot messages", async () => {
+    const message = {
+      author: { bot: true },
+      id: "msg-123",
+    } as any;
+
+    const ticket = { id: 1, user_id: "user-456" } as any;
+    const client = {} as any;
+
+    await routeThreadToDm(message, ticket, client);
+
+    // Should return early without processing
+  });
+
+  it("skips already forwarded messages", async () => {
+    markForwarded("msg-123");
+
+    const message = {
+      author: { bot: false },
+      id: "msg-123",
+    } as any;
+
+    const ticket = { id: 1, user_id: "user-456" } as any;
+    const client = {} as any;
+
+    await routeThreadToDm(message, ticket, client);
+
+    // Should return early
+  });
+
+  it("skips empty messages", async () => {
+    const message = {
+      author: { bot: false },
+      id: "msg-123",
+      content: "",
+      attachments: { size: 0 },
+    } as any;
+
+    const ticket = { id: 1, user_id: "user-456" } as any;
+    const client = {} as any;
+
+    await routeThreadToDm(message, ticket, client);
+
+    // Should return early
+  });
+
+  it("sends embed to user DM", async () => {
+    const mockUserSend = vi.fn().mockResolvedValue({ id: "dm-msg-123" });
+    const mockMemberFetch = vi.fn().mockResolvedValue({
+      displayName: "Mod Name",
+      user: { globalName: "Mod", username: "mod" },
+      displayAvatarURL: vi.fn().mockReturnValue("https://avatar.url"),
+    });
+
+    const message = {
+      author: { bot: false, id: "staff-1", globalName: "Staff", username: "staff" },
+      id: "msg-123",
+      content: "Hello user",
+      attachments: new Map(),
+      guild: {
+        name: "Test Guild",
+        iconURL: vi.fn().mockReturnValue("https://icon.url"),
+        members: { fetch: mockMemberFetch },
+      },
+      reference: null,
+    } as any;
+
+    const ticket = { id: 1, user_id: "user-456" } as any;
+    const client = {
+      users: { fetch: vi.fn().mockResolvedValue({ send: mockUserSend }) },
+    } as any;
+
+    await routeThreadToDm(message, ticket, client);
+
+    expect(mockUserSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        embeds: expect.any(Array),
+      })
+    );
+  });
+
+  it("handles user DM failure", async () => {
+    const mockReply = vi.fn().mockResolvedValue(undefined);
+    const mockMemberFetch = vi.fn().mockResolvedValue({
+      displayName: "Mod",
+      user: {},
+      displayAvatarURL: vi.fn().mockReturnValue(null),
+    });
+
+    const message = {
+      author: { bot: false, id: "staff-1", globalName: null, username: "staff" },
+      id: "msg-123",
+      content: "Hello",
+      attachments: new Map(),
+      guild: {
+        name: "Test",
+        iconURL: vi.fn().mockReturnValue(null),
+        members: { fetch: mockMemberFetch },
+      },
+      reference: null,
+      reply: mockReply,
+    } as any;
+
+    const ticket = { id: 1, user_id: "user-456" } as any;
+    const client = {
+      users: {
+        fetch: vi.fn().mockResolvedValue({
+          send: vi.fn().mockRejectedValue(new Error("DMs closed")),
+        }),
+      },
+    } as any;
+
+    await routeThreadToDm(message, ticket, client);
+
+    expect(mockReply).toHaveBeenCalledWith(
+      expect.objectContaining({
+        content: expect.stringContaining("Failed to deliver"),
+      })
+    );
+  });
+});
+
+describe("routeDmToThread", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    _testing.clearForwardedMessages();
+  });
+
+  it("skips bot messages", async () => {
+    const message = { author: { bot: true } } as any;
+    const ticket = { id: 1, thread_id: "thread-123" } as any;
+    const client = {} as any;
+
+    await routeDmToThread(message, ticket, client);
+  });
+
+  it("skips already forwarded messages", async () => {
+    markForwarded("msg-123");
+
+    const message = { author: { bot: false }, id: "msg-123" } as any;
+    const ticket = { id: 1, thread_id: "thread-123" } as any;
+    const client = {} as any;
+
+    await routeDmToThread(message, ticket, client);
+  });
+
+  it("skips when thread_id is null", async () => {
+    const message = {
+      author: { bot: false },
+      id: "msg-123",
+      content: "Hello",
+      attachments: { size: 0 },
+    } as any;
+
+    const ticket = { id: 1, thread_id: null } as any;
+    const client = {} as any;
+
+    await routeDmToThread(message, ticket, client);
+
+    // Should return early with warning logged
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ ticketId: 1 }),
+      expect.stringContaining("no thread_id")
+    );
+  });
+
+  it("skips empty messages", async () => {
+    const message = {
+      author: { bot: false },
+      id: "msg-123",
+      content: "",
+      attachments: { size: 0 },
+    } as any;
+
+    const ticket = { id: 1, thread_id: "thread-123" } as any;
+    const client = {} as any;
+
+    await routeDmToThread(message, ticket, client);
+  });
+
+  it("sends embed to thread", async () => {
+    const mockThreadSend = vi.fn().mockResolvedValue({ id: "thread-msg-123" });
+
+    const message = {
+      author: {
+        bot: false,
+        id: "user-123",
+        globalName: "User",
+        username: "user",
+        displayAvatarURL: vi.fn().mockReturnValue("https://avatar.url"),
+      },
+      id: "dm-msg-123",
+      content: "Hello staff",
+      attachments: new Map(),
+      reference: null,
+    } as any;
+
+    const ticket = { id: 1, thread_id: "thread-123" } as any;
+    const client = {
+      channels: {
+        fetch: vi.fn().mockResolvedValue({
+          isThread: () => true,
+          send: mockThreadSend,
+        }),
+      },
+    } as any;
+
+    await routeDmToThread(message, ticket, client);
+
+    expect(mockThreadSend).toHaveBeenCalledWith(
+      expect.objectContaining({
+        embeds: expect.any(Array),
+      })
+    );
+  });
+
+  it("handles thread not found", async () => {
+    const message = {
+      author: { bot: false },
+      id: "dm-msg-123",
+      content: "Hello",
+      attachments: { size: 0 },
+    } as any;
+
+    const ticket = { id: 1, thread_id: "thread-123" } as any;
+    const client = {
+      channels: {
+        fetch: vi.fn().mockResolvedValue(null),
+      },
+    } as any;
+
+    await routeDmToThread(message, ticket, client);
+
+    expect(mockLogger.warn).toHaveBeenCalledWith(
+      expect.objectContaining({ threadId: "thread-123" }),
+      expect.stringContaining("thread not found")
+    );
+  });
+});
+
+describe("handleInboundDmForModmail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("skips bot messages", async () => {
+    const message = { author: { bot: true } } as any;
+    const client = {} as any;
+
+    await handleInboundDmForModmail(message, client);
+  });
+
+  it("does nothing when no open ticket exists", async () => {
+    const { db } = await import("../../../src/db/db.js");
+    (db.prepare as any).mockReturnValue({
+      get: vi.fn().mockReturnValue(undefined),
+    });
+
+    const message = {
+      author: { bot: false, id: "user-123" },
+    } as any;
+    const client = {} as any;
+
+    await handleInboundDmForModmail(message, client);
+  });
+});
+
+describe("handleInboundThreadMessageForModmail", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it("skips bot messages", async () => {
+    const message = { author: { bot: true } } as any;
+    const client = {} as any;
+
+    await handleInboundThreadMessageForModmail(message, client);
+  });
+
+  it("skips non-thread channels", async () => {
+    const message = {
+      author: { bot: false },
+      channel: { isThread: () => false },
+    } as any;
+    const client = {} as any;
+
+    await handleInboundThreadMessageForModmail(message, client);
+  });
+
+  it("skips messages without guildId", async () => {
+    const message = {
+      author: { bot: false },
+      channel: { isThread: () => true },
+      guildId: null,
+    } as any;
+    const client = {} as any;
+
+    await handleInboundThreadMessageForModmail(message, client);
+  });
+
+  it("routes message when open ticket exists", async () => {
+    mockGetTicketByThread.mockReturnValue({
+      id: 1,
+      status: "open",
+      user_id: "user-123",
+      thread_id: "thread-123",
+    });
+
+    const message = {
+      author: { bot: false, id: "staff-1" },
+      id: "msg-123",
+      content: "",
+      attachments: { size: 0 },
+      channel: { isThread: () => true, id: "thread-123" },
+      guildId: "guild-123",
+    } as any;
+    const client = {} as any;
+
+    await handleInboundThreadMessageForModmail(message, client);
+
+    expect(mockGetTicketByThread).toHaveBeenCalledWith("thread-123");
+  });
+
+  it("skips closed tickets", async () => {
+    mockGetTicketByThread.mockReturnValue({
+      id: 1,
+      status: "closed",
+      user_id: "user-123",
+    });
+
+    const message = {
+      author: { bot: false },
+      channel: { isThread: () => true, id: "thread-123" },
+      guildId: "guild-123",
+    } as any;
+    const client = {} as any;
+
+    await handleInboundThreadMessageForModmail(message, client);
   });
 });

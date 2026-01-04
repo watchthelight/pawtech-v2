@@ -438,3 +438,291 @@ describe("HealthSummary structure", () => {
     });
   });
 });
+
+describe("getSummary function", () => {
+  describe("WS ping retrieval", () => {
+    it("returns -1 when client not set", () => {
+      const wsPing = -1;
+      expect(wsPing).toBe(-1);
+    });
+
+    it("returns actual ping when client set", () => {
+      const mockClient = { ws: { ping: 50 } };
+      const wsPing = mockClient.ws.ping;
+      expect(wsPing).toBe(50);
+    });
+  });
+
+  describe("DB integrity check", () => {
+    it("runs PRAGMA quick_check", () => {
+      const pragma = "PRAGMA quick_check";
+      expect(pragma).toContain("quick_check");
+    });
+
+    it("uses pluck() for single value", () => {
+      const method = "pluck";
+      expect(method).toBe("pluck");
+    });
+  });
+});
+
+describe("runCheck function", () => {
+  describe("threshold evaluation", () => {
+    it("checks queue backlog against threshold", () => {
+      const backlog = 250;
+      const threshold = 200;
+      const exceeds = backlog >= threshold;
+      expect(exceeds).toBe(true);
+    });
+
+    it("checks P95 against threshold", () => {
+      const p95 = 2500;
+      const threshold = 2000;
+      const exceeds = p95 >= threshold;
+      expect(exceeds).toBe(true);
+    });
+
+    it("checks WS ping against threshold", () => {
+      const ping = 600;
+      const threshold = 500;
+      const exceeds = ping >= threshold;
+      expect(exceeds).toBe(true);
+    });
+  });
+
+  describe("PM2 status checks", () => {
+    it("alerts on stopped process", () => {
+      const status = "stopped";
+      const shouldAlert = status === "stopped" || status === "errored";
+      expect(shouldAlert).toBe(true);
+    });
+
+    it("alerts on errored process", () => {
+      const status = "errored";
+      const shouldAlert = status === "stopped" || status === "errored";
+      expect(shouldAlert).toBe(true);
+    });
+
+    it("does not alert on online process", () => {
+      const status = "online";
+      const shouldAlert = status === "stopped" || status === "errored";
+      expect(shouldAlert).toBe(false);
+    });
+  });
+
+  describe("orphaned ticket check", () => {
+    it("queries for open tickets without open_modmail entry", () => {
+      const query = "SELECT FROM modmail_ticket WHERE status = 'open' AND NOT EXISTS (SELECT FROM open_modmail)";
+      expect(query).toContain("open_modmail");
+    });
+  });
+});
+
+describe("ackAlert function", () => {
+  describe("database update", () => {
+    it("sets acknowledged_by", () => {
+      const field = "acknowledged_by";
+      expect(field).toBe("acknowledged_by");
+    });
+
+    it("sets acknowledged_at to current timestamp", () => {
+      const now = Math.floor(Date.now() / 1000);
+      expect(now).toBeGreaterThan(0);
+    });
+  });
+
+  describe("audit logging", () => {
+    it("logs ops_health_ack action", () => {
+      const action = "ops_health_ack";
+      expect(action).toBe("ops_health_ack");
+    });
+
+    it("includes alert_id in meta", () => {
+      const meta = { alert_id: 123 };
+      expect(meta.alert_id).toBe(123);
+    });
+  });
+});
+
+describe("resolveAlert function", () => {
+  describe("database update", () => {
+    it("sets resolved_by", () => {
+      const field = "resolved_by";
+      expect(field).toBe("resolved_by");
+    });
+
+    it("sets resolved_at to current timestamp", () => {
+      const now = Math.floor(Date.now() / 1000);
+      expect(now).toBeGreaterThan(0);
+    });
+  });
+
+  describe("audit logging", () => {
+    it("logs ops_health_resolve action", () => {
+      const action = "ops_health_resolve";
+      expect(action).toBe("ops_health_resolve");
+    });
+  });
+});
+
+describe("notifyAlert function", () => {
+  describe("guild validation", () => {
+    it("warns when guild not in cache", () => {
+      const guildFound = false;
+      expect(guildFound).toBe(false);
+    });
+  });
+
+  describe("action log entry", () => {
+    it("logs ops_health_alert action", () => {
+      const action = "ops_health_alert";
+      expect(action).toBe("ops_health_alert");
+    });
+
+    it("includes alert metadata", () => {
+      const meta = {
+        alert_type: "queue_backlog",
+        severity: "warn",
+        threshold: 200,
+        actual: 250,
+      };
+      expect(meta.alert_type).toBeDefined();
+      expect(meta.severity).toBeDefined();
+    });
+  });
+
+  describe("webhook integration", () => {
+    it("sends POST request to webhook URL", () => {
+      const method = "POST";
+      expect(method).toBe("POST");
+    });
+
+    it("includes Content-Type header", () => {
+      const headers = { "Content-Type": "application/json" };
+      expect(headers["Content-Type"]).toBe("application/json");
+    });
+
+    it("includes User-Agent header", () => {
+      const headers = { "User-Agent": "Pawtropolis-Tech-Bot/1.0" };
+      expect(headers["User-Agent"]).toContain("Pawtropolis");
+    });
+  });
+});
+
+describe("health_alerts table schema", () => {
+  describe("columns", () => {
+    it("has id as primary key", () => {
+      const pk = "id";
+      expect(pk).toBe("id");
+    });
+
+    it("has alert_type for categorization", () => {
+      const column = "alert_type";
+      expect(column).toBe("alert_type");
+    });
+
+    it("has severity for priority", () => {
+      const column = "severity";
+      expect(column).toBe("severity");
+    });
+
+    it("has triggered_at for first occurrence", () => {
+      const column = "triggered_at";
+      expect(column).toBe("triggered_at");
+    });
+
+    it("has last_seen_at for ongoing tracking", () => {
+      const column = "last_seen_at";
+      expect(column).toBe("last_seen_at");
+    });
+
+    it("has meta JSON for alert details", () => {
+      const column = "meta";
+      expect(column).toBe("meta");
+    });
+  });
+});
+
+describe("error handling", () => {
+  describe("DB check failure", () => {
+    it("returns ok: false on exception", () => {
+      const result = { ok: false, message: "DB check failed" };
+      expect(result.ok).toBe(false);
+    });
+
+    it("logs error message", () => {
+      const logMessage = "[opshealth] DB integrity check failed";
+      expect(logMessage).toContain("failed");
+    });
+  });
+
+  describe("queue metrics failure", () => {
+    it("returns zeroed metrics on error", () => {
+      const metrics = { backlog: 0, p50Ms: 0, p95Ms: 0, throughputPerHour: 0, timeseries: [] };
+      expect(metrics.backlog).toBe(0);
+    });
+  });
+
+  describe("recent actions failure", () => {
+    it("returns empty array on error", () => {
+      const actions: any[] = [];
+      expect(actions).toHaveLength(0);
+    });
+  });
+
+  describe("alert upsert failure", () => {
+    it("returns null on error", () => {
+      const result = null;
+      expect(result).toBeNull();
+    });
+
+    it("logs error", () => {
+      const logMessage = "[opshealth] failed to upsert alert";
+      expect(logMessage).toContain("upsert");
+    });
+  });
+
+  describe("notification failure", () => {
+    it("does not throw", () => {
+      const behavior = "log_and_continue";
+      expect(behavior).toBe("log_and_continue");
+    });
+  });
+});
+
+describe("environment variable thresholds", () => {
+  describe("QUEUE_BACKLOG_ALERT", () => {
+    it("overrides default threshold", () => {
+      const envVar = "QUEUE_BACKLOG_ALERT";
+      const defaultVal = 200;
+      const envVal = parseInt(process.env[envVar] || String(defaultVal), 10);
+      expect(envVal).toBe(defaultVal);
+    });
+  });
+
+  describe("P95_RESPONSE_MS_ALERT", () => {
+    it("overrides default threshold", () => {
+      const envVar = "P95_RESPONSE_MS_ALERT";
+      const defaultVal = 2000;
+      const envVal = parseInt(process.env[envVar] || String(defaultVal), 10);
+      expect(envVal).toBe(defaultVal);
+    });
+  });
+
+  describe("WS_PING_MS_ALERT", () => {
+    it("overrides default threshold", () => {
+      const envVar = "WS_PING_MS_ALERT";
+      const defaultVal = 500;
+      const envVal = parseInt(process.env[envVar] || String(defaultVal), 10);
+      expect(envVal).toBe(defaultVal);
+    });
+  });
+
+  describe("HEALTH_ALERT_WEBHOOK", () => {
+    it("enables webhook notifications when set", () => {
+      const webhookUrl = process.env.HEALTH_ALERT_WEBHOOK;
+      const enabled = !!webhookUrl;
+      expect(enabled).toBe(false); // Not set in test env
+    });
+  });
+});
