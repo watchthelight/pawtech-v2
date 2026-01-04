@@ -52,9 +52,10 @@ import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js"
 import { generateAuditDocs, commitAndPushDocs, analyzeSecurityOnly, type SecurityIssue } from "../features/serverAuditDocs.js";
 import { acknowledgeIssue, unacknowledgeIssue, getAcknowledgedIssues } from "../store/acknowledgedSecurityStore.js";
 
-// Allowed role IDs (Community Manager + Server Dev)
+// Allowed role IDs (Senior Admin + Community Manager + Server Dev)
 // Uses centralized ROLE_IDS from roles.ts for consistency
 const ALLOWED_ROLES = [
+  ROLE_IDS.SENIOR_ADMIN,
   ROLE_IDS.COMMUNITY_MANAGER,
   ROLE_IDS.SERVER_DEV,
 ];
@@ -194,11 +195,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         .setTimestamp();
 
       // Add GitHub link or error
-      if (pushResult.success && pushResult.commitUrl) {
+      if (pushResult.success && pushResult.docsUrl) {
         embed.setDescription(`Server documentation has been updated and pushed to GitHub.`);
         embed.addFields({
-          name: "📎 View Changes",
-          value: `[View commit on GitHub](${pushResult.commitUrl})`,
+          name: "📎 View Report",
+          value: `[View CONFLICTS.md on GitHub](${pushResult.docsUrl})`,
           inline: false,
         });
       } else if (pushResult.error === "No changes to commit") {
@@ -232,7 +233,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   // Handle acknowledge subcommand
   if (subcommand === "acknowledge") {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply();
 
     const issueId = interaction.options.getString("issue", true).toUpperCase();
     const reason = interaction.options.getString("reason") ?? undefined;
@@ -286,7 +287,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         embed.addFields({ name: "Reason", value: reason, inline: false });
       }
 
-      embed.setFooter({ text: "This issue will be hidden from future audits until permissions change." });
+      embed.setFooter({ text: "This issue will be marked as acknowledged in future audits." });
 
       await interaction.editReply({ embeds: [embed] });
 

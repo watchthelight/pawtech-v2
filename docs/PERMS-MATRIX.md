@@ -175,6 +175,11 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/config toggleapis` | Toggle API services on/off |
 | `/review-set-notify-config` | Configure forum notifications |
 | `/review-get-notify-config` | View notification settings |
+| `/audit members` | Scan server for suspicious bot accounts |
+| `/audit nsfw` | Scan all member avatars for NSFW content |
+| `/audit security` | Generate server permission/security documentation |
+| `/audit acknowledge` | Acknowledge a security finding |
+| `/audit unacknowledge` | Remove acknowledgment from a finding |
 
 ---
 
@@ -182,8 +187,6 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 
 | Command | Description |
 |---------|-------------|
-| `/audit members` | Scan server for suspicious bot accounts |
-| `/audit nsfw` | Scan all member avatars for NSFW content |
 | `/gate setup` | Initialize guild gate configuration |
 | `/gate reset` | Reset ALL application data (destructive) |
 | `/gate status` | View application statistics |

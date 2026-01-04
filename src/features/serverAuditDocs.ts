@@ -158,6 +158,7 @@ export interface GitPushResult {
   success: boolean;
   commitHash?: string;
   commitUrl?: string;
+  docsUrl?: string;
   error?: string;
 }
 
@@ -976,13 +977,33 @@ export async function generateAuditDocs(guild: Guild, outputDir?: string): Promi
 }
 
 /**
+ * Cache for security analysis results (60 second TTL).
+ * Allows rapid-fire acknowledge commands without re-analyzing.
+ */
+const securityAnalysisCache = new Map<string, { issues: SecurityIssue[]; expiresAt: number }>();
+const SECURITY_CACHE_TTL_MS = 60_000; // 60 seconds
+
+/**
  * Run a fresh security analysis and return issues (for acknowledge command).
  * Does NOT write files or update docs.
+ * Results are cached for 60 seconds to allow multiple acknowledges.
  */
 export async function analyzeSecurityOnly(guild: Guild): Promise<SecurityIssue[]> {
+  const cached = securityAnalysisCache.get(guild.id);
+  if (cached && cached.expiresAt > Date.now()) {
+    return cached.issues;
+  }
+
   const roles = await fetchRoles(guild);
   const channels = await fetchChannels(guild, roles);
-  return analyzeSecurityIssues(roles, channels);
+  const issues = analyzeSecurityIssues(roles, channels);
+
+  securityAnalysisCache.set(guild.id, {
+    issues,
+    expiresAt: Date.now() + SECURITY_CACHE_TTL_MS,
+  });
+
+  return issues;
 }
 
 /**
@@ -1044,11 +1065,13 @@ Issues: ${result.issueCount} (${result.criticalCount} critical, ${result.highCou
     execSync(`git remote set-url origin https://github.com/${repo}.git`, { cwd });
 
     const commitUrl = `https://github.com/${repo}/commit/${commitHash}`;
+    const docsUrl = `https://github.com/${repo}/blob/main/docs/internal-info/CONFLICTS.md`;
 
     return {
       success: true,
       commitHash,
       commitUrl,
+      docsUrl,
     };
   } catch (err) {
     // Reset git config to original user if push failed
