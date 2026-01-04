@@ -7,17 +7,19 @@ All commands are registered per-server and updated with `npm run deploy:cmds`.
 | Command | What It Does | Who Can Use |
 |---------|-------------|-------------|
 | `/gate` | Submit join application | Everyone |
-| `/accept` | Approve an application | Mods |
-| `/reject` | Deny an application | Mods |
-| `/kick` | Remove a member | Mods with Kick permission |
-| `/unclaim` | Release a claimed application | Mods |
+| `/accept` | Approve an application | Gatekeeper |
+| `/reject` | Deny an application | Gatekeeper |
+| `/kick` | Remove a member | Gatekeeper |
+| `/unclaim` | Release a claimed application | Gatekeeper |
 | `/health` | Check bot status | Everyone |
-| `/config` | Change server settings | Admins |
-| `/modmail` | Close or reopen tickets | Mods |
-| `/analytics` | View stats report | Mods |
-| `/modstats` | View mod performance | Mods |
-| `/send` | Send message as bot | Admins |
-| `/flag` | Mark user as potential bot | Mods |
+| `/config` | Change server settings | Admin+ |
+| `/stats` | View mod stats and analytics | Gatekeeper+ |
+| `/send` | Send message as bot | ManageMessages |
+| `/flag` | Mark user as potential bot | Junior Mod+ |
+| `/isitreal` | Check if images are AI-generated | Junior Mod+ |
+| `/movie` | Movie night attendance tracking | Moderator+ |
+| `/event` | Event tracking (movie/game nights) | Moderator+ |
+| `/audit` | Server and NSFW audits | CM+ |
 
 ## How Commands Work
 

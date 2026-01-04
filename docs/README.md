@@ -58,9 +58,9 @@ The Bot Handbook has everything you need - commands, features, and how to use th
 
 > **Re-generate:** Use `/audit security` in Discord or run `npx dotenvx run -- tsx scripts/audit-server-full.ts`
 
-### Roadmap
-- [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Future ideas
-- [Rejected Ideas](roadmap/REJECTED.md) - Ideas we decided against
+### Roadmap & Ideas
+- [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Features to consider later
+- [Rejected Ideas](roadmap/REJECTED.md) - Features we decided against
 
 ---
 

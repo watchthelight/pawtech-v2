@@ -36,7 +36,7 @@
          ┌───────▼────────┐
          │  Telemetry     │
          │  (Sentry SDK)  │
-         │  [403 blocked] │
+         │  [optional]    │
          └────────────────┘
 ```
 
@@ -99,9 +99,9 @@ Generates "pretty cards" (rich embeds) for all moderator actions and posts to gu
 - Handle fallback when channel unreachable (log to console)
 - Track action types: `claim`, `unclaim`, `accept`, `reject`, `kick`, `modmail_open`, `modmail_close`, `config_change`
 
-**Known Issue**: `logging_channel_id` column missing from `configs` table; `/config set logging` fails.
+**Note**: Logging channel is configurable via `/config set logging` and stored in the database.
 
-### Analytics Module (`src/commands/analytics.ts`, `modstats.ts`)
+### Analytics Module (`src/commands/stats/`)
 
 Queries `review_action` and `action_log` tables to generate performance metrics.
 
@@ -176,7 +176,7 @@ Queries `review_action` and `action_log` tables to generate performance metrics.
 | Database    | better-sqlite3 (SQLite 3.x)  | Synchronous API; file at `./data/data.db`      |
 | Build       | tsup (esbuild)               | Fast bundler; outputs ESM to `dist/`           |
 | Config      | dotenvx                      | Environment variable loader                    |
-| Telemetry   | @sentry/node + OpenTelemetry | 403 unauthorized; awaiting DSN/project fix     |
+| Telemetry   | @sentry/node + OpenTelemetry | Optional; requires valid SENTRY_DSN env var    |
 | Deployment  | Systemd / PM2 (bare-metal)   | No containerization yet; local file DB         |
 
 ## Error Handling Strategy
@@ -191,7 +191,7 @@ try {
     // Handle duplicate application
     return interaction.reply({ content: "Already submitted.", ephemeral: true });
   }
-  Sentry.captureException(error); // [Known Issue] 403 blocked
+  Sentry.captureException(error); // Requires valid SENTRY_DSN
   console.error("DB error:", error);
   return interaction.reply({ content: "Database error. Try again.", ephemeral: true });
 }
@@ -218,7 +218,6 @@ try {
 const loggingChannel = getLoggingChannel(guildId); // DB → env → null
 if (!loggingChannel) {
   console.warn("No logging channel; skipping action card");
-  // [Known Issue] Fallback never triggers; LOGGING_CHANNEL env not read
   return;
 }
 
@@ -244,7 +243,7 @@ CREATE TABLE configs (
   acceptance_message TEXT,
   rejection_message TEXT,
   auto_kick_rejected INTEGER DEFAULT 0,
-  -- [Missing] logging_channel_id TEXT
+  logging_channel_id TEXT,
   created_at TEXT NOT NULL,
   updated_at TEXT NOT NULL
 );

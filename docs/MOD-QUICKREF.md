@@ -30,15 +30,15 @@ Made a mistake with a permanent rejection? `/unblock target:@Username` lets them
 
 ## Checking Your Stats
 
-Curious how you're doing? Run `/modstats user moderator:@YourName` to see your approval rate, response times, and activity breakdown. You can adjust the time range with `days:30` or whatever period you want.
+Curious how you're doing? Run `/stats user moderator:@YourName` to see your approval rate, response times, and activity breakdown. You can adjust the time range with `days:30` or whatever period you want.
 
-To see how everyone's doing, `/modstats leaderboard` shows rankings by review count. Great for friendly competition or seeing who's been most active.
+To see how everyone's doing, `/stats leaderboard` shows rankings by review count. Great for friendly competition or seeing who's been most active.
 
-For server-wide trends, `/approval-rate` shows the overall approve vs reject breakdown, and `/analytics` gives you visual charts of activity patterns — helpful for spotting when reviews tend to pile up.
+For server-wide trends, `/stats approval-rate` shows the overall approve vs reject breakdown.
 
 ## Server Activity
 
-Want to know when the server is busiest? `/activity` shows a heatmap of message activity by day and hour. You can look back up to 8 weeks with `weeks:8`.
+Want to know when the server is busiest? `/stats activity` shows a heatmap of message activity by day and hour. You can look back up to 8 weeks with `weeks:8`.
 
 To check if the bot is running smoothly, `/health` shows uptime and response latency.
 

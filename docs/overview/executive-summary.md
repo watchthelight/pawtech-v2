@@ -25,9 +25,10 @@ Every action creates a colored card in the logging channel:
 
 ### 4. Analytics
 
-- **`/modstats`** - See moderator performance (claims, approvals, rejections, response time)
-- **`/analytics`** - View reports
-- **`/analytics-export`** - Download data as CSV or JSON
+- **`/stats leaderboard`** - See moderator rankings
+- **`/stats user`** - Individual moderator performance (claims, approvals, rejections, response time)
+- **`/stats activity`** - View server activity heatmap
+- **`/stats export`** - Download data as CSV
 
 ### 5. Configuration
 
@@ -43,10 +44,14 @@ Use `/config` to set logging channels, custom messages, and other settings per s
 All core features are complete:
 - Review flow (claim, approve, reject)
 - Modmail system
-- `/modstats` analytics
+- `/stats` analytics (leaderboard, user stats, activity heatmap)
 - `/send` command
 - Pretty card logs
 - `/config` settings
+- Event tracking (movie nights, game nights)
+- AI image detection (`/isitreal`)
+- Avatar NSFW scanning (`/audit nsfw`)
+- Permission system with role hierarchy
 
 ## Performance
 
@@ -88,24 +93,6 @@ All core features are complete:
    - Card appears in logging channel: "Accepted by @Moderator"
    - User gets member role (if accepted)
 
-## To-Do List
-
-### Fix Now
-1. Add `logging_channel_id` to database (needed for `/config`)
-2. Fix database migration issues
-3. Fix Sentry error tracking
-4. Save application history when submitted
-
-### Fix Soon
-1. Make sure all actions create log cards
-2. Handle missing Discord permissions better
-3. Add modmail data to analytics exports
-
-### Fix Later
-1. Add PostgreSQL support
-2. Add automated tests
-3. Add performance monitoring and alerts
-
 ## Summary
 
-Pawtropolis Tech is a working moderation bot with review, modmail, and logging features. The bot performs well. Current work focuses on fixing database issues and improving data tracking.
+Pawtropolis Tech is a production-ready moderation bot with review, modmail, analytics, and event tracking features. The bot is actively maintained with regular security updates and feature improvements. See the [CHANGELOG](../CHANGELOG.md) for recent updates.
