@@ -49,7 +49,7 @@ describe("safeReply", () => {
     } as unknown as ChatInputCommandInteraction;
 
     await errorCard.safeReply(interaction, { content: "hi", ephemeral: true });
-    expect(reply).toHaveBeenCalledWith({ content: "hi", ephemeral: true, flags: 64 });
+    expect(reply).toHaveBeenCalledWith({ content: "hi", ephemeral: true, flags: 0 });
   });
 
   /**
@@ -92,7 +92,7 @@ describe("safeReply", () => {
     } as unknown as ChatInputCommandInteraction;
 
     await errorCard.safeReply(interaction, { content: "later", ephemeral: true });
-    expect(followUp).toHaveBeenCalledWith({ content: "later", ephemeral: true, flags: 64 });
+    expect(followUp).toHaveBeenCalledWith({ content: "later", ephemeral: true, flags: 0 });
   });
 });
 
