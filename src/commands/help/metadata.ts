@@ -76,7 +76,7 @@ export const CATEGORY_INFO: Record<CommandCategory, CategoryInfo> = {
     emoji: "",
     label: "Analytics",
     description: "Statistics and performance metrics",
-    tip: "Check `/activity` for server engagement heatmaps.",
+    tip: "Use `/stats` for all analytics - activity heatmaps, approval rates, and moderator metrics.",
   },
   messaging: {
     emoji: "",

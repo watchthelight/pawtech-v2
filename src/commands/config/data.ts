@@ -244,6 +244,11 @@ export const data = new SlashCommandBuilder()
           .addNumberOption((o) => o.setName("weight_model").setDescription("Model weight (0-1)").setRequired(false).setMinValue(0.0).setMaxValue(1.0))
           .addNumberOption((o) => o.setName("weight_edge").setDescription("Edge weight (0-1)").setRequired(false).setMinValue(0.0).setMaxValue(1.0))
       )
+      // Event thresholds
+      .addSubcommand((sc) =>
+        sc.setName("game_threshold").setDescription("Set game night qualification percentage")
+          .addIntegerOption((o) => o.setName("percentage").setDescription("Percentage of event duration required (10-90)").setRequired(true).setMinValue(10).setMaxValue(90))
+      )
   )
   .addSubcommandGroup((group) =>
     group
@@ -263,6 +268,11 @@ export const data = new SlashCommandBuilder()
         sc
           .setName("movie_config")
           .setDescription("View current movie night configuration")
+      )
+      .addSubcommand((sc) =>
+        sc
+          .setName("game_config")
+          .setDescription("View current game night configuration")
       )
       .addSubcommand((sc) =>
         sc

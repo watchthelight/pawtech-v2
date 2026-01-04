@@ -105,8 +105,8 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 
 | Command | Description |
 |---------|-------------|
-| `/modstats leaderboard` | View ranked list of moderators by application decisions |
-| `/modstats user @moderator` | View detailed stats for a specific moderator |
+| `/stats leaderboard` | View ranked list of moderators by application decisions |
+| `/stats user @moderator` | View detailed stats for a specific moderator |
 
 ---
 
@@ -138,7 +138,7 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 
 | Command | Description |
 |---------|-------------|
-| `/activity` | View server activity heatmap with message trends |
+| `/stats activity` | View server activity heatmap with message trends |
 | `/skullmode chance:<N>` | Set the odds (1-1000) for random skull reactions |
 | `/update activity` | Set bot's Discord activity (Playing, Watching, etc.) |
 | `/update status` | Set bot's custom status text |
@@ -169,8 +169,8 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/panic on` | Enable emergency mode (stops all role automation) |
 | `/panic off` | Disable emergency mode |
 | `/panic status` | Check current panic mode state |
-| `/modstats export` | Export all moderator metrics as CSV |
-| `/modstats reset` | Clear and rebuild statistics (password required) |
+| `/stats export` | Export all moderator metrics as CSV |
+| `/stats reset` | Clear and rebuild statistics (password required) |
 | `/config isitreal` | Configure AI detection API keys |
 | `/config toggleapis` | Toggle API services on/off |
 | `/review-set-notify-config` | Configure forum notifications |
@@ -222,10 +222,8 @@ These commands use Discord's built-in permission system rather than role-based c
 | `/redeemreward` | ManageRoles | Assign an art reward to a user |
 | `/resetdata` | ManageGuild + Password | Reset metrics data from now forward |
 | `/review-set-listopen-output` | ManageGuild | Configure listopen visibility |
-| `/modhistory` | Administrator | View detailed mod action history |
-| `/analytics` | Staff/Owner | Visual activity charts |
-| `/analytics-export` | Staff/Owner | Export activity data as CSV |
-| `/approval-rate` | Staff | Server-wide approval analytics |
+| `/stats history` | Administrator | View detailed mod action history |
+| `/stats approval-rate` | Staff | Server-wide approval analytics |
 
 ---
 
@@ -360,12 +358,12 @@ The permission system always checks bypass conditions first:
 |-------|----------|------------------|
 | Public | Anyone | `/help`, `/health` |
 | Gatekeeper | [GK] | `/accept`, `/reject`, `/kick`, `/search` |
-| Gatekeeper+ | GK+ | `/modstats leaderboard` |
+| Gatekeeper+ | GK+ | `/stats leaderboard`, `/stats user` |
 | Junior Mod+ | JM+ | `/flag`, `/isitreal` |
-| Moderator+ | M+ | `/movie` |
-| Senior Mod+ | SM+ | `/activity`, `/skullmode` |
+| Moderator+ | M+ | `/movie`, `/event` |
+| Senior Mod+ | SM+ | `/stats activity`, `/skullmode` |
 | Administrator+ | A+ | `/config` |
-| Senior Admin+ | SA+ | `/panic`, `/modstats reset` |
+| Senior Admin+ | SA+ | `/panic`, `/stats export/reset` |
 | Community Manager+ | CM+ | `/audit`, `/backfill`, `/gate setup` |
 | Owner Only | [BO/SD] | `/database`, `/poke` |
 | Discord Perm | ManageMessages | `/send`, `/purge` |

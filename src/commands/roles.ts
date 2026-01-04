@@ -69,6 +69,20 @@ export const data = new SlashCommandBuilder()
   )
   .addSubcommand((sub) =>
     sub
+      .setName("add-game-tier")
+      .setDescription("Add a game night attendance tier")
+      .addStringOption((opt) =>
+        opt.setName("tier_name").setDescription("Tier name (e.g., Game Champion)").setRequired(true)
+      )
+      .addRoleOption((opt) =>
+        opt.setName("role").setDescription("The tier role").setRequired(true)
+      )
+      .addIntegerOption((opt) =>
+        opt.setName("games_required").setDescription("Number of game nights needed").setRequired(true).setMinValue(1)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
       .setName("list")
       .setDescription("View configured role mappings")
       .addStringOption((opt) =>
@@ -79,7 +93,8 @@ export const data = new SlashCommandBuilder()
           .addChoices(
             { name: "Level Tiers", value: "level" },
             { name: "Level Rewards", value: "level_reward" },
-            { name: "Movie Tiers", value: "movie_night" }
+            { name: "Movie Tiers", value: "movie_night" },
+            { name: "Game Tiers", value: "game_night" }
           )
       )
   )
@@ -106,6 +121,14 @@ export const data = new SlashCommandBuilder()
     sub
       .setName("remove-movie-tier")
       .setDescription("Remove a movie tier")
+      .addStringOption((opt) =>
+        opt.setName("tier_name").setDescription("Tier name to remove").setRequired(true)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub
+      .setName("remove-game-tier")
+      .setDescription("Remove a game tier")
       .addStringOption((opt) =>
         opt.setName("tier_name").setDescription("Tier name to remove").setRequired(true)
       )
@@ -146,6 +169,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     case "add-movie-tier":
       await handleAddMovieTier(interaction);
       break;
+    case "add-game-tier":
+      await handleAddGameTier(interaction);
+      break;
     case "list":
       await handleList(interaction);
       break;
@@ -157,6 +183,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       break;
     case "remove-movie-tier":
       await handleRemoveMovieTier(interaction);
+      break;
+    case "remove-game-tier":
+      await handleRemoveGameTier(interaction);
       break;
     default:
       await interaction.reply({
@@ -358,6 +387,18 @@ async function handleList(interaction: ChatInputCommandInteraction): Promise<voi
     }
   }
 
+  // Game tiers
+  if (!filterType || filterType === "game_night") {
+    const gameTiers = getRoleTiers(guild.id, "game_night");
+    if (gameTiers.length > 0) {
+      const lines = gameTiers.map(t => `${t.tier_name} (${t.threshold} games): <@&${t.role_id}>`);
+      embed.addFields({ name: "Game Night Tiers", value: lines.join("\n") || "None" });
+      gameTiers.forEach(t => configuredRoleIds.add(t.role_id));
+    } else if (!filterType) {
+      embed.addFields({ name: "Game Night Tiers", value: "None configured" });
+    }
+  }
+
   // Check for misconfigured roles and collect warnings
   const warnings: string[] = [];
   for (const roleId of Array.from(configuredRoleIds)) {
@@ -499,6 +540,88 @@ async function handleRemoveMovieTier(interaction: ChatInputCommandInteraction): 
     logger.error({ evt: "remove_movie_tier_error", err }, "Error removing movie tier");
     await interaction.reply({
       content: `❌ Failed to remove movie tier: ${err}`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleAddGameTier(interaction: ChatInputCommandInteraction): Promise<void> {
+  const guild = interaction.guild!;
+  const tierName = interaction.options.getString("tier_name", true);
+  const role = interaction.options.getRole("role", true);
+  const gamesRequired = interaction.options.getInteger("games_required", true);
+
+  // Pre-flight check: verify bot can manage this role
+  const check = canManageRoleSync(guild, role as Role);
+  if (!check.canManage) {
+    await interaction.reply({
+      content: `Cannot configure this role: ${check.reason}\n\nPlease choose a role that is below the bot's highest role.`,
+      ephemeral: true,
+    });
+    return;
+  }
+
+  try {
+    const stmt = db.prepare(`
+      INSERT OR REPLACE INTO role_tiers (guild_id, tier_type, tier_name, role_id, threshold)
+      VALUES (?, 'game_night', ?, ?, ?)
+    `);
+    stmt.run(guild.id, tierName, role.id, gamesRequired);
+
+    logger.info({
+      evt: "add_game_tier",
+      guildId: guild.id,
+      tierName,
+      roleId: role.id,
+      gamesRequired,
+      invokedBy: interaction.user.id,
+    }, `Added game tier: ${tierName} (${gamesRequired} games)`);
+
+    await interaction.reply({
+      content: `✅ Added game tier **${tierName}** (${gamesRequired} game nights) → **${role.name}**`,
+      ephemeral: true,
+    });
+  } catch (err) {
+    logger.error({ evt: "add_game_tier_error", err }, "Error adding game tier");
+    await interaction.reply({
+      content: `❌ Failed to add game tier: ${err}`,
+      ephemeral: true,
+    });
+  }
+}
+
+async function handleRemoveGameTier(interaction: ChatInputCommandInteraction): Promise<void> {
+  const guild = interaction.guild!;
+  const tierName = interaction.options.getString("tier_name", true);
+
+  try {
+    const result = db.prepare(`
+      DELETE FROM role_tiers
+      WHERE guild_id = ? AND tier_type = 'game_night' AND tier_name = ?
+    `).run(guild.id, tierName);
+
+    if (result.changes > 0) {
+      logger.info({
+        evt: "remove_game_tier",
+        guildId: guild.id,
+        tierName,
+        invokedBy: interaction.user.id,
+      }, `Removed game tier ${tierName}`);
+
+      await interaction.reply({
+        content: `✅ Removed game tier **${tierName}**`,
+        ephemeral: true,
+      });
+    } else {
+      await interaction.reply({
+        content: `⚠️ No game tier found with name **${tierName}**`,
+        ephemeral: true,
+      });
+    }
+  } catch (err) {
+    logger.error({ evt: "remove_game_tier_error", err }, "Error removing game tier");
+    await interaction.reply({
+      content: `❌ Failed to remove game tier: ${err}`,
       ephemeral: true,
     });
   }

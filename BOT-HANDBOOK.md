@@ -25,8 +25,9 @@ All bot commands and how to use them.
 1. [Gate System](#gate-system-application-review) — Reviewing applications
 2. [Mod Tools](#moderator-tools) — Stats, flags, audits
 3. [Artist Rotation](#artist-rotation) — Art queue and jobs
-4. [Movie Night](#movie-night) — Event tracking
-5. [Role Automation](#role-automation) — Auto-assign roles
+4. [Movie Night](#movie-night) — Movie event tracking
+5. [Game Night](#game-night) — Game event tracking
+6. [Role Automation](#role-automation) — Auto-assign roles
 6. [Configuration](#configuration) — Bot settings
 7. [Utility Commands](#utility--admin) — Help, send, purge, etc.
 8. [Permissions](#permission-reference) — Who can do what
@@ -185,7 +186,7 @@ Step by step:
 5. Posts a welcome message in your general channel (uses the template from `/gate welcome set`)
 6. Closes their modmail thread if they had one open
 7. Updates the review card to show "Approved" in green
-8. Logs the action for `/modstats` tracking
+8. Logs the action for `/stats` tracking
 
 **Common issues and what the bot does:**
 
@@ -455,45 +456,80 @@ The bot shows these as "p50" and "p95" which are percentiles:
 - **p50** (median) — Half of the reviews were faster than this, half were slower
 - **p95** — 95% of reviews were faster than this (shows your slowest cases)
 
-### `/modstats`
-**Who can use it:** Staff
+### `/stats`
+**Who can use it:** Various (see subcommands)
 
-See how active moderators are and how they're performing.
+Unified analytics command for server activity and moderator performance metrics.
 
-| Subcommand | What it does |
-|------------|--------------|
-| `leaderboard` | Ranks mods by how many apps they've handled |
-| `user` | Deep dive into a specific mod's stats |
-| `export` | Download everything as a CSV file |
-| `reset` | Wipe and rebuild the stats (needs admin password) |
+| Subcommand | Permission | What it does |
+|------------|------------|--------------|
+| `activity` | Senior Mod+ | Server activity heatmap with trends |
+| `approval-rate` | Staff | Server-wide approval/rejection analytics |
+| `leaderboard` | Gatekeeper+ | Ranks mods by decisions |
+| `user` | Gatekeeper+ | Deep dive into a specific mod's stats |
+| `export` | Senior Admin+ | Download all mod metrics as CSV |
+| `reset` | Senior Admin+ | Wipe and rebuild stats (needs password) |
+| `history` | Leadership | Detailed mod action history with export |
 
-**Options:**
+**Common Options:**
 | Option | Works with | What it does |
 |--------|------------|--------------|
-| `days` | All | How far back to look (default: 30 days) |
-| `moderator` | `user` | Which mod to analyze |
+| `weeks` | `activity` | How many weeks (1-8, default: 1) |
+| `days` | Most others | How far back to look (default: 30) |
+| `moderator` | `user`, `history` | Which mod to analyze |
+| `export` | `leaderboard`, `history` | Download as CSV |
 
-**The leaderboard shows:**
-- Rankings by total decisions (approves + rejects + kicks + modmail opens)
-- Accept and reject counts for each mod
-- Average response time (how long from claim to decision)
-- Color-coded by their highest role for easy identification
-- Shows top 15 mods (use export to see everyone)
+#### `/stats activity`
+Visual heatmap showing server activity patterns over time (when people are online, peak hours, etc.).
 
-**Individual mod stats show:**
-- Total decisions they've made
-- Accept vs reject breakdown with exact counts
-- Modmail threads opened (shows engagement with applicants)
-- Avg Claim → Decision time (how fast they work)
-- Server Avg: Submit → First Claim time (for comparison)
+**Shows:**
+- Total messages and average per hour
+- Busiest and least active hours
+- Peak and quietest days
+- Week-over-week growth (if viewing 2+ weeks)
 
-The individual stats let you compare a mod's speed to the server average. If someone's claim-to-decision time is way higher than the server's submit-to-first-claim time, it might mean they're being extra thorough (good!) or getting stuck on decisions (needs support).
+#### `/stats approval-rate`
+Server-wide approval/rejection trends with period comparison.
+
+**Shows:**
+- Total decisions with breakdown (approved, rejected, kicked, perm rejected)
+- Trend comparison vs previous period (↑ up, ↓ down, ↔ stable)
+- Top 5 rejection reasons
+
+#### `/stats leaderboard`
+Ranks moderators by decisions. Shows top 15 with image, use `export:true` for full list.
+
+**Shows:**
+- Rankings by total decisions
+- Accept/reject counts per mod
+- Average response time
+- Color-coded by role
+
+#### `/stats user`
+Individual moderator performance metrics.
+
+**Shows:**
+- Total decisions, accepts, rejects, modmail
+- Avg Claim → Decision time (their speed)
+- Server Avg: Submit → First Claim (for comparison)
+
+#### `/stats history`
+Leadership-only detailed mod action history with optional CSV export.
+
+**Shows:**
+- Every action they've taken
+- Response time percentiles (p50, p95)
+- Anomaly detection (flags unusual patterns)
+- CSV export link (expires in 24 hours)
 
 **Examples:**
 ```
-/modstats leaderboard days:7
-/modstats user moderator:@ModName days:30
-/modstats export days:90
+/stats activity weeks:4
+/stats approval-rate days:7
+/stats leaderboard days:7
+/stats user moderator:@ModName days:30
+/stats export days:90
+/stats history moderator:@ModName days:60 export:true
 ```
 
 ---
@@ -534,99 +570,6 @@ graph TD
 ```
 
 **Important note:** This compares each mod to their own history, not to other mods. A consistently slow mod won't trigger alerts because slow is their normal. If you want to compare mods to each other, use the leaderboard.
-
----
-
-### `/modhistory`
-**Who can use it:** Leadership only (server owners or designated leaders)
-
-This gives you a detailed look at everything a specific mod has done. It's for oversight and performance reviews, which is why it's restricted to leadership.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `moderator` | **Yes** | Who to look into |
-| `days` | No | How far back (default: 30, max: 365) |
-| `export` | No | Download as CSV |
-
-**You'll see:**
-- Every accept, reject, and kick they've made
-- Timestamps for each action
-- How long they took to respond
-- The reasons they gave for rejections
-- Anomaly scores (flags unusual patterns)
-- Reject rate percentage (rejects divided by total decisions)
-- Response time percentiles (p50 and p95)
-
-**What the CSV export includes:**
-When you export to CSV, you get a file with every single action that mod took. Each row has:
-- Action type (approve, reject, kick, etc.)
-- Timestamp (when it happened)
-- Who they acted on (user ID)
-- Reason given (for rejects)
-- Response time (in milliseconds)
-- Application ID (for reference)
-
-The CSV link expires after 24 hours for security reasons.
-
-**Examples:**
-```
-/modhistory moderator:@ModName days:60
-/modhistory moderator:@ModName days:90 export:true
-```
-
----
-
-### `/analytics`
-**Who can use it:** Staff
-
-Visual charts showing review activity over time. Helpful for spotting busy periods or figuring out when you need more coverage.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `from` | No | Start date (Unix timestamp) |
-| `to` | No | End date (Unix timestamp) |
-| `all-guilds` | No | Include all servers (bot owners only) |
-| `bucket` | No | Group by `day` or `week` |
-
-**The charts show:**
-- How many apps came in over time (volume trends)
-- Accept vs reject vs kick distribution
-- Busiest days and times
-- Whether activity is going up or down
-
-**Time buckets explained:**
-- **Daily buckets** — Each bar = one day. Good for spotting weekly patterns (like "Mondays are busy")
-- **Weekly buckets** — Each bar = one week. Good for long-term trends (like "summer is slower")
-
-Default time range is the last 7 days if you don't specify `from` and `to`.
-
-**Examples:**
-```
-/analytics
-/analytics bucket:daily
-/analytics bucket:week
-```
-
----
-
-### `/analytics-export`
-**Who can use it:** Staff
-
-Same data as `/analytics` but downloaded as a CSV so you can dig into it yourself with Excel or Google Sheets.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `from` | No | Start date (Unix timestamp) |
-| `to` | No | End date (Unix timestamp) |
-| `all-guilds` | No | Include all servers (owners only) |
-
-The CSV includes columns for:
-- Time bucket start and end
-- Total actions
-- Approvals count
-- Rejections count
-- Permanent rejects count
-- Kicks count
 
 ---
 
@@ -805,45 +748,6 @@ Engine 4:  60%
 - API services have rate limits — don't spam the command
 - Not all services are 100% accurate — use results as guidance, not absolute proof
 - Some art styles (digital art, anime) may get false positives
-
----
-
-### `/approval-rate`
-**Who can use it:** Staff
-
-See the big picture — what percentage of applications get approved vs rejected server-wide.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `days` | No | How far back to look (default: 30) |
-
-**You'll see:**
-- Total applications received
-- Approval rate percentage (approvals divided by all decisions)
-- Rejection rate percentage
-- Kick rate percentage
-- Permanent reject rate percentage
-- How it compares to the previous period (trend up or down)
-- Common rejection reasons (top 5 most-used reasons)
-
-**Understanding the trend:**
-The bot compares your current period to the previous period of the same length. So if you ask for the last 30 days, it compares to the 30 days before that.
-
-- **Trend up** — You're approving more than you used to
-- **Trend down** — You're rejecting more than you used to
-- **Stable** — Less than 1% change (basically the same)
-
-A declining approval rate might mean:
-- Stricter standards (intentional policy change)
-- Lower quality applicants (need to review your advertising)
-- Burnt out moderators being overly harsh (check in with the team)
-
-**Examples:**
-```
-/approval-rate
-/approval-rate days:7
-/approval-rate days:90
-```
 
 ---
 
@@ -1519,6 +1423,74 @@ You need to stay **at least 30 minutes** during a movie night for it to count to
 
 ---
 
+## Game Night
+
+Track who shows up to game nights with percentage-based qualification. Unlike movie nights which have a fixed time threshold (30 minutes), game nights qualify users based on what percentage of the event they attended.
+
+### How It Works
+
+Game night tracking works similarly to movie night, but the qualification is based on event duration:
+
+1. **Start tracking** — Staff runs `/event game start` and picks the voice channel
+2. **Bot starts watching** — Same voice channel monitoring as movie nights
+3. **Time gets counted** — Every join/leave is recorded
+4. **End the event** — Run `/event game end` to stop tracking
+5. **Bot calculates percentage** — For each person, the bot divides their time by total event duration
+6. **Qualification check** — Anyone who attended more than the threshold percentage (default 50%) qualifies
+
+**Example:** A 2-hour game night with 50% threshold:
+- Event duration: 120 minutes
+- Required to qualify: 60 minutes (50% of 120)
+- User who attended 65 minutes: **Qualified** (54%)
+- User who attended 45 minutes: **Not qualified** (37%)
+
+### `/event game`
+**Who can use it:** Staff
+
+| Subcommand | What it does |
+|------------|--------------|
+| `start` | Begin tracking attendance in a voice channel |
+| `end` | Finish the event and calculate qualification |
+| `attendance` | See who attended or check a specific person's history |
+| `add` | Manually add minutes to someone's current event attendance |
+| `credit` | Credit attendance to a past event date |
+| `bump` | Give someone full credit for an event (compensation) |
+| `resume` | Check if a session was recovered after bot restart |
+
+**Start options:**
+| Option | Required? | What it does |
+|--------|-----------|--------------|
+| `channel` | **Yes** | Which voice channel to track |
+
+**Examples:**
+```
+/event game start channel:#game-night-vc
+/event game end
+/event game attendance
+/event game attendance user:@Username
+/event game add user:@Username minutes:30 reason:Was on mute but watching
+```
+
+### Configuration
+
+Use `/config set game_threshold` to change the qualification percentage (default: 50%).
+Use `/config get game_config` to view current settings.
+
+| Setting | Default | Range | Description |
+|---------|---------|-------|-------------|
+| `game_threshold` | 50% | 10-90% | Percentage of event duration required to qualify |
+
+### Difference from Movie Nights
+
+| Feature | Movie Night | Game Night |
+|---------|-------------|------------|
+| Qualification | Fixed time (e.g., 30 min) | Percentage of event (e.g., 50%) |
+| Works for | Fixed-length events | Variable-length events |
+| Command | `/event movie` or `/movie` | `/event game` |
+| Tier roles | Has tier system | Not yet (just tracks attendance) |
+
+---
+
 ## Role Automation
 
 Set up automatic role assignments based on Amaribot levels and movie night attendance. This feature watches for certain events (like someone leveling up) and automatically gives them roles without staff needing to do it manually.
@@ -2108,49 +2080,6 @@ If the bot doesn't respond to `/health` within 5 seconds, it's probably stuck or
 
 ---
 
-### `/activity`
-**Who can use it:** Staff
-
-See a heatmap of when the server is most active. Shows message volume by day and hour, helping you understand when your community is online.
-
-| Option | Required? | What it does |
-|--------|-----------|--------------|
-| `weeks` | No | How far back to look (1-8 weeks, default: 1) |
-
-#### What the Heatmap Shows
-
-The bot generates a visual heatmap image with:
-- **Days of week** on one axis (Sunday through Saturday)
-- **Hours of day** on the other axis (0-23, in UTC)
-- **Color intensity** representing message volume (darker = more activity)
-- **Trend analysis** comparing to previous periods
-
-**Additional stats included:**
-- Total messages in the period
-- Average messages per hour
-- Busiest hours (when the most messages happen)
-- Least active hours (when it's quietest)
-- Peak days (which days of the week are busiest)
-- Quietest days
-- Week-over-week growth percentage (if viewing multiple weeks)
-
-**Use cases:**
-- Figuring out when to schedule events for max attendance
-- Understanding when you need more moderator coverage
-- Spotting unusual activity patterns (raids, bots, etc.)
-- Tracking server growth over time
-
-**Examples:**
-```
-/activity
-/activity weeks:4
-/activity weeks:8
-```
-
-**Note:** All times are in UTC. If your community is primarily in a different timezone, you'll need to mentally adjust the hours (or the bot owner can configure a timezone offset).
-
----
-
 ### `/backfill`
 **Who can use it:** Staff
 
@@ -2287,12 +2216,12 @@ This is an interactive wizard that helps you:
 |------------------|------------|----------|
 | **Everyone** | All server members | `/help`, `/health`, `/art getstatus` |
 | **Gatekeeper only** | Gatekeeper role | `/accept`, `/reject`, `/kick`, `/unclaim`, `/listopen`, `/unblock`, review card buttons |
-| **Gatekeeper+** | GK and above | `/modstats leaderboard`, `/modstats user` |
+| **Gatekeeper+** | GK and above | `/stats leaderboard`, `/stats user` |
 | **Junior Mod+** | JM and above | `/flag`, `/isitreal` |
 | **Moderator+** | M and above | `/movie` |
-| **Senior Mod+** | SM and above | `/activity`, `/skullmode`, `/update activity/status` |
+| **Senior Mod+** | SM and above | `/stats activity`, `/skullmode`, `/update activity/status` |
 | **Administrator+** | A and above | `/config` |
-| **Senior Admin+** | SA and above | `/panic`, `/modstats export/reset` |
+| **Senior Admin+** | SA and above | `/panic`, `/stats export/reset` |
 | **Community Manager+** | CM and above | `/update banner/avatar`, `/backfill`, `/audit` |
 | **Bot Owner only** | Server Dev or Bot Owner | `/database` |
 
@@ -2587,7 +2516,7 @@ Ask the bot owner if `LOGGING_CHANNEL` is set in the environment variables. If i
 #### Application stats or history are wrong
 
 **Symptoms:**
-- `/modstats` shows zero for a mod who definitely processed apps
+- `/stats` shows zero for a mod who definitely processed apps
 - `/search` doesn't show applications you know exist
 - Counts don't match what you remember
 
@@ -2600,7 +2529,7 @@ Ask the bot owner if `LOGGING_CHANNEL` is set in the environment variables. If i
 
 **Check the date range:**
 ```
-/modstats leaderboard days:90
+/stats leaderboard days:90
 /search user:@Username
 ```
 
@@ -2652,7 +2581,7 @@ The more details you provide, the faster support can help you.
 | `/reject` | Reject an application |
 | `/listopen` | See what's pending |
 | `/search` | Look up someone's history |
-| `/modstats leaderboard` | See mod activity |
+| `/stats leaderboard` | See mod activity |
 | `/health` | Check if bot's working |
 
 ### Emergency commands

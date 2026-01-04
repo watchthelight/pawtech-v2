@@ -10,6 +10,21 @@ All changes to Pawtropolis Tech are tracked here.
 
 - **Unclaim Button** - Review cards have an "Unclaim" button that requires typing "UNCLAIM" to confirm. Only the person who claimed it can unclaim.
 - **Incident Log** - Added `INCIDENTS.md` to track production incidents and resolutions
+- **Game Night Tracking** - New `/event game` command for game night attendance tracking with percentage-based qualification:
+  - `/event game start #channel` - Start tracking attendance in a voice channel
+  - `/event game end` - End event and calculate qualification based on % of event duration attended
+  - `/event game attendance` - View attendance stats (live during event, historical after)
+  - `/event game add/credit/bump` - Manual attendance adjustments
+  - `/config set game_threshold` - Configure qualification percentage (default: 50%)
+  - `/config get game_config` - View game night configuration
+- **Game Night Tier Roles** - Automatic tier role rewards for game night attendance:
+  - `/roles add-game-tier` - Configure tier roles (e.g., 1 game = T1, 5 games = T2)
+  - `/roles remove-game-tier` - Remove a game tier
+  - `/roles list` - View configured game tiers
+  - Automatically assigns roles when users qualify, removes lower tiers
+  - DMs users with progress updates after each game night
+- **Unified Event System** - `/event movie` now mirrors `/movie` (which is deprecated). Both movie and game nights use the same underlying tracking system.
+- **Combined Event Stats** - Movie and game night attendance tracked in same database for unified statistics
 
 ### Security
 
@@ -23,6 +38,26 @@ All changes to Pawtropolis Tech are tracked here.
 
 - **Modmail Open Message** - Now includes clearer instructions: explains that replies go to staff only, are confidential, and verification continues after modmail closes
 - **Permission System Redesign** - Commands now use specific role names instead of generic "staff" permissions. Each command requires a minimum role level. Bot owners and server devs can bypass all restrictions. Error messages show which roles you need. See `PERMS-MATRIX.md` for details.
+- **Analytics Command Consolidation** - Unified analytics commands under `/stats`:
+  - `/activity` → `/stats activity`
+  - `/approval-rate` → `/stats approval-rate`
+  - `/modstats leaderboard` → `/stats leaderboard`
+  - `/modstats user` → `/stats user`
+  - `/modstats export` → `/stats export`
+  - `/modstats reset` → `/stats reset`
+  - `/modhistory` → `/stats history`
+
+### Removed
+
+- **`/activity`** - Replaced by `/stats activity`
+- **`/approval-rate`** - Replaced by `/stats approval-rate`
+- **`/modstats`** - Replaced by `/stats`
+- **`/modhistory`** - Replaced by `/stats history`
+- **`/analytics`** and **`/analytics-export`** - Replaced by `/stats activity`
+
+### Deprecated
+
+- **`/movie` command** - Use `/event movie` instead. The `/movie` command still works but will be removed in a future version.
 
 ### Security
 

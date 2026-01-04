@@ -25,20 +25,18 @@ import { data as databaseData } from "./database.js";
 // Not ideal, but refactoring it would be a three-hour yak shave.
 import { modmailCommand } from "../features/modmail.js";
 import { isitRealContextMenu } from "./isitreal.js";
-import { analyticsData, analyticsExportData } from "./analytics.js";
-import { data as modstatsData } from "./modstats.js";
+import { data as statsData } from "./stats/index.js";
+import { data as eventData } from "./event/index.js";
 import { data as sendData } from "./send.js";
 import { data as resetdataData } from "./resetdata.js";
 import { data as purgeData } from "./purge.js";
 import { data as flagData } from "./flag.js";
 import { data as sampleData } from "./sample.js";
 import { data as listopenData } from "./listopen.js";
-import { data as modhistoryData } from "./modhistory.js";
 import { data as setNotifyConfigData } from "./review/setNotifyConfig.js";
 import { data as getNotifyConfigData } from "./review/getNotifyConfig.js";
 import { data as pokeData } from "./poke.js";
 import { data as unblockData } from "./unblock.js";
-import { data as activityData } from "./activity.js";
 import { data as backfillData } from "./backfill.js";
 import { data as reviewSetListopenOutputData } from "./review-set-listopen-output.js";
 import { data as movieData } from "./movie.js";
@@ -46,7 +44,6 @@ import { data as rolesData } from "./roles.js";
 // Yes, there's a panic button. No, you don't want to find out what it does the hard way.
 import { data as panicData } from "./panic.js";
 import { data as searchData } from "./search.js";
-import { data as approvalRateData } from "./approvalRate.js";
 import { data as artistqueueData } from "./artistqueue.js";
 import { data as redeemrewardData } from "./redeemreward.js";
 import { data as artData } from "./art.js";
@@ -77,28 +74,24 @@ export function buildCommands() {
 
     // Feature commands
     modmailCommand.toJSON(),
-    analyticsData.toJSON(),
-    analyticsExportData.toJSON(),
-    modstatsData.toJSON(),
+    statsData.toJSON(),
+    eventData.toJSON(),
     sendData.toJSON(),
     resetdataData.toJSON(),
     purgeData.toJSON(),
     flagData.toJSON(),
     sampleData.toJSON(),
     listopenData.toJSON(),
-    modhistoryData.toJSON(),
     setNotifyConfigData.toJSON(),
     getNotifyConfigData.toJSON(),
     pokeData.toJSON(),
     unblockData.toJSON(),
-    activityData.toJSON(),
     backfillData.toJSON(),
     reviewSetListopenOutputData.toJSON(),
     movieData.toJSON(),
     rolesData.toJSON(),
     panicData.toJSON(),
     searchData.toJSON(),
-    approvalRateData.toJSON(),
 
     // Artist rotation commands - the art queue feature nobody asked for but everyone uses
     artistqueueData.toJSON(),

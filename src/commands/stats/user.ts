@@ -1,6 +1,6 @@
 /**
- * Pawtropolis Tech -- src/commands/modstats/userStats.ts
- * WHAT: Individual moderator statistics handler.
+ * Pawtropolis Tech -- src/commands/stats/user.ts
+ * WHAT: Handler for /stats user - individual moderator statistics.
  * WHY: Provides detailed performance metrics for a specific moderator.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
@@ -8,34 +8,43 @@
 import {
   ChatInputCommandInteraction,
   EmbedBuilder,
-} from "discord.js";
-import { db } from "../../db/db.js";
-import { nowUtc } from "../../lib/time.js";
-import { logger } from "../../lib/logger.js";
-import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
-import { getAvgClaimToDecision, getAvgSubmitToFirstClaim, formatDuration } from "./helpers.js";
+  db,
+  nowUtc,
+  logger,
+  requireMinRole,
+  ROLE_IDS,
+  SAFE_ALLOWED_MENTIONS,
+  getAvgClaimToDecision,
+  getAvgSubmitToFirstClaim,
+  formatDuration,
+} from "./shared.js";
 
 /**
- * WHAT: Handle /modstats user subcommand.
- * WHY: Individual performance review + context (server avg).
+ * Handle /stats user subcommand.
+ * Shows detailed stats for a specific moderator.
  */
 export async function handleUser(interaction: ChatInputCommandInteraction): Promise<void> {
   if (!interaction.guildId) {
     await interaction.reply({
-      content: "❌ This command must be run in a guild.",
+      content: "This command must be run in a guild.",
       ephemeral: true,
     });
     return;
   }
 
-  // Defer reply - DB queries can take time
+  // Require Gatekeeper+
+  if (!requireMinRole(interaction, ROLE_IDS.GATEKEEPER, {
+    command: "stats user",
+    description: "Views individual moderator stats.",
+    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.GATEKEEPER }],
+  })) return;
+
   await interaction.deferReply();
 
   const moderator = interaction.options.getUser("moderator", true);
   const days = interaction.options.getInteger("days") ?? 30;
   const windowStartS = nowUtc() - days * 86400;
 
-  // Get decision counts for this moderator
   const row = db
     .prepare(
       `
@@ -66,35 +75,33 @@ export async function handleUser(interaction: ChatInputCommandInteraction): Prom
 
   if (!row || row.total === 0) {
     await interaction.editReply({
-      content: `📊 ${moderator.tag} has no decisions in the last ${days} days.`,
+      content: `${moderator.tag} has no decisions in the last ${days} days.`,
     });
     return;
   }
 
   const avgClaimToDecision = getAvgClaimToDecision(interaction.guildId, moderator.id, windowStartS);
-
   const avgSubmitToFirstClaim = getAvgSubmitToFirstClaim(interaction.guildId, windowStartS);
-
   const rejects = row.rejections + row.perm_reject + row.kicks;
 
   const embed = new EmbedBuilder()
-    .setTitle(`📊 Moderator Stats: ${moderator.tag}`)
+    .setTitle(`Moderator Stats: ${moderator.tag}`)
     .setDescription(`Performance metrics (last ${days} days)`)
     .setColor(0x5865f2)
     .setThumbnail(moderator.displayAvatarURL())
     .setTimestamp()
     .addFields(
       { name: "Decisions", value: `**${row.total}**`, inline: true },
-      { name: "Accepted", value: `✅ ${row.approvals}`, inline: true },
-      { name: "Rejected", value: `❌ ${rejects}`, inline: true },
-      { name: "Modmail", value: `💬 ${row.modmail}`, inline: true },
+      { name: "Accepted", value: `${row.approvals}`, inline: true },
+      { name: "Rejected", value: `${rejects}`, inline: true },
+      { name: "Modmail", value: `${row.modmail}`, inline: true },
       {
-        name: "Avg Claim → Decision",
+        name: "Avg Claim to Decision",
         value: formatDuration(avgClaimToDecision),
         inline: true,
       },
       {
-        name: "Server Avg: Submit → First Claim",
+        name: "Server Avg: Submit to First Claim",
         value: formatDuration(avgSubmitToFirstClaim),
         inline: true,
       }
@@ -107,6 +114,6 @@ export async function handleUser(interaction: ChatInputCommandInteraction): Prom
 
   logger.info(
     { guildId: interaction.guildId, moderatorId: moderator.id, days },
-    "[modstats] user stats displayed"
+    "[stats:user] displayed"
   );
 }

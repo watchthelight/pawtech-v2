@@ -76,6 +76,11 @@ import {
 } from "./movie.js";
 
 import {
+  executeSetGameThreshold,
+  executeGetGameConfig,
+} from "./game.js";
+
+import {
   executePokeAddCategory,
   executePokeRemoveCategory,
   executePokeExcludeChannel,
@@ -197,6 +202,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeSetAvatarThresholds(ctx);
     } else if (subcommand === "avatar_scan_advanced") {
       await executeSetAvatarScanAdvanced(ctx);
+    } else if (subcommand === "game_threshold") {
+      await executeSetGameThreshold(ctx);
     }
   } else if (subcommandGroup === "get") {
     if (subcommand === "logging") {
@@ -205,6 +212,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       await executeGetFlags(ctx);
     } else if (subcommand === "movie_config") {
       await executeGetMovieConfig(ctx);
+    } else if (subcommand === "game_config") {
+      await executeGetGameConfig(ctx);
     } else if (subcommand === "artist_rotation") {
       await executeGetArtistRotation(ctx);
     }

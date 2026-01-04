@@ -175,17 +175,9 @@ commands.set(config.data.name, wrapCommand("config", config.execute));
 commands.set(database.data.name, wrapCommand("database", database.execute));
 commands.set("modmail", wrapCommand("modmail", executeModmailCommand));
 
-// Analytics commands
-import {
-  executeAnalyticsCommand,
-  executeAnalyticsExportCommand,
-} from "./features/analytics/command.js";
-commands.set("analytics", wrapCommand("analytics", executeAnalyticsCommand));
-commands.set("analytics-export", wrapCommand("analytics-export", executeAnalyticsExportCommand));
-
-// Modstats command
-import * as modstats from "./commands/modstats.js";
-commands.set(modstats.data.name, wrapCommand("modstats", modstats.execute));
+// Stats command (consolidated analytics)
+import * as stats from "./commands/stats/index.js";
+commands.set(stats.data.name, wrapCommand("stats", stats.execute));
 
 // Send command (anonymous staff messages)
 import * as send from "./commands/send.js";
@@ -211,9 +203,6 @@ commands.set(isitreal.data.name, wrapCommand("isitreal", isitreal.execute));
 import * as unblock from "./commands/unblock.js";
 commands.set(unblock.data.name, wrapCommand("unblock", unblock.execute));
 
-// Activity command (server activity heatmap)
-import * as activity from "./commands/activity.js";
-commands.set(activity.data.name, wrapCommand("activity", activity.execute));
 
 // Backfill command (populate message_activity table)
 import * as backfill from "./commands/backfill.js";
@@ -230,9 +219,6 @@ commands.set(listopen.data.name, wrapCommand("listopen", listopen.execute));
 import * as purge from "./commands/purge.js";
 commands.set(purge.data.name, wrapCommand("purge", purge.execute));
 
-// Modhistory command (leadership oversight of moderator activity)
-import * as modhistory from "./commands/modhistory.js";
-commands.set(modhistory.data.name, wrapCommand("modhistory", modhistory.execute));
 
 // Poke command (owner-only multi-channel ping)
 import * as poke from "./commands/poke.js";
@@ -252,18 +238,16 @@ commands.set(reviewSetListopenOutput.data.name, wrapCommand("review-set-listopen
 import * as movie from "./commands/movie.js";
 import * as roles from "./commands/roles.js";
 import * as panic from "./commands/panic.js";
+import * as event from "./commands/event/index.js";
 commands.set(movie.data.name, wrapCommand("movie", movie.execute));
 commands.set(roles.data.name, wrapCommand("roles", roles.execute));
 commands.set(panic.data.name, wrapCommand("panic", panic.execute));
+commands.set(event.data.name, wrapCommand("event", event.execute));
 
 // Search command (user application history lookup)
 import * as search from "./commands/search.js";
 commands.set(search.data.name, wrapCommand("search", search.execute));
 
-// Approval rate analytics command
-import * as approvalRate from "./commands/approvalRate.js";
-import { executeApprovalRateCommand } from "./features/analytics/approvalRateCommand.js";
-commands.set(approvalRate.data.name, wrapCommand("approval-rate", executeApprovalRateCommand));
 
 // Artist rotation commands
 import * as artistqueue from "./commands/artistqueue.js";
@@ -349,6 +333,19 @@ client.once(Events.ClientReady, async () => {
     startSessionPersistence();
   } catch (err) {
     logger.error({ err }, "[startup] Movie session recovery failed");
+  }
+
+  // Recover game night sessions from database (crash recovery)
+  try {
+    const { recoverPersistedGameSessions, startGameSessionPersistence } =
+      await import("./features/events/gameNight.js");
+    const { events, sessions } = recoverPersistedGameSessions();
+    if (events > 0) {
+      logger.info({ events, sessions }, "[startup] Recovered game night sessions");
+    }
+    startGameSessionPersistence();
+  } catch (err) {
+    logger.error({ err }, "[startup] Game session recovery failed");
   }
 
   // Hydrate open modmail threads from database into memory
@@ -535,11 +532,11 @@ client.once(Events.ClientReady, async () => {
       }
 
       try {
-        const { cleanupModstatsRateLimiter } = await import("./commands/modstats.js");
-        cleanupModstatsRateLimiter();
-        logger.debug("[shutdown] Modstats rate limiter cleanup complete");
+        const { cleanupStatsRateLimiter } = await import("./commands/stats/index.js");
+        cleanupStatsRateLimiter();
+        logger.debug("[shutdown] Stats rate limiter cleanup complete");
       } catch (err) {
-        logger.warn({ err }, "[shutdown] Modstats rate limiter cleanup failed (non-fatal)");
+        logger.warn({ err }, "[shutdown] Stats rate limiter cleanup failed (non-fatal)");
       }
 
       // 6. Persist movie sessions before shutdown
@@ -911,32 +908,51 @@ client.on("guildMemberUpdate", wrapEvent("guildMemberUpdate", async (oldMember, 
   }
 }));
 
-// ROLE AUTOMATION: Movie night attendance tracking
-// WHY: Track VC participation for movie night tier roles
+// ROLE AUTOMATION: Event attendance tracking (movie nights + game nights)
+// WHY: Track VC participation for event tier roles
 // DOCS: https://discord.js.org/#/docs/discord.js/main/class/Client?scrollTo=e-voiceStateUpdate
 import {
   getActiveMovieEvent,
   handleMovieVoiceJoin,
   handleMovieVoiceLeave,
 } from "./features/movieNight.js";
+import {
+  getActiveGameEvent,
+  handleGameVoiceJoin,
+  handleGameVoiceLeave,
+} from "./features/events/gameNight.js";
 
 client.on("voiceStateUpdate", wrapEvent("voiceStateUpdate", async (oldState, newState) => {
   const guildId = newState.guild?.id;
   if (!guildId) return;
 
-  const activeEvent = getActiveMovieEvent(guildId);
-  if (!activeEvent) return; // No active movie event
-
   const userId = newState.member?.id;
   if (!userId) return;
 
-  const joined = !oldState.channelId && newState.channelId === activeEvent.channelId;
-  const left = oldState.channelId === activeEvent.channelId && !newState.channelId;
+  // Check for active movie event
+  const movieEvent = getActiveMovieEvent(guildId);
+  if (movieEvent) {
+    const joined = !oldState.channelId && newState.channelId === movieEvent.channelId;
+    const left = oldState.channelId === movieEvent.channelId && !newState.channelId;
 
-  if (joined) {
-    handleMovieVoiceJoin(guildId, userId);
-  } else if (left) {
-    handleMovieVoiceLeave(guildId, userId);
+    if (joined) {
+      handleMovieVoiceJoin(guildId, userId);
+    } else if (left) {
+      handleMovieVoiceLeave(guildId, userId);
+    }
+  }
+
+  // Check for active game event
+  const gameEvent = getActiveGameEvent(guildId);
+  if (gameEvent) {
+    const joined = !oldState.channelId && newState.channelId === gameEvent.channelId;
+    const left = oldState.channelId === gameEvent.channelId && !newState.channelId;
+
+    if (joined) {
+      handleGameVoiceJoin(guildId, userId);
+    } else if (left) {
+      handleGameVoiceLeave(guildId, userId);
+    }
   }
 }));
 

@@ -1,34 +1,25 @@
 /**
- * Pawtropolis Tech — src/commands/modhistory.ts
- * WHAT: /modhistory slash command for leadership oversight
- * WHY: Quick moderator activity inspection from Discord
- * FLOWS:
- *  - /modhistory moderator:@User [days:30] [export:false]
- *  - Fetch summary + recent actions
- *  - Return embed with metrics and anomaly badge
- *  - Optional CSV export with secure link
- * SECURITY: Leadership-only command (checked server-side)
- * DOCS:
- *  - Discord.js SlashCommandBuilder: https://discord.js.org/docs/packages/builders
+ * Pawtropolis Tech -- src/commands/stats/history.ts
+ * WHAT: Handler for /stats history - moderator action history.
+ * WHY: Provides leadership with detailed moderator activity inspection.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 import {
-  SlashCommandBuilder,
   ChatInputCommandInteraction,
   EmbedBuilder,
-  PermissionFlagsBits,
-} from "discord.js";
-import type { CommandContext } from "../lib/cmdWrap.js";
-import { logger } from "../lib/logger.js";
-import { isOwner } from "../lib/owner.js";
-import { hasStaffPermissions, getConfig } from "../lib/config.js";
-import { isGuildMember } from "../lib/typeGuards.js";
-import { db } from "../db/db.js";
-import { computePercentiles } from "../lib/percentiles.js";
-import { detectModeratorAnomalies } from "../lib/anomaly.js";
-import { generateModHistoryCsv } from "../lib/csv.js";
-import { logActionPretty } from "../logging/pretty.js";
+  db,
+  logger,
+  isOwner,
+  hasStaffPermissions,
+  getConfig,
+  isGuildMember,
+  type CommandContext,
+} from "./shared.js";
+import { computePercentiles } from "../../lib/percentiles.js";
+import { detectModeratorAnomalies } from "../../lib/anomaly.js";
+import { generateModHistoryCsv } from "../../lib/csv.js";
+import { logActionPretty } from "../../logging/pretty.js";
 import { writeFileSync, mkdirSync } from "node:fs";
 import { join } from "node:path";
 import { randomBytes } from "node:crypto";
@@ -38,68 +29,22 @@ const MAX_DAYS = 365;
 const MAX_PERCENTILE_ROWS = 30000;
 const MAX_EXPORT_ROWS = 50000;
 
-export const data = new SlashCommandBuilder()
-  .setName("modhistory")
-  .setDescription("View moderator action history (leadership only)")
-  .addUserOption((opt) =>
-    opt.setName("moderator").setDescription("Moderator to inspect").setRequired(true)
-  )
-  .addIntegerOption((opt) =>
-    opt
-      .setName("days")
-      .setDescription("Days of history to fetch (default: 30)")
-      .setMinValue(1)
-      .setMaxValue(MAX_DAYS)
-  )
-  .addBooleanOption((opt) =>
-    opt.setName("export").setDescription("Export full history as CSV (default: false)")
-  )
-  .setDefaultMemberPermissions(PermissionFlagsBits.Administrator) // UI hint only
-  .setDMPermission(false);
-
 /**
- * Leadership permission check for moderator oversight commands.
- *
- * PERMISSION HIERARCHY (any one grants access):
- *   1. Bot owner (OWNER_IDS in env) - global override for debugging
- *   2. Guild owner - always has access to their own server
- *   3. Staff permissions (mod_role_ids or ManageGuild) - server admins
- *   4. Leadership role (leadership_role_id in config) - designated oversight role
- *
- * WHY SO MANY CHECKS?
- * Different servers organize their staff differently. Some have a dedicated
- * "Leadership" role for senior mods, others just use ManageGuild for admins.
- * We support all common patterns.
- *
- * The `member.permissions` string check handles an edge case where Discord
- * returns permissions as a bitfield string instead of a Permissions object
- * (happens in some webhook/API contexts).
+ * Leadership permission check for moderator oversight.
  */
 async function requireLeadership(interaction: ChatInputCommandInteraction): Promise<boolean> {
   const userId = interaction.user.id;
   const guildId = interaction.guildId!;
 
-  // Owner override
-  if (isOwner(userId)) {
-    return true;
-  }
+  if (isOwner(userId)) return true;
 
   const member = interaction.member;
-  if (!member || typeof member.permissions === "string") {
-    return false;
-  }
+  if (!member || typeof member.permissions === "string") return false;
 
-  // Guild owner
-  if (interaction.guild?.ownerId === userId) {
-    return true;
-  }
+  if (interaction.guild?.ownerId === userId) return true;
 
-  // Staff permissions - hasStaffPermissions accepts the union type natively
-  if (hasStaffPermissions(member, guildId)) {
-    return true;
-  }
+  if (hasStaffPermissions(member, guildId)) return true;
 
-  // Leadership role - need type guard to access roles.cache
   const config = getConfig(guildId);
   if (
     config?.leadership_role_id &&
@@ -112,21 +57,27 @@ async function requireLeadership(interaction: ChatInputCommandInteraction): Prom
   return false;
 }
 
-export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+/**
+ * Handle /stats history subcommand.
+ * Shows detailed moderator action history with optional CSV export.
+ */
+export async function handleHistory(
+  ctx: CommandContext<ChatInputCommandInteraction>
+): Promise<void> {
   const { interaction } = ctx;
+
   if (!interaction.guildId) {
     await interaction.reply({
-      content: "❌ This command can only be used in a server.",
+      content: "This command can only be used in a server.",
       ephemeral: true,
     });
     return;
   }
 
-  // Leadership check
   const isLeadership = await requireLeadership(interaction);
   if (!isLeadership) {
     await interaction.reply({
-      content: "❌ This command requires leadership role or admin permissions.",
+      content: "This command requires leadership role or admin permissions.",
       ephemeral: true,
     });
     return;
@@ -142,7 +93,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   const fromTimestamp = Math.floor(Date.now() / 1000) - days * 24 * 60 * 60;
 
   try {
-    // Fetch summary data (same logic as API endpoint)
     const totalRow = db
       .prepare(
         `SELECT COUNT(*) as total
@@ -167,7 +117,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       counts[row.action] = row.cnt;
     }
 
-    // Response times
     const responseRows = db
       .prepare(
         `SELECT json_extract(meta_json, '$.response_ms') as ms
@@ -184,25 +133,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     const p50 = percentiles.get(50);
     const p95 = percentiles.get(95);
 
-    // Reject rate
     const approveCount = counts["approve"] || 0;
     const rejectCount = counts["reject"] || 0;
     const totalDecisions = approveCount + rejectCount;
     const rejectRate = totalDecisions > 0 ? ((rejectCount / totalDecisions) * 100).toFixed(1) : "0.0";
 
-    /*
-     * ANOMALY DETECTION:
-     * We compute daily action counts and run them through detectModeratorAnomalies()
-     * which uses z-score analysis to flag unusual patterns. High z-scores indicate
-     * activity significantly above/below the moderator's normal baseline.
-     *
-     * Use cases:
-     *   - Catching compromised accounts (sudden spike in rejections)
-     *   - Identifying burnout (gradual decline in activity)
-     *   - Detecting potential abuse (high reject rate on specific days)
-     *
-     * The threshold for "anomaly" is configurable in lib/anomaly.ts
-     */
     const dailyRows = db
       .prepare(
         `SELECT DATE(created_at_s, 'unixepoch') as day, COUNT(*) as cnt
@@ -216,12 +151,11 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     const dailyCounts = dailyRows.map((r) => r.cnt);
     const anomaly = detectModeratorAnomalies(dailyCounts);
 
-    // Build embed
     const embed = new EmbedBuilder()
-      .setTitle(`📊 Moderator History: ${moderator.tag}`)
+      .setTitle(`Moderator History: ${moderator.tag}`)
       .setDescription(
         totalActions > 10000
-          ? `Activity summary for the last ${days} days\n⚠️ High volume (${totalActions.toLocaleString()} actions) - some statistics may be sampled`
+          ? `Activity summary for the last ${days} days\nHigh volume (${totalActions.toLocaleString()} actions) - some statistics may be sampled`
           : `Activity summary for the last ${days} days`
       )
       .setColor(anomaly.isAnomaly ? 0xfaa61a : 0x5865f2)
@@ -246,14 +180,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
     if (anomaly.isAnomaly) {
       embed.addFields({
-        name: "⚠️ Anomaly Detected",
+        name: "Anomaly Detected",
         value: `Z-score: ${anomaly.score.toFixed(2)} (${anomaly.reason})`,
       });
     }
 
-    // Audit log
     await logActionPretty(interaction.guild!, {
-      action: "modhistory_view",
+      action: "stats_history_view",
       actorId: interaction.user.id,
       meta: {
         moderatorId: moderator.id,
@@ -264,7 +197,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       },
     });
 
-    // Export CSV if requested
     if (exportCsv) {
       const countRow = db
         .prepare(
@@ -278,7 +210,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
       if (totalRows > MAX_EXPORT_ROWS) {
         await interaction.editReply({
-          content: `❌ Export too large: ${totalRows.toLocaleString()} rows exceeds limit of ${MAX_EXPORT_ROWS.toLocaleString()}. Please narrow your time range (try fewer days).`,
+          content: `Export too large: ${totalRows.toLocaleString()} rows exceeds limit of ${MAX_EXPORT_ROWS.toLocaleString()}. Please narrow your time range.`,
         });
         return;
       }
@@ -295,19 +227,6 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
       const csv = generateModHistoryCsv(rows);
 
-      /*
-       * CSV files are written to data/exports/ with a randomized filename
-       * to prevent enumeration attacks. The random suffix ensures that even
-       * knowing the moderator ID and timestamp isn't enough to guess the URL.
-       *
-       * CLEANUP: These files should be pruned by a scheduled task (cron or
-       * similar) after 24 hours. The "expires in 24 hours" message is a
-       * promise to the user that we honor via that cleanup process.
-       *
-       * SECURITY: The exports directory should NOT be publicly listable.
-       * Only direct file access should work. Configure your web server
-       * to disable directory listing for /exports/.
-       */
       const exportsDir = join(process.cwd(), "data", "exports");
       try {
         mkdirSync(exportsDir, { recursive: true });
@@ -317,14 +236,13 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
       const timestamp = Date.now();
       const random = randomBytes(4).toString("hex");
-      const filename = `modhistory-${moderator.id}-${timestamp}-${random}.csv`;
+      const filename = `stats-history-${moderator.id}-${timestamp}-${random}.csv`;
       const filepath = join(exportsDir, filename);
 
       writeFileSync(filepath, csv, "utf-8");
 
-      // Audit export
       await logActionPretty(interaction.guild!, {
-        action: "modhistory_export",
+        action: "stats_history_export",
         actorId: interaction.user.id,
         meta: {
           moderatorId: moderator.id,
@@ -337,7 +255,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       const downloadUrl = `${process.env.PUBLIC_URL || "https://pawtropolis.tech"}/exports/${filename}`;
 
       embed.addFields({
-        name: "📥 CSV Export",
+        name: "CSV Export",
         value: `[Download CSV](${downloadUrl}) (${rows.length} rows)\n*Link expires in 24 hours*`,
       });
     }
@@ -346,12 +264,12 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
     logger.info(
       { moderatorId: moderator.id, guildId, days, exportCsv, actorId: interaction.user.id },
-      "[modhistory] command executed"
+      "[stats:history] command executed"
     );
   } catch (err) {
-    logger.error({ err, moderatorId: moderator.id, guildId }, "[modhistory] command failed");
+    logger.error({ err, moderatorId: moderator.id, guildId }, "[stats:history] command failed");
     await interaction.editReply({
-      content: "❌ Failed to fetch moderator history. Please try again later.",
+      content: "Failed to fetch moderator history. Please try again later.",
     });
   }
 }
