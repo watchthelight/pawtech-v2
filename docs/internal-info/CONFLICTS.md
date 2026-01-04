@@ -1,8 +1,9 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T15:22:43.199Z
+**Generated:** 2026-01-04T16:39:51.685Z
 **Guild ID:** 896070888594759740
-**Total Issues Found:** 9
+**Active Issues:** 9
+**Acknowledged:** 0
 
 ## Summary
 
@@ -12,6 +13,7 @@
 | 🟠 High | 1 |
 | 🟡 Medium | 5 |
 | 🟢 Low | 1 |
+| ✅ Acknowledged | 0 |
 
 ---
 
@@ -48,7 +50,7 @@
 
 ## 🟡 Medium Priority Issues
 
-### [CRIT-001] Administrator Permission on Bot Role
+### [MED-001] Administrator Permission on Bot Role
 
 - **Affected:** Role: Wick (1394581676579094600)
 - **Issue:** This role has full Administrator permission, bypassing all permission checks.
@@ -57,7 +59,7 @@
 
 ---
 
-### [CRIT-002] Administrator Permission on Bot Role
+### [MED-002] Administrator Permission on Bot Role
 
 - **Affected:** Role: Server Owner (896070888779317254)
 - **Issue:** This role has full Administrator permission, bypassing all permission checks.

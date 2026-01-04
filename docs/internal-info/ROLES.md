@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T15:22:43.190Z
+**Generated:** 2026-01-04T16:39:51.674Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 219
 
@@ -20,17 +20,17 @@
 
 | Position | Role | Color | Members | Managed | Key Permissions |
 |----------|------|-------|---------|---------|-----------------|
-| 218 | Wick | default | 1 | Bot | Administrator, ManageRoles, BanMembers |
+| 218 | Wick | default | 1 | Bot | Administrator, BanMembers, ManageMessages |
 | 217 | Quarantined | #ffffff | 0 |  | - |
-| 216 | Server Owner | #090314 | 1 | Integration | Administrator, ManageGuild, ManageRoles |
-| 215 | Community Manager | #b41b46 | 1 |  | Administrator, ManageGuild, ManageRoles |
+| 216 | Server Owner | #090314 | 1 | Integration | Administrator, BanMembers, KickMembers |
+| 215 | Community Manager | #b41b46 | 1 |  | Administrator, BanMembers, ManageChannels |
 | 214 | Community Development Lead | #99aab5 | 0 |  | - |
 | 213 | Mooster | #8a18ed | 1 |  | - |
-| 212 | Senior Administrator | default | 1 |  | Administrator, ManageGuild, ManageRoles |
+| 212 | Senior Administrator | default | 1 |  | Administrator, BanMembers, KickMembers |
 | 211 | Enter Key | #e86f01 | 1 |  | - |
 | 210 | Server Dev | #1e402f | 1 | Integration | - |
 | 209 | Staff of the Month | default | 1 |  | - |
-| 208 | Administrator | default | 2 |  | ManageGuild, ManageRoles, ManageChannels |
+| 208 | Administrator | default | 2 |  | BanMembers, KickMembers, ManageChannels |
 | 207 | VRC Group Lead | default | 1 |  | ManageRoles |
 | 206 | Senior Moderator | default | 0 |  | ManageRoles |
 | 205 | Atters | #ffffff | 1 |  | - |
@@ -39,7 +39,7 @@
 | 202 | Moderation Team | default | 17 |  | ManageMessages, MentionEveryone, ModerateMembers |
 | 201 | Staff on Break | default | 1 |  | - |
 | 200 | Gatekeeper | default | 8 |  | MentionEveryone |
-| 199 | Community Apps | #0b7c54 | 25 |  | ManageRoles, ManageChannels |
+| 199 | Community Apps | #0b7c54 | 25 |  | ManageChannels, ManageRoles |
 | 198 | VRC Group Team | default | 1 |  | - |
 | 197 | Events Manager | default | 0 |  | - |
 | 196 | Event Host | default | 2 |  | - |
@@ -93,7 +93,7 @@
 | 148 | Black | #000005 | 78 |  | - |
 | 147 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Membership ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 50 |  | - |
 | 146 | Server Artist | #2f0099 | 6 |  | - |
-| 145 | Patreon | #e57843 | 1 | Bot | ManageRoles, KickMembers |
+| 145 | Patreon | #e57843 | 1 | Bot | KickMembers, ManageRoles |
 | 144 | [Patreon] Legendary Fiona | #a9c9ff | 1 |  | - |
 | 143 | [Patreon] City Benefactor | #eac80d | 2 |  | - |
 | 142 | [Patreon] Mayor | #7e0554 | 0 |  | - |
@@ -103,7 +103,7 @@
 | 138 | Donator | #e834f5 | 3 |  | - |
 | 137 | Booster Fur | #e834f5 | 30 | Integration | - |
 | 136 | VIP Fur | #ffa9e4 | 23 |  | - |
-| 135 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Community ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5758 |  | - |
+| 135 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Community ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5760 |  | - |
 | 134 | OG Verified 2D Artist | #369876 | 11 |  | - |
 | 133 | Verified 2D Artist | #52e5ff | 164 |  | - |
 | 132 | Verified 3D Artist | #368192 | 0 |  | - |
@@ -127,14 +127,14 @@
 | 114 | Newcomer Fur ‹‹ LVL 1 ›› | #d6a77a | 710 |  | - |
 | 113 | OG Citizen | #ffb833 | 115 |  | - |
 | 112 | Community Contributor | #2b89ac | 84 |  | - |
-| 111 | Community Member | #e69f74 | 2674 |  | - |
+| 111 | Community Member | #e69f74 | 2675 |  | - |
 | 110 | Pings Ok | #ce3355 | 627 |  | - |
 | 109 | Important Pings only | #ce3355 | 245 |  | - |
 | 108 | No Pings | #ce3355 | 71 |  | - |
 | 107 | DM's Open | #ce3355 | 763 |  | - |
 | 106 | Important DM's Only | #ce3355 | 141 |  | - |
 | 105 | DM's Closed | #ce3355 | 28 |  | - |
-| 104 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5780 |  | - |
+| 104 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5782 |  | - |
 | 103 | Fur Voter [ 2x EXP ] | #fab2fd | 3 |  | - |
 | 102 | Spooktober 2025 Participant | #f58d3d | 28 |  | - |
 | 101 | Cinematic Royalty | #6a0dad | 0 |  | - |
@@ -174,7 +174,7 @@
 | 67 | OC Half-body Ticket | #d4843d | 8 |  | - |
 | 66 | OC Emoji Ticket | #4cadd0 | 0 |  | - |
 | 65 | OC Headshot Ticket | #aa65ff | 12 |  | - |
-| 64 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀‎About Me⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5730 |  | - |
+| 64 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀‎About Me⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5732 |  | - |
 | 63 | He/Him | #8cbeff | 1812 |  | - |
 | 62 | She/Her | #8cbeff | 1361 |  | - |
 | 61 | They/Them | #8cbeff | 694 |  | - |
@@ -215,7 +215,7 @@
 | 26 | Asia | #ffbfa8 | 183 |  | - |
 | 25 | South America | #ffbfa8 | 208 |  | - |
 | 24 | Africa | #ffbfa8 | 98 |  | - |
-| 23 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀Pings Roles⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5686 |  | - |
+| 23 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀Pings Roles⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5688 |  | - |
 | 22 | Announcements | #df713b | 755 |  | - |
 | 21 | World Updates | #73cac6 | 20 |  | - |
 | 20 | Community Updates | #3498db | 529 |  | - |
@@ -236,9 +236,9 @@
 | 5 | Verified Art | #fff3ad | 173 |  | - |
 | 4 | Art Comms | #fff3ad | 137 |  | - |
 | 3 | Art Adopts | #fff3ad | 101 |  | - |
-| 2 | [ The Pawtropolis Community ] | #ffa5fa | 5757 |  | - |
+| 2 | [ The Pawtropolis Community ] | #ffa5fa | 5759 |  | - |
 | 1 | everyone. | default | 0 |  | - |
-| 0 | @everyone | default | 5806 |  | - |
+| 0 | @everyone | default | 5808 |  | - |
 
 ---
 
@@ -311,7 +311,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 1
 - **Mentionable:** No
 - **Hoisted:** Yes
-- **Permissions:** Administrator, ManageGuild, ManageRoles, ManageChannels, BanMembers, ManageMessages, ManageWebhooks, ManageNicknames, ManageEmojisAndStickers, MentionEveryone, ModerateMembers, ViewAuditLog, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker
+- **Permissions:** AddReactions, Administrator, AttachFiles, BanMembers, Connect, CreatePrivateThreads, CreatePublicThreads, DeafenMembers, EmbedLinks, ManageChannels, ManageEmojisAndStickers, ManageGuild, ManageMessages, ManageNicknames, ManageRoles, ManageWebhooks, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, Stream, UseExternalEmojis, UseExternalStickers, UseVAD, ViewAuditLog, ViewChannel
 
 ### Senior Administrator
 - **ID:** 1420440472169746623
@@ -319,7 +319,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 1
 - **Mentionable:** No
 - **Hoisted:** Yes
-- **Permissions:** Administrator, ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageMessages, ManageWebhooks, ManageNicknames, ManageEmojisAndStickers, MentionEveryone, ModerateMembers, ViewAuditLog, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker
+- **Permissions:** AddReactions, Administrator, AttachFiles, BanMembers, Connect, CreatePrivateThreads, CreatePublicThreads, DeafenMembers, EmbedLinks, KickMembers, ManageChannels, ManageEmojisAndStickers, ManageGuild, ManageMessages, ManageNicknames, ManageRoles, ManageWebhooks, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, Stream, UseExternalEmojis, UseExternalStickers, UseVAD, ViewAuditLog, ViewChannel
 
 ### Administrator
 - **ID:** 896070888779317248
@@ -327,7 +327,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 2
 - **Mentionable:** No
 - **Hoisted:** Yes
-- **Permissions:** ManageGuild, ManageRoles, ManageChannels, KickMembers, BanMembers, ManageMessages, ManageNicknames, ManageEmojisAndStickers, MentionEveryone, ModerateMembers, ViewAuditLog, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker
+- **Permissions:** AddReactions, AttachFiles, BanMembers, Connect, CreatePrivateThreads, CreatePublicThreads, DeafenMembers, EmbedLinks, KickMembers, ManageChannels, ManageEmojisAndStickers, ManageGuild, ManageMessages, ManageNicknames, ManageRoles, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, Stream, UseExternalEmojis, UseExternalStickers, UseVAD, ViewAuditLog, ViewChannel
 
 ### VRC Group Lead
 - **ID:** 1408612908967006288
@@ -351,7 +351,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 17
 - **Mentionable:** Yes
 - **Hoisted:** No
-- **Permissions:** ManageMessages, ManageNicknames, MentionEveryone, ModerateMembers, ViewAuditLog, ViewChannel, EmbedLinks, AttachFiles, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker
+- **Permissions:** AttachFiles, DeafenMembers, EmbedLinks, ManageMessages, ManageNicknames, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, Stream, UseVAD, ViewAuditLog, ViewChannel
 
 ### Gatekeeper
 - **ID:** 896070888762535969
@@ -359,7 +359,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 8
 - **Mentionable:** No
 - **Hoisted:** Yes
-- **Permissions:** MentionEveryone, ViewChannel, EmbedLinks, AttachFiles, Stream, PrioritySpeaker
+- **Permissions:** AttachFiles, EmbedLinks, MentionEveryone, PrioritySpeaker, Stream, ViewChannel
 
 ### Community Apps
 - **ID:** 896070888749940774
@@ -367,7 +367,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 25
 - **Mentionable:** No
 - **Hoisted:** No
-- **Permissions:** ManageRoles, ManageChannels, ViewAuditLog, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak
+- **Permissions:** AddReactions, AttachFiles, Connect, EmbedLinks, ManageChannels, ManageRoles, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, UseExternalEmojis, UseExternalStickers, ViewAuditLog, ViewChannel
 
 ### Community Ambassador
 - **ID:** 896070888762535967
@@ -375,7 +375,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 6
 - **Mentionable:** No
 - **Hoisted:** Yes
-- **Permissions:** ManageMessages, ManageNicknames, MentionEveryone, ModerateMembers, ViewChannel, EmbedLinks, AttachFiles, Stream, MuteMembers, UseVAD, PrioritySpeaker
+- **Permissions:** AttachFiles, EmbedLinks, ManageMessages, ManageNicknames, MentionEveryone, ModerateMembers, MuteMembers, PrioritySpeaker, Stream, UseVAD, ViewChannel
 
 
 ---
@@ -386,13 +386,13 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **ID:** 1394581676579094600
 - **Bot ID:** 536991182035746816
 - **Position:** 218
-- **Permissions:** Administrator, ManageRoles, BanMembers, ManageMessages
+- **Permissions:** Administrator, BanMembers, ManageMessages, ManageRoles
 
 ### Patreon
 - **ID:** 1004701361381834764
 - **Bot ID:** 216303189073461248
 - **Position:** 145
-- **Permissions:** ManageRoles, KickMembers
+- **Permissions:** KickMembers, ManageRoles
 
 ### DS.ME
 - **ID:** 1139638820460048547
