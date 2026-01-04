@@ -42,6 +42,14 @@ The Bot Handbook has everything you need - commands, features, and how to use th
 - [Deployment Config](operations/deployment-config.md) - Setup and environment
 - [Troubleshooting](operations/troubleshooting.md) - Common problems and fixes
 
+### Internal Server Info
+- [Roles](internal-info/ROLES.md) - All server roles with permissions matrix
+- [Channels](internal-info/CHANNELS.md) - All channels with permission overwrites
+- [Security Conflicts](internal-info/CONFLICTS.md) - Permission conflicts and security issues
+- [Server Info](internal-info/SERVER-INFO.md) - Server metadata and statistics
+
+> **Re-generate:** `npx dotenvx run -- tsx scripts/audit-server-full.ts`
+
 ### Roadmap
 - [Future Considerations](roadmap/THINK_ABOUT_LATER.md) - Future ideas
 - [Rejected Ideas](roadmap/REJECTED.md) - Ideas we decided against

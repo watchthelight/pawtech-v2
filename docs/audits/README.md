@@ -5,6 +5,17 @@
 
 ---
 
+## Discord Server Audit
+
+For Discord server permission and security audits, see:
+- [internal-info/CONFLICTS.md](../internal-info/CONFLICTS.md) - Permission conflicts and security issues
+- [internal-info/ROLES.md](../internal-info/ROLES.md) - Full role permission matrix
+- [internal-info/CHANNELS.md](../internal-info/CHANNELS.md) - Channel permission overwrites
+
+> **Re-generate:** `npx dotenvx run -- tsx scripts/audit-server-full.ts`
+
+---
+
 ## Quick Reference
 
 | # | Plan | Priority | Files | Risk |

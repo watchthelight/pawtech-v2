@@ -1,4 +1,6 @@
-# Roles for 🍂 Pawtropolis™ | Furry • LGBTQ+
+# Roles for Pawtropolis
+
+> **Note:** For comprehensive role documentation including full permission matrix, member counts, and security analysis, see [internal-info/ROLES.md](internal-info/ROLES.md).
 
 Guild ID: 896070888594759740
 Fetched: 2025-11-26T12:49:22.590Z

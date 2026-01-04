@@ -4,6 +4,8 @@ You configure bot settings, manage role automation, and handle emergencies.
 
 **Prerequisite:** [Moderator Guide](MODERATOR-GUIDE.md) | **Other docs:** [Quick Reference](../MOD-QUICKREF.md) &#8226; [Bot Handbook](../BOT-HANDBOOK.md)
 
+> **Server Reference:** For complete role/channel/permission data, see [internal-info/](internal-info/) docs.
+
 ---
 
 ## Everything You Had Before
