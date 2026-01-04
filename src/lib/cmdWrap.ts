@@ -456,9 +456,8 @@ export async function ensureDeferred(
  * then edit, or follow up after replying. Getting this wrong causes 40060
  * (already acknowledged) errors. This function handles all the cases.
  *
- * IMPORTANT: All replies default to ephemeral (only visible to the user who
- * triggered the command). This is intentional - public responses should be
- * explicit, not accidental.
+ * IMPORTANT: All replies default to public (visible to everyone in the channel).
+ * Commands that need privacy (like /isitreal) should explicitly set ephemeral.
  */
 export async function replyOrEdit(
   interaction: ReplyableInteraction,
@@ -467,14 +466,14 @@ export async function replyOrEdit(
   /**
    * replyOrEdit
    * WHAT: Sends a response with the right API based on interaction state.
-   * WHY: Avoids double-acknowledge (40060) and handles ephemeral defaults consistently.
+   * WHY: Avoids double-acknowledge (40060) and handles flags consistently.
    * PARAMS:
    *  - interaction: Slash/Button/Modal interaction.
-   *  - payload: InteractionReplyOptions; flags default to Ephemeral if not provided.
+   *  - payload: InteractionReplyOptions; flags default to 0 (public) if not provided.
    * RETURNS: The underlying Message or API result from discord.js.
    * THROWS: Re-throws non-10062/40060 errors after logging.
    */
-  const withFlags = { ...payload, flags: payload.flags ?? MessageFlags.Ephemeral };
+  const withFlags = { ...payload, flags: payload.flags ?? 0 };
   try {
     let result;
     if (interaction.deferred) {

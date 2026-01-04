@@ -1,7 +1,8 @@
 /**
  * Pawtropolis Tech — src/lib/permissionCard.ts
- * WHAT: Ephemeral permission denial embeds with intelligent role resolution.
+ * WHAT: Public permission denial embeds with intelligent role resolution.
  * WHY: Provides users with specific, actionable feedback about which roles they need.
+ *      Public (not ephemeral) so staff can see unauthorized command attempts.
  * FLOWS:
  *  - Command checks permission → fails → postPermissionDenied() → shows role names
  * DOCS:
@@ -11,7 +12,6 @@
 
 import {
   EmbedBuilder,
-  MessageFlags,
   type ButtonInteraction,
   type ChatInputCommandInteraction,
   type Guild,
@@ -156,7 +156,7 @@ async function resolveRequirement(
 // ═══════════════════════════════════════════════════════════════════════════
 
 /**
- * Posts an ephemeral permission denial embed with specific role requirements.
+ * Posts a public permission denial embed with specific role requirements.
  *
  * @example
  * await postPermissionDenied(interaction, {
@@ -203,14 +203,13 @@ export async function postPermissionDenied(
     .setFooter({ text: `Trace: ${traceId}` })
     .setTimestamp();
 
-  // Send ephemeral reply
+  // Send public reply (visible to all for moderation purposes)
   try {
     if (interaction.deferred || interaction.replied) {
       await interaction.editReply({ embeds: [embed] });
     } else {
       await interaction.reply({
         embeds: [embed],
-        flags: MessageFlags.Ephemeral,
       });
     }
   } catch (err) {
@@ -226,7 +225,6 @@ export async function postPermissionDenied(
       } else {
         await interaction.reply({
           content: fallbackMsg,
-          flags: MessageFlags.Ephemeral,
         });
       }
     } catch (fallbackErr) {
