@@ -42,19 +42,22 @@ Want to know when the server is busiest? `/activity` shows a heatmap of message 
 
 To check if the bot is running smoothly, `/health` shows uptime and response latency.
 
-## Movie Night
+## Events (Movie & Game Night)
 
-When a movie event starts, use `/movie start channel:#movie-vc` to begin tracking who's in the voice channel.
+**Movie Night:** Use `/movie start channel:#movie-vc` to begin tracking. When done, `/movie end` finalizes attendance and assigns tier roles to anyone who stayed 30+ minutes.
 
-When the movie is over, make sure you end attendance tracking with `/movie end`. This finalizes everyone's time and automatically assigns tier roles to anyone who stayed 30+ minutes.
+**Game Night:** Use `/event game start channel:#game-vc` to begin tracking. When done, `/event game end` calculates qualification based on percentage of event attended (default 50%).
 
-To see who attended or check someone's movie history, use `/movie attendance`. Add `user:@Username` to look up a specific person's progress toward the next tier.
+Check attendance with `/movie attendance` or `/event game attendance`. Add `user:@Username` to look up someone's progress.
 
-**Tier roles** (you need 30+ minutes per movie to count):
-- <@&1388676461657063505> — attended 1+ movie
-- <@&1388676662337736804> — attended 5+ movies
-- <@&1388675577778802748> — attended 10+ movies
-- <@&1388677466993987677> — attended 20+ movies
+**Movie Tier Roles** (30+ min per event):
+- <@&1388676461657063505> — 1+ movies
+- <@&1388676662337736804> — 5+ movies
+- <@&1388675577778802748> — 10+ movies
+- <@&1388677466993987677> — 20+ movies
+
+**Game Tier Roles** (50%+ of event duration):
+Configured via `/roles add-game-tier`. Use `/roles list type:game_night` to see current tiers.
 
 ## Utility Commands
 

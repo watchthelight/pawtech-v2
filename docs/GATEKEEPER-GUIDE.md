@@ -139,7 +139,7 @@ Stats include:
 
 When you advance to **Moderator**, you'll unlock:
 
-- **Movie Night** — Run movie events and track attendance
+- **Events** — Run movie & game nights and track attendance
 - **Server Activity** — View activity heatmaps
 - **Bot Presence** — Update the bot's status and activity
 - **Fun Stuff** — Skull mode and other server features

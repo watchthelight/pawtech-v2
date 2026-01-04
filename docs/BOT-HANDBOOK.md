@@ -25,8 +25,7 @@ All bot commands and how to use them.
 1. [Gate System](#gate-system-application-review) — Reviewing applications
 2. [Mod Tools](#moderator-tools) — Stats, flags, audits
 3. [Artist Rotation](#artist-rotation) — Art queue and jobs
-4. [Movie Night](#movie-night) — Movie event tracking
-5. [Game Night](#game-night) — Game event tracking
+4. [Events](#events) — Movie & game night tracking
 6. [Role Automation](#role-automation) — Auto-assign roles
 6. [Configuration](#configuration) — Bot settings
 7. [Utility Commands](#utility--admin) — Help, send, purge, etc.
@@ -1293,11 +1292,15 @@ Special tasks appear in the artist's job list without a client mention, showing 
 
 ---
 
-## Movie Night
+## Events
+
+Track attendance at server events (movie nights, game nights) and automatically award tier roles.
+
+### Movie Night
 
 Track who shows up to movie nights and automatically give out tier roles based on attendance.
 
-### How It Works
+#### How It Works
 
 Movie night tracking is all about watching the voice channel and counting how long people stay. Here's the step-by-step process:
 
@@ -1331,7 +1334,7 @@ flowchart TD
     Q --> N
 ```
 
-### How Time Tracking Works
+#### How Time Tracking Works
 
 The bot uses something called "sessions" to track your time. A session is the period from when you join the voice channel until you leave. Here's what happens behind the scenes:
 
@@ -1355,7 +1358,7 @@ The bot uses something called "sessions" to track your time. A session is the pe
 - Calculates totals for everyone
 - Anyone with 30+ minutes total gets marked as "qualified"
 
-### Tier Roles
+#### Tier Roles
 
 You need to stay **at least 30 minutes** during a movie night for it to count toward your tier. This is called being "qualified" for that event.
 
@@ -1380,7 +1383,7 @@ You need to stay **at least 30 minutes** during a movie night for it to count to
 - You can't lose tiers by not attending — once earned, always earned
 - Each movie night counts as one event, even if you attend for 3 hours
 
-### `/movie`
+#### `/movie`
 **Who can use it:** Staff
 
 | Subcommand | What it does |
@@ -1421,13 +1424,11 @@ You need to stay **at least 30 minutes** during a movie night for it to count to
 - Multiple people leaving at once — each person's time is tracked separately
 - Someone switches between voice channels — only time in the tracked channel counts
 
----
-
-## Game Night
+### Game Night
 
 Track who shows up to game nights with percentage-based qualification. Unlike movie nights which have a fixed time threshold (30 minutes), game nights qualify users based on what percentage of the event they attended.
 
-### How It Works
+#### How It Works
 
 Game night tracking works similarly to movie night, but the qualification is based on event duration:
 
@@ -1444,7 +1445,7 @@ Game night tracking works similarly to movie night, but the qualification is bas
 - User who attended 65 minutes: **Qualified** (54%)
 - User who attended 45 minutes: **Not qualified** (37%)
 
-### `/event game`
+#### `/event game`
 **Who can use it:** Staff
 
 | Subcommand | What it does |
@@ -1471,7 +1472,7 @@ Game night tracking works similarly to movie night, but the qualification is bas
 /event game add user:@Username minutes:30 reason:Was on mute but watching
 ```
 
-### Configuration
+#### Configuration
 
 Use `/config set game_threshold` to change the qualification percentage (default: 50%).
 Use `/config get game_config` to view current settings.
@@ -1480,7 +1481,7 @@ Use `/config get game_config` to view current settings.
 |---------|---------|-------|-------------|
 | `game_threshold` | 50% | 10-90% | Percentage of event duration required to qualify |
 
-### Difference from Movie Nights
+#### Difference from Movie Nights
 
 | Feature | Movie Night | Game Night |
 |---------|-------------|------------|
@@ -1493,7 +1494,7 @@ Use `/config get game_config` to view current settings.
 
 ## Role Automation
 
-Set up automatic role assignments based on Amaribot levels and movie night attendance. This feature watches for certain events (like someone leveling up) and automatically gives them roles without staff needing to do it manually.
+Set up automatic role assignments based on Amaribot levels and event attendance (movie & game nights). This feature watches for certain events (like someone leveling up or completing an event) and automatically gives them roles without staff needing to do it manually.
 
 ### How Role Automation Works
 
@@ -1503,7 +1504,7 @@ The bot watches for specific triggers and then assigns roles automatically. Here
 flowchart TD
     A[Event happens] --> B{What type?}
     B -->|Amaribot assigns level role| C[Bot detects role change]
-    B -->|Movie night ends| D[Bot calculates attendance]
+    B -->|Event ends| D[Bot calculates attendance]
     C --> E[Look up level in database]
     D --> F[Look up tier thresholds]
     E --> G{Is there a reward configured?}
@@ -1576,10 +1577,12 @@ Configure which roles get assigned automatically.
 | `add-level-tier` | Connect an Amaribot level to a role |
 | `add-level-reward` | Give a one-time token role when someone hits a level |
 | `add-movie-tier` | Set up a movie attendance tier |
+| `add-game-tier` | Set up a game night attendance tier |
 | `list` | See all your configured mappings |
 | `remove-level-tier` | Delete a level tier mapping |
 | `remove-level-reward` | Delete a level reward |
 | `remove-movie-tier` | Delete a movie tier |
+| `remove-game-tier` | Delete a game tier |
 
 **Examples:**
 ```
@@ -1587,15 +1590,18 @@ Configure which roles get assigned automatically.
 /roles add-level-reward level:15 role:@Byte Token [Common]
 /roles add-level-reward level:15 role:@Event Ticket
 /roles add-movie-tier tier_name:Popcorn Club role:@Popcorn Club movies_required:5
+/roles add-game-tier tier_name:Gamer role:@Gamer games_required:5
 /roles list type:level_tier
 /roles list type:level_reward
 /roles list type:movie_tier
+/roles list type:game_night
 ```
 
 **What `/roles list` shows you:**
 - All configured level tiers (which Amaribot roles map to which levels)
 - All configured level rewards (what bonus roles people get at each level)
 - All configured movie tiers (how many movies needed for each tier role)
+- All configured game tiers (how many games needed for each tier role)
 - Each entry shows the threshold/level and which role gets assigned
 
 ---
@@ -1612,7 +1618,7 @@ Emergency stop button for role automation. If roles are getting assigned incorre
 | `status` | Check if panic mode is currently on |
 
 **What panic mode does:**
-- Stops ALL automatic role assignments (level rewards, movie tiers, etc.)
+- Stops ALL automatic role assignments (level rewards, movie tiers, game tiers, etc.)
 - Blocks the bot from adding or removing roles automatically
 - Still allows manual role changes by staff
 - Still allows applications to be accepted/rejected (but the accepted role won't be granted)
@@ -1888,7 +1894,7 @@ The help system organizes commands into 9 categories:
 | Queue Management | listopen, search, sample |
 | Analytics | activity, approval-rate, modstats, modhistory |
 | Messaging | send, purge, poke, modmail |
-| Role Automation | roles, movie, panic |
+| Role Automation | roles, movie, event, panic |
 | Artist System | artistqueue, art, redeemreward |
 | System | health, update, database, resetdata, backfill |
 
@@ -2367,6 +2373,7 @@ This immediately stops ALL automatic role assignments. The bot will stop listeni
 /roles list type:level_tier
 /roles list type:level_reward
 /roles list type:movie_tier
+/roles list type:game_night
 ```
 
 Look for:

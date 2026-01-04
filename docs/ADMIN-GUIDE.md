@@ -13,7 +13,7 @@ You configure bot settings, manage role automation, and handle emergencies.
 You still have all Moderator capabilities:
 - Gate system (accept, reject, kick, claim, listopen, search)
 - Flagging users and AI detection
-- Movie night management
+- Event management (movie & game nights)
 - Activity heatmaps
 - Bot presence updates
 - Skull mode
@@ -56,16 +56,18 @@ You control how the bot behaves across your entire server.
 
 ### Role Automation Setup
 
-Configure automatic role assignments based on Amaribot levels and movie attendance.
+Configure automatic role assignments based on Amaribot levels and event attendance.
 
 **Commands:**
 - `/roles add-level-tier level:N role:@Role` — Connect an Amaribot level to a role
 - `/roles add-level-reward level:N role:@Role` — Give a one-time token role at a level
 - `/roles add-movie-tier tier_name:Name role:@Role movies_required:N` — Set up movie attendance tiers
+- `/roles add-game-tier tier_name:Name role:@Role games_required:N` — Set up game attendance tiers
 - `/roles list type:...` — See all configured mappings
 - `/roles remove-level-tier level:N` — Delete a level tier
 - `/roles remove-level-reward level:N` — Delete a level reward
 - `/roles remove-movie-tier tier_name:Name` — Delete a movie tier
+- `/roles remove-game-tier tier_name:Name` — Delete a game tier
 
 **Level Tiers vs Level Rewards:**
 - **Level Tiers** are the roles Amaribot assigns (like "Engaged Fur LVL 15")
