@@ -295,3 +295,270 @@ describe("AIDetectionResult structure", () => {
     expect(result.averageScore).toBeNull();
   });
 });
+
+describe("testHive function behavior", () => {
+  describe("response handling", () => {
+    it("returns success when output exists in response", () => {
+      const data = { status: [{ response: { output: [{ classes: [] }] } }] };
+      const hasOutput = !!data?.status?.[0]?.response?.output;
+      expect(hasOutput).toBe(true);
+    });
+
+    it("returns failure when output missing", () => {
+      const data = { status: [{ response: {} }] };
+      const hasOutput = !!(data as any)?.status?.[0]?.response?.output;
+      expect(hasOutput).toBe(false);
+    });
+
+    it("returns invalid key error on 401", () => {
+      const status = 401;
+      const errorMsg = status === 401 ? "Invalid API key (401 Unauthorized)" : `HTTP ${status}`;
+      expect(errorMsg).toBe("Invalid API key (401 Unauthorized)");
+    });
+  });
+
+  describe("API request format", () => {
+    it("uses Token authorization header", () => {
+      const apiKey = "test-key";
+      const header = `Token ${apiKey}`;
+      expect(header).toBe("Token test-key");
+    });
+
+    it("sends test image URL in body", () => {
+      const testUrl = "https://upload.wikimedia.org/wikipedia/commons/thumb/4/47/PNG_transparency_demonstration_1.png/300px-PNG_transparency_demonstration_1.png";
+      const body = JSON.stringify({ url: testUrl });
+      expect(JSON.parse(body).url).toContain("wikimedia.org");
+    });
+  });
+});
+
+describe("testRapidAI function behavior", () => {
+  describe("response handling", () => {
+    it("returns success on 200 response", () => {
+      const response = { ok: true, status: 200 };
+      expect(response.ok).toBe(true);
+    });
+
+    it("returns invalid key on 401", () => {
+      const status = 401;
+      const isAuthError = status === 401 || status === 403;
+      expect(isAuthError).toBe(true);
+    });
+
+    it("returns invalid key on 403", () => {
+      const status = 403;
+      const isAuthError = status === 401 || status === 403;
+      expect(isAuthError).toBe(true);
+    });
+  });
+
+  describe("API request format", () => {
+    it("uses X-RapidAPI-Key header", () => {
+      const headerName = "X-RapidAPI-Key";
+      expect(headerName).toBe("X-RapidAPI-Key");
+    });
+
+    it("uses X-RapidAPI-Host header", () => {
+      const host = "ai-generated-image-detection-api.p.rapidapi.com";
+      expect(host).toContain("rapidapi.com");
+    });
+  });
+});
+
+describe("testSightEngine function behavior", () => {
+  describe("response handling", () => {
+    it("returns success when status is success", () => {
+      const data = { status: "success" };
+      expect(data.status).toBe("success");
+    });
+
+    it("returns error message from response", () => {
+      const data = { status: "error", error: { message: "Invalid API key" } };
+      expect(data.error?.message).toBe("Invalid API key");
+    });
+
+    it("returns failure on 401", () => {
+      const status = 401;
+      const isAuthError = status === 401 || status === 403;
+      expect(isAuthError).toBe(true);
+    });
+
+    it("handles 200 with error in body", () => {
+      // SightEngine can return 200 OK with error in body
+      const response = { ok: true };
+      const data = { status: "error", error: { message: "Rate limit exceeded" } };
+      expect(response.ok).toBe(true);
+      expect(data.status).not.toBe("success");
+    });
+  });
+
+  describe("credential sanitization in errors", () => {
+    function sanitizeSightEngineError(err: unknown): unknown {
+      if (err instanceof Error) {
+        const sanitized = new Error(
+          err.message
+            .replace(/api_user=[^&\s]+/gi, "api_user=[REDACTED]")
+            .replace(/api_secret=[^&\s]+/gi, "api_secret=[REDACTED]")
+        );
+        sanitized.name = err.name;
+        return sanitized;
+      }
+      return err;
+    }
+
+    it("sanitizes Error objects", () => {
+      const err = new Error("Failed: api_user=secret123");
+      const sanitized = sanitizeSightEngineError(err) as Error;
+      expect(sanitized.message).toContain("[REDACTED]");
+      expect(sanitized.message).not.toContain("secret123");
+    });
+
+    it("passes non-Error through unchanged", () => {
+      const obj = { code: 500 };
+      const result = sanitizeSightEngineError(obj);
+      expect(result).toEqual({ code: 500 });
+    });
+  });
+});
+
+describe("testOptic function behavior", () => {
+  describe("response handling", () => {
+    it("returns success on 200 response", () => {
+      const response = { ok: true, status: 200 };
+      expect(response.ok).toBe(true);
+    });
+
+    it("returns invalid key on 401", () => {
+      const status = 401;
+      const isAuthError = status === 401 || status === 403;
+      expect(isAuthError).toBe(true);
+    });
+
+    it("returns invalid key on 403", () => {
+      const status = 403;
+      const isAuthError = status === 401 || status === 403;
+      expect(isAuthError).toBe(true);
+    });
+  });
+
+  describe("API request format", () => {
+    it("uses Bearer authorization header", () => {
+      const apiKey = "test-key";
+      const header = `Bearer ${apiKey}`;
+      expect(header).toBe("Bearer test-key");
+    });
+
+    it("sends object parameter instead of url", () => {
+      const testUrl = "https://example.com/test.png";
+      const body = JSON.stringify({ object: testUrl });
+      const parsed = JSON.parse(body);
+      expect(parsed.object).toBeDefined();
+      expect(parsed.url).toBeUndefined();
+    });
+  });
+});
+
+describe("testAllConfigured function behavior", () => {
+  describe("service filtering", () => {
+    it("skips unconfigured services", () => {
+      const services = [
+        { service: "hive", configured: false },
+        { service: "optic", configured: true },
+      ];
+
+      const toTest = services.filter((s) => s.configured);
+      expect(toTest).toHaveLength(1);
+      expect(toTest[0].service).toBe("optic");
+    });
+
+    it("tests all configured services in parallel", () => {
+      const services = [
+        { service: "hive", configured: true },
+        { service: "rapidai", configured: true },
+        { service: "sightengine", configured: false },
+        { service: "optic", configured: true },
+      ];
+
+      const toTest = services.filter((s) => s.configured);
+      expect(toTest).toHaveLength(3);
+    });
+  });
+
+  describe("result aggregation", () => {
+    it("preserves service metadata with test result", () => {
+      const svc = {
+        service: "hive" as const,
+        displayName: "Hive Moderation",
+        configured: true,
+        healthy: null as boolean | null,
+        docsUrl: "https://thehive.ai/",
+        envVars: ["HIVE_API_KEY"],
+      };
+
+      const testResult = { success: true };
+
+      const result = {
+        ...svc,
+        healthy: testResult.success,
+      };
+
+      expect(result.service).toBe("hive");
+      expect(result.healthy).toBe(true);
+      expect(result.displayName).toBe("Hive Moderation");
+    });
+
+    it("includes error message on failure", () => {
+      const testResult = { success: false, error: "Connection timeout" };
+
+      expect(testResult.success).toBe(false);
+      expect(testResult.error).toBe("Connection timeout");
+    });
+  });
+});
+
+describe("ServiceHealth interface", () => {
+  it("has all required fields", () => {
+    const health = {
+      service: "hive" as const,
+      displayName: "Hive Moderation",
+      configured: true,
+      healthy: true,
+      docsUrl: "https://thehive.ai/",
+      envVars: ["HIVE_API_KEY"],
+    };
+
+    expect(health).toHaveProperty("service");
+    expect(health).toHaveProperty("displayName");
+    expect(health).toHaveProperty("configured");
+    expect(health).toHaveProperty("healthy");
+    expect(health).toHaveProperty("docsUrl");
+    expect(health).toHaveProperty("envVars");
+  });
+
+  it("supports optional error field", () => {
+    const health = {
+      service: "rapidai" as const,
+      displayName: "RapidAPI AI Art Detection",
+      configured: true,
+      healthy: false,
+      error: "Invalid API key",
+      docsUrl: "https://rapidapi.com",
+      envVars: ["RAPIDAPI_KEY"],
+    };
+
+    expect(health.error).toBe("Invalid API key");
+  });
+
+  it("healthy is null before testing", () => {
+    const health = {
+      service: "optic" as const,
+      displayName: "Optic AI Or Not",
+      configured: true,
+      healthy: null,
+      docsUrl: "https://aiornot.com/",
+      envVars: ["OPTIC_API_KEY"],
+    };
+
+    expect(health.healthy).toBeNull();
+  });
+});

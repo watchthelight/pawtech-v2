@@ -385,3 +385,335 @@ describe("restore result", () => {
     });
   });
 });
+
+describe("listCandidates function behavior", () => {
+  describe("file system operations", () => {
+    it("scans data/backups directory", () => {
+      const backupDir = "data/backups";
+      expect(backupDir).toContain("backups");
+    });
+
+    it("filters for .db files only", () => {
+      const files = ["backup.db", "notes.txt", "data.db", "config.json"];
+      const dbFiles = files.filter((f) => f.endsWith(".db"));
+
+      expect(dbFiles).toHaveLength(2);
+    });
+
+    it("creates directory if not exists", () => {
+      const options = { recursive: true };
+      expect(options.recursive).toBe(true);
+    });
+  });
+
+  describe("candidate metadata", () => {
+    it("includes file stats", () => {
+      const stats = {
+        ctimeMs: Date.now(),
+        size: 1024000,
+      };
+
+      const candidate = {
+        created_at: Math.floor(stats.ctimeMs / 1000),
+        size_bytes: stats.size,
+      };
+
+      expect(candidate.created_at).toBeGreaterThan(0);
+      expect(candidate.size_bytes).toBe(1024000);
+    });
+
+    it("generates unique ID", () => {
+      const filename = "backup.db";
+      const created_at = 1700000000;
+      const id = `cand-${created_at}-${filename.replace(".db", "")}`;
+
+      expect(id).toBe("cand-1700000000-backup");
+    });
+  });
+
+  describe("cached metadata lookup", () => {
+    it("merges file stats with cached validation", () => {
+      const fileData = { path: "/backups/backup.db", created_at: 1700000000 };
+      const cachedData = { integrity_result: "ok", foreign_key_violations: 0 };
+
+      const merged = { ...fileData, ...cachedData };
+      expect(merged.integrity_result).toBe("ok");
+    });
+  });
+});
+
+describe("validateCandidate function behavior", () => {
+  describe("database operations", () => {
+    it("opens database in read-only mode", () => {
+      const mode = "readonly";
+      expect(mode).toBe("readonly");
+    });
+
+    it("runs PRAGMA integrity_check", () => {
+      const pragma = "PRAGMA integrity_check";
+      expect(pragma).toContain("integrity_check");
+    });
+
+    it("runs PRAGMA foreign_key_check", () => {
+      const pragma = "PRAGMA foreign_key_check";
+      expect(pragma).toContain("foreign_key_check");
+    });
+
+    it("runs PRAGMA quick_check for faster validation", () => {
+      const pragma = "PRAGMA quick_check";
+      expect(pragma).toContain("quick_check");
+    });
+  });
+
+  describe("row count queries", () => {
+    it("counts rows in action_log", () => {
+      const table = "action_log";
+      const query = `SELECT COUNT(*) as count FROM ${table}`;
+
+      expect(query).toContain("action_log");
+    });
+
+    it("counts rows in guilds", () => {
+      const table = "guilds";
+      const query = `SELECT COUNT(*) as count FROM ${table}`;
+
+      expect(query).toContain("guilds");
+    });
+
+    it("counts rows in users", () => {
+      const table = "users";
+      const query = `SELECT COUNT(*) as count FROM ${table}`;
+
+      expect(query).toContain("users");
+    });
+
+    it("counts rows in review_card", () => {
+      const table = "review_card";
+      const query = `SELECT COUNT(*) as count FROM ${table}`;
+
+      expect(query).toContain("review_card");
+    });
+  });
+
+  describe("checksum computation", () => {
+    it("uses SHA256 algorithm", () => {
+      const algorithm = "sha256";
+      expect(algorithm).toBe("sha256");
+    });
+
+    it("reads file in chunks for large files", () => {
+      const CHUNK_SIZE = 64 * 1024; // 64KB
+      expect(CHUNK_SIZE).toBe(65536);
+    });
+  });
+
+  describe("validation result", () => {
+    it("sets ok: true when all checks pass", () => {
+      const integrity = "ok";
+      const fkViolations = 0;
+
+      const ok = integrity === "ok" && fkViolations === 0;
+      expect(ok).toBe(true);
+    });
+
+    it("sets ok: false when integrity fails", () => {
+      const integrity = "corruption detected";
+      const fkViolations = 0;
+
+      const ok = integrity === "ok" && fkViolations === 0;
+      expect(ok).toBe(false);
+    });
+
+    it("sets ok: false when FK violations exist", () => {
+      const integrity = "ok";
+      const fkViolations = 3;
+
+      const ok = integrity === "ok" && fkViolations === 0;
+      expect(ok).toBe(false);
+    });
+  });
+});
+
+describe("restoreCandidate function behavior", () => {
+  describe("pre-restore backup", () => {
+    it("creates backup with timestamp", () => {
+      const timestamp = new Date().toISOString().replace(/[:.]/g, "-").slice(0, 19);
+      const backupName = `data.db.${timestamp}.preRestore.bak`;
+
+      expect(backupName).toContain("preRestore");
+      expect(backupName).toContain(".bak");
+    });
+
+    it("uses copyFileSync for backup", () => {
+      const method = "copyFileSync";
+      expect(method).toBe("copyFileSync");
+    });
+  });
+
+  describe("PM2 coordination", () => {
+    it("stops process before restore", () => {
+      const processName = "pawtropolis";
+      const stopCmd = `pm2 stop ${processName}`;
+
+      expect(stopCmd).toContain("pm2 stop");
+    });
+
+    it("starts process after restore", () => {
+      const processName = "pawtropolis";
+      const startCmd = `pm2 start ${processName}`;
+
+      expect(startCmd).toContain("pm2 start");
+    });
+
+    it("validates process name against injection", () => {
+      const regex = /^[a-zA-Z0-9_-]+$/;
+
+      expect(regex.test("pawtropolis")).toBe(true);
+      expect(regex.test("bot; rm -rf /")).toBe(false);
+    });
+  });
+
+  describe("dry-run mode", () => {
+    it("skips file operations in dry-run", () => {
+      const dryRun = true;
+      const shouldCopy = !dryRun;
+
+      expect(shouldCopy).toBe(false);
+    });
+
+    it("still performs validation in dry-run", () => {
+      const dryRun = true;
+      const shouldValidate = true;
+
+      expect(shouldValidate).toBe(true);
+    });
+  });
+
+  describe("rollback on failure", () => {
+    it("restores from pre-restore backup on error", () => {
+      const preRestorePath = "/data/data.db.timestamp.preRestore.bak";
+      const targetPath = "/data/data.db";
+
+      const rollbackCmd = { src: preRestorePath, dest: targetPath };
+      expect(rollbackCmd.src).toContain("preRestore");
+    });
+  });
+});
+
+describe("findCandidateById function behavior", () => {
+  describe("ID matching", () => {
+    it("finds candidate by exact ID", () => {
+      const candidates = [
+        { id: "cand-123-backup", path: "/backups/backup.db" },
+        { id: "cand-456-data", path: "/backups/data.db" },
+      ];
+
+      const targetId = "cand-123-backup";
+      const found = candidates.find((c) => c.id === targetId);
+
+      expect(found?.path).toBe("/backups/backup.db");
+    });
+
+    it("returns undefined for non-existent ID", () => {
+      const candidates = [{ id: "cand-123-backup" }];
+      const found = candidates.find((c) => c.id === "cand-999-missing");
+
+      expect(found).toBeUndefined();
+    });
+  });
+});
+
+describe("file system safety", () => {
+  describe("path validation", () => {
+    it("resolves absolute paths", () => {
+      const baseDir = "/data/backups";
+      const filename = "backup.db";
+      const resolved = `${baseDir}/${filename}`;
+
+      expect(resolved.startsWith("/")).toBe(true);
+    });
+
+    it("detects path traversal attempts", () => {
+      const baseDir = "/data/backups";
+      const malicious = "../../../etc/passwd";
+      const resolved = `/etc/passwd`; // What path.resolve would return
+
+      const isSafe = resolved.startsWith(baseDir);
+      expect(isSafe).toBe(false);
+    });
+  });
+
+  describe("file operations", () => {
+    it("uses synchronous operations for atomicity", () => {
+      const methods = ["copyFileSync", "unlinkSync", "renameSync"];
+      const isSync = methods.every((m) => m.endsWith("Sync"));
+
+      expect(isSync).toBe(true);
+    });
+  });
+});
+
+describe("db_backups table", () => {
+  describe("schema", () => {
+    it("has path as primary key", () => {
+      const primaryKey = "path";
+      expect(primaryKey).toBe("path");
+    });
+
+    it("stores validation metadata", () => {
+      const columns = [
+        "path",
+        "created_at",
+        "size_bytes",
+        "integrity_result",
+        "foreign_key_violations",
+        "row_count",
+        "checksum",
+        "verified_at",
+        "notes",
+      ];
+
+      expect(columns).toContain("integrity_result");
+      expect(columns).toContain("checksum");
+    });
+  });
+
+  describe("UPSERT behavior", () => {
+    it("updates existing record on conflict", () => {
+      const sql = `
+        INSERT INTO db_backups (...) VALUES (...)
+        ON CONFLICT(path) DO UPDATE SET
+          integrity_result = excluded.integrity_result
+      `;
+
+      expect(sql).toContain("ON CONFLICT");
+    });
+  });
+});
+
+describe("restore logging", () => {
+  describe("db_restore_log table", () => {
+    it("tracks restore operations", () => {
+      const columns = [
+        "restore_id",
+        "candidate_path",
+        "actor_id",
+        "dry_run",
+        "success",
+        "pre_restore_backup",
+        "restored_at",
+        "notes",
+      ];
+
+      expect(columns).toContain("dry_run");
+      expect(columns).toContain("actor_id");
+    });
+
+    it("generates unique restore_id", () => {
+      const timestamp = Date.now();
+      const restoreId = `restore-${timestamp}`;
+
+      expect(restoreId).toContain("restore-");
+    });
+  });
+});

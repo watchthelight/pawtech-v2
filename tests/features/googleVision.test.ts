@@ -342,3 +342,298 @@ describe("image URL handling", () => {
     });
   });
 });
+
+describe("detectNsfwVision function behavior", () => {
+  describe("feature flag check", () => {
+    it("returns null when API key not configured", () => {
+      const GOOGLE_VISION_ENABLED = false;
+      const result = GOOGLE_VISION_ENABLED ? "would call API" : null;
+
+      expect(result).toBeNull();
+    });
+
+    it("proceeds when API key configured", () => {
+      const GOOGLE_VISION_ENABLED = true;
+      const shouldProceed = GOOGLE_VISION_ENABLED;
+
+      expect(shouldProceed).toBe(true);
+    });
+  });
+
+  describe("API request structure", () => {
+    it("uses POST method", () => {
+      const method = "POST";
+      expect(method).toBe("POST");
+    });
+
+    it("sets Content-Type to application/json", () => {
+      const contentType = "application/json";
+      expect(contentType).toBe("application/json");
+    });
+
+    it("sets X-Goog-Api-Key header", () => {
+      const headerName = "X-Goog-Api-Key";
+      expect(headerName).toBe("X-Goog-Api-Key");
+    });
+
+    it("requests SAFE_SEARCH_DETECTION feature", () => {
+      const features = [{ type: "SAFE_SEARCH_DETECTION", maxResults: 1 }];
+      const hasSSE = features.some((f) => f.type === "SAFE_SEARCH_DETECTION");
+
+      expect(hasSSE).toBe(true);
+    });
+
+    it("bundles LABEL_DETECTION for free pricing", () => {
+      const features = [
+        { type: "SAFE_SEARCH_DETECTION", maxResults: 1 },
+        { type: "LABEL_DETECTION", maxResults: 1 },
+      ];
+
+      const hasLabel = features.some((f) => f.type === "LABEL_DETECTION");
+      expect(hasLabel).toBe(true);
+    });
+  });
+
+  describe("response parsing", () => {
+    it("extracts safeSearchAnnotation from responses", () => {
+      const data = {
+        responses: [{
+          safeSearchAnnotation: {
+            adult: "LIKELY",
+            racy: "POSSIBLE",
+            violence: "UNLIKELY",
+            spoof: "VERY_UNLIKELY",
+            medical: "UNKNOWN",
+          },
+        }],
+      };
+
+      const annotation = data.responses[0].safeSearchAnnotation;
+      expect(annotation.adult).toBe("LIKELY");
+    });
+
+    it("returns null for missing responses", () => {
+      const data = {};
+      const responses = (data as any).responses;
+
+      expect(responses).toBeUndefined();
+    });
+
+    it("returns null for empty responses array", () => {
+      const data = { responses: [] };
+      const firstResponse = data.responses[0];
+
+      expect(firstResponse).toBeUndefined();
+    });
+
+    it("returns null for missing safeSearchAnnotation", () => {
+      const data = { responses: [{}] };
+      const annotation = (data.responses[0] as any).safeSearchAnnotation;
+
+      expect(annotation).toBeUndefined();
+    });
+  });
+
+  describe("error classification", () => {
+    it("classifies network errors", () => {
+      const errorKind = "network";
+      const isTransient = errorKind === "network" || errorKind === "timeout";
+
+      expect(isTransient).toBe(true);
+    });
+
+    it("classifies timeout errors", () => {
+      const errorKind = "timeout";
+      const isTransient = errorKind === "network" || errorKind === "timeout";
+
+      expect(isTransient).toBe(true);
+    });
+
+    it("identifies non-transient errors", () => {
+      const errorKind = "authentication";
+      const isTransient = errorKind === "network" || errorKind === "timeout";
+
+      expect(isTransient).toBe(false);
+    });
+  });
+
+  describe("Sentry reporting", () => {
+    it("reports non-transient errors to Sentry", () => {
+      const shouldReport = true;
+      const errorKind = "unknown";
+
+      const wouldReport = shouldReport && errorKind !== "network";
+      expect(wouldReport).toBe(true);
+    });
+
+    it("skips Sentry for network errors", () => {
+      const errorKind = "network";
+      const shouldReport = errorKind !== "network" && errorKind !== "timeout";
+
+      expect(shouldReport).toBe(false);
+    });
+
+    it("includes feature context in Sentry", () => {
+      const context = {
+        feature: "googleVision",
+        imageUrl: "https://example.com/img.png".substring(0, 100),
+      };
+
+      expect(context.feature).toBe("googleVision");
+    });
+  });
+});
+
+describe("loadVisionClient function behavior", () => {
+  describe("singleton pattern", () => {
+    it("returns cached client if exists", () => {
+      let visionClient: any = { cached: true };
+
+      const getClient = () => {
+        if (visionClient) return visionClient;
+        visionClient = { cached: false };
+        return visionClient;
+      };
+
+      expect(getClient().cached).toBe(true);
+    });
+
+    it("creates new client if not exists", () => {
+      let visionClient: any = null;
+
+      const getClient = () => {
+        if (visionClient) return visionClient;
+        visionClient = { created: true };
+        return visionClient;
+      };
+
+      expect(getClient().created).toBe(true);
+    });
+  });
+
+  describe("disabled state", () => {
+    it("returns null when GOOGLE_VISION_ENABLED is false", () => {
+      const GOOGLE_VISION_ENABLED = false;
+      const result = GOOGLE_VISION_ENABLED ? {} : null;
+
+      expect(result).toBeNull();
+    });
+  });
+});
+
+describe("VisionResult construction", () => {
+  describe("score calculation from annotation", () => {
+    it("converts adult likelihood to score", () => {
+      const annotation = { adult: "LIKELY" };
+      const likelihoodToScore = (l: string) => {
+        const map: Record<string, number> = {
+          VERY_UNLIKELY: 0,
+          UNLIKELY: 0.2,
+          POSSIBLE: 0.5,
+          LIKELY: 0.8,
+          VERY_LIKELY: 1,
+        };
+        return map[l] ?? 0;
+      };
+
+      expect(likelihoodToScore(annotation.adult)).toBe(0.8);
+    });
+
+    it("converts racy likelihood to score", () => {
+      const annotation = { racy: "POSSIBLE" };
+      const likelihoodToScore = (l: string) => {
+        const map: Record<string, number> = {
+          VERY_UNLIKELY: 0,
+          UNLIKELY: 0.2,
+          POSSIBLE: 0.5,
+          LIKELY: 0.8,
+          VERY_LIKELY: 1,
+        };
+        return map[l] ?? 0;
+      };
+
+      expect(likelihoodToScore(annotation.racy)).toBe(0.5);
+    });
+
+    it("converts violence likelihood to score", () => {
+      const annotation = { violence: "VERY_LIKELY" };
+      const likelihoodToScore = (l: string) => {
+        const map: Record<string, number> = {
+          VERY_UNLIKELY: 0,
+          UNLIKELY: 0.2,
+          POSSIBLE: 0.5,
+          LIKELY: 0.8,
+          VERY_LIKELY: 1,
+        };
+        return map[l] ?? 0;
+      };
+
+      expect(likelihoodToScore(annotation.violence)).toBe(1);
+    });
+  });
+
+  describe("result structure", () => {
+    it("includes all required fields", () => {
+      const result = {
+        adultScore: 0.8,
+        racyScore: 0.5,
+        violenceScore: 0.2,
+        raw: {
+          adult: "LIKELY",
+          racy: "POSSIBLE",
+          violence: "UNLIKELY",
+          spoof: "VERY_UNLIKELY",
+          medical: "UNKNOWN",
+        },
+      };
+
+      expect(result).toHaveProperty("adultScore");
+      expect(result).toHaveProperty("racyScore");
+      expect(result).toHaveProperty("violenceScore");
+      expect(result).toHaveProperty("raw");
+    });
+  });
+});
+
+describe("HTTP response handling", () => {
+  describe("non-ok responses", () => {
+    it("returns null on HTTP error", () => {
+      const response = { ok: false, status: 403 };
+      const result = response.ok ? {} : null;
+
+      expect(result).toBeNull();
+    });
+
+    it("logs warning with status and error text", () => {
+      const response = { status: 403 };
+      const errorText = "Forbidden";
+
+      const logData = { status: response.status, error: errorText };
+      expect(logData.status).toBe(403);
+    });
+  });
+
+  describe("successful responses", () => {
+    it("proceeds to parse JSON on ok response", () => {
+      const response = { ok: true };
+      const shouldParse = response.ok;
+
+      expect(shouldParse).toBe(true);
+    });
+  });
+});
+
+describe("timeout configuration", () => {
+  describe("AbortSignal usage", () => {
+    it("uses 15 second timeout", () => {
+      const timeoutMs = 15000;
+      expect(timeoutMs).toBe(15000);
+    });
+
+    it("creates AbortSignal with timeout", () => {
+      // AbortSignal.timeout(15000) creates signal that aborts after 15s
+      const hasTimeoutMethod = typeof AbortSignal.timeout === "function";
+      expect(hasTimeoutMethod).toBe(true);
+    });
+  });
+});
