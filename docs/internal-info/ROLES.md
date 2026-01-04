@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T19:42:34.929Z
+**Generated:** 2026-01-04T20:16:14.606Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 219
 
@@ -123,7 +123,7 @@
 | 118 | Active Fur ‹‹ LVL 20 ›› | #c24c28 | 38 |  | - |
 | 117 | Engaged Fur ‹‹ LVL 15 ›› | #d47a35 | 30 |  | - |
 | 116 | Chatty Fur ‹‹ LVL 10 ›› | #e9a64d | 94 |  | - |
-| 115 | Beginner Fur ‹‹ LVL 5 ›› | #e3b16e | 268 |  | - |
+| 115 | Beginner Fur ‹‹ LVL 5 ›› | #e3b16e | 269 |  | - |
 | 114 | Newcomer Fur ‹‹ LVL 1 ›› | #d6a77a | 709 |  | - |
 | 113 | OG Citizen | #ffb833 | 115 |  | - |
 | 112 | Community Contributor | #2b89ac | 84 |  | - |
@@ -135,7 +135,7 @@
 | 106 | Important DM's Only | #ce3355 | 141 |  | - |
 | 105 | DM's Closed | #ce3355 | 28 |  | - |
 | 104 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5777 |  | - |
-| 103 | Fur Voter [ 2x EXP ] | #fab2fd | 3 |  | - |
+| 103 | Fur Voter [ 2x EXP ] | #fab2fd | 1 |  | - |
 | 102 | Spooktober 2025 Participant | #f58d3d | 28 |  | - |
 | 101 | Cinematic Royalty | #6a0dad | 0 |  | - |
 | 100 | Director’s Cut | #d4843d | 0 |  | - |
@@ -144,7 +144,7 @@
 | 97 | NoLife Token | #e22126 | 0 |  | - |
 | 96 | Trophy Hunter | #f5bc00 | 0 |  | - |
 | 95 | Key Masher | #9c34c2 | 0 |  | - |
-| 94 | Night Builder | #71c598 | 0 |  | - |
+| 94 | Night Builder | #71c598 | 9 |  | - |
 | 93 | AllByte Token [Mythic] | #a9c9ff | 2 |  | - |
 | 92 | AllByte Token [Legendary] | #d4843d | 23 |  | - |
 | 91 | AllByte Token [Epic] | #ff806d | 34 |  | - |

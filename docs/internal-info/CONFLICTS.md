@@ -1,6 +1,6 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T19:42:34.936Z
+**Generated:** 2026-01-04T20:16:14.612Z
 **Guild ID:** 896070888594759740
 **Active Issues:** 9
 **Acknowledged:** 0
