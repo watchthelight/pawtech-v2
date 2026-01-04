@@ -37,12 +37,21 @@ const sentryMock = vi.hoisted(() => ({
 
 vi.mock("../../src/lib/sentry.js", () => sentryMock);
 
-// postErrorCard sends a user-facing error embed. We mock it to verify it's called
-// with the right payload shape without actually posting to Discord.
-const postErrorCardMock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
+// postErrorCardV2 sends a user-facing error embed with wide event context.
+// We mock it to verify it's called with the right payload shape.
+const postErrorCardV2Mock = vi.hoisted(() => vi.fn().mockResolvedValue(undefined));
 
-vi.mock("../../src/lib/errorCard.js", () => ({
-  postErrorCard: postErrorCardMock,
+vi.mock("../../src/lib/errorCardV2.js", () => ({
+  postErrorCardV2: postErrorCardV2Mock,
+}));
+
+// Wide event emitter mock - captures emitted events for assertion.
+const emitWideEventMock = vi.hoisted(() => vi.fn());
+const emitWideEventForcedMock = vi.hoisted(() => vi.fn());
+
+vi.mock("../../src/lib/wideEventEmitter.js", () => ({
+  emitWideEvent: emitWideEventMock,
+  emitWideEventForced: emitWideEventForcedMock,
 }));
 
 // Request context mock — simulates the async-local-storage trace context.
@@ -105,10 +114,10 @@ beforeEach(() => {
 describe("wrapCommand", () => {
   /**
    * Happy path: command runs to completion without throwing.
-   * Verifies the full lifecycle logging: start -> step -> ok.
+   * Verifies wide event emission on success.
    * This is the bread-and-butter case—most commands should follow this pattern.
    */
-  it("logs start, step, and completion on success", async () => {
+  it("emits wide event on success", async () => {
     const interaction = createInteraction();
     const handler = wrapCommand("health", async (ctx) => {
       // withStep wraps a logical phase of the command for observability.
@@ -118,33 +127,29 @@ describe("wrapCommand", () => {
 
     await handler(interaction);
 
-    // Verify the three expected log calls in order: start, step, completion.
-    expect(loggerMock.info).toHaveBeenCalledWith(
-      expect.objectContaining({ evt: "cmd_start", traceId: "trace-fixed", cmd: "health" }),
-      "command start"
-    );
-    expect(loggerMock.info).toHaveBeenCalledWith(
-      expect.objectContaining({ evt: "cmd_step", phase: "validate_input" })
-    );
-    expect(loggerMock.info).toHaveBeenCalledWith(
-      expect.objectContaining({ evt: "cmd_ok", cmd: "health" }),
-      "command ok"
+    // Verify wide event was emitted with success outcome
+    expect(emitWideEventMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        command: "health",
+        outcome: "success",
+        traceId: "trace-fixed",
+      })
     );
     // No error card on success—don't spam users with "everything is fine" messages.
-    expect(postErrorCardMock).not.toHaveBeenCalled();
+    expect(postErrorCardV2Mock).not.toHaveBeenCalled();
   });
 
   /**
    * Error path: simulates a SQLite error during command execution.
    * This tests the full error handling pipeline:
-   * 1. Error gets logged with full context (phase, traceId, error details)
-   * 2. User gets a friendly error card (not a raw stack trace)
+   * 1. Wide event is emitted with error outcome and context
+   * 2. User gets a friendly error card V2 (with severity coloring)
    * 3. Sentry gets notified for alerting/tracking
    *
    * The error is intentionally thrown mid-step ("db_begin") to verify
    * the phase is captured correctly—helps debugging which step failed.
    */
-  it("records error and posts error card on failure", async () => {
+  it("emits wide event with error and posts error card V2 on failure", async () => {
     const interaction = createInteraction();
     // Switch context to "gate" command for this test.
     reqCtxState.cmd = "gate";
@@ -163,33 +168,32 @@ describe("wrapCommand", () => {
     // and in prod that means "randomly crash and restart via PM2".
     await expect(handler(interaction)).resolves.toBeUndefined();
 
-    // Verify structured error logging with all diagnostic fields.
-    // These fields are critical for debugging production issues.
-    expect(loggerMock.error).toHaveBeenCalledWith(
+    // Verify wide event was emitted with error outcome
+    // Note: emitWideEvent is used (not forced) because errors are always sampled at 100%
+    expect(emitWideEventMock).toHaveBeenCalledWith(
       expect.objectContaining({
-        evt: "cmd_error",
-        cmd: "gate",
-        phase: "db_begin", // Which step failed
-        traceId: "trace-fixed", // Correlation ID for log aggregation
-        lastSql: null, // Would contain the failing SQL in real usage
-        errorKind: "db_error", // Classification for alerting rules
-        errorMessage: "boom",
-        err: expect.objectContaining({
-          name: "SqliteError",
-          code: "SQLITE_ERROR",
+        command: "gate",
+        outcome: "error",
+        traceId: "trace-fixed",
+        error: expect.objectContaining({
+          kind: "db_error",
           message: "boom",
+          phase: "db_begin",
         }),
-      }),
-      "command error: boom"
+      })
     );
 
-    // User-facing error card with just enough info to report the issue.
-    expect(postErrorCardMock).toHaveBeenCalledWith(
+    // User-facing error card V2 with wide event context
+    expect(postErrorCardV2Mock).toHaveBeenCalledWith(
       interaction,
       expect.objectContaining({
-        traceId: "trace-fixed",
-        cmd: "gate",
-        phase: "db_begin",
+        wideEvent: expect.objectContaining({
+          traceId: "trace-fixed",
+          command: "gate",
+        }),
+        classified: expect.objectContaining({
+          kind: "db_error",
+        }),
       })
     );
 

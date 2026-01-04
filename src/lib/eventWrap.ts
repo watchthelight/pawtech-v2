@@ -1,11 +1,10 @@
 /**
  * Pawtropolis Tech — src/lib/eventWrap.ts
- * WHAT: Safe wrapper for Discord.js event handlers
- * WHY: Ensures events never crash the bot, always logged with error classification
+ * WHAT: Safe wrapper for Discord.js event handlers with wide event telemetry
+ * WHY: Ensures events never crash the bot, emits comprehensive wide events for observability
  * FLOWS:
- *  - wrapEvent(name, handler) → wrapped handler that catches errors
- *  - Error classification applied to all caught errors
- *  - Sentry capture only for reportable errors
+ *  - wrapEvent(name, handler) → create WideEvent → execute → emit on completion
+ *  - Error classification and Sentry reporting for real errors
  * USAGE:
  *  import { wrapEvent } from "./eventWrap.js";
  *  client.on("guildMemberAdd", wrapEvent("guildMemberAdd", async (member) => { ... }));
@@ -15,47 +14,58 @@
 import { logger } from "./logger.js";
 import { captureException } from "./sentry.js";
 import { classifyError, errorContext, shouldReportToSentry } from "./errors.js";
+import { newTraceId, runWithCtx } from "./reqctx.js";
+import { WideEventBuilder } from "./wideEvent.js";
+import { emitWideEvent } from "./wideEventEmitter.js";
 
 /**
  * Generic event handler type.
- *
  * Supports both sync and async handlers since Discord.js events can be either.
- * The unknown[] is intentionally loose - we don't want to constrain which
- * events can be wrapped.
  */
 type EventHandler<T extends unknown[]> = (...args: T) => Promise<void> | void;
 
 /**
  * Default timeout for event handlers.
- *
  * Discord.js events should generally complete quickly. 10 seconds provides
- * ample safety margin while catching genuinely slow handlers that need
- * investigation.
- *
- * Override via EVENT_TIMEOUT_MS environment variable or per-handler timeout
- * parameter if specific events need more time.
+ * ample safety margin while catching genuinely slow handlers.
  */
 const DEFAULT_EVENT_TIMEOUT_MS = parseInt(process.env.EVENT_TIMEOUT_MS ?? "10000", 10);
 
 /**
- * Wrap an event handler with error protection
+ * Infer the feature from an event name.
+ * Used to set the feature field in wide events.
+ */
+function inferFeatureFromEvent(eventName: string): string | null {
+  // Map common events to features
+  const eventFeatureMap: Record<string, string> = {
+    guildMemberAdd: "gate",
+    guildMemberUpdate: "member",
+    messageCreate: "message",
+    messageDelete: "message",
+    messageUpdate: "message",
+    interactionCreate: "interaction",
+    guildCreate: "guild",
+    guildDelete: "guild",
+    userUpdate: "user",
+    presenceUpdate: "presence",
+  };
+
+  return eventFeatureMap[eventName] ?? null;
+}
+
+/**
+ * Wrap an event handler with error protection and wide event telemetry.
  *
  * @param eventName - Name of the event for logging
  * @param handler - The actual event handler function
  * @param timeoutMs - Timeout in milliseconds (default: 10000)
- * @returns Wrapped handler that catches and logs errors
+ * @returns Wrapped handler that catches/logs errors and emits wide events
  *
  * @example
  * ```ts
- * // Use default 10-second timeout
  * client.on("guildMemberAdd", wrapEvent("guildMemberAdd", async (member) => {
  *   await processNewMember(member);
  * }));
- *
- * // Override for slow operation
- * client.on("guildCreate", wrapEvent("guildCreate", async (guild) => {
- *   await syncCommandsToGuild(guild.id);
- * }, 20000)); // 20-second timeout
  * ```
  */
 export function wrapEvent<T extends unknown[]>(
@@ -63,53 +73,83 @@ export function wrapEvent<T extends unknown[]>(
   handler: EventHandler<T>,
   timeoutMs: number = DEFAULT_EVENT_TIMEOUT_MS
 ): EventHandler<T> {
-  // Return an async wrapper that will never throw. This is critical -
-  // an unhandled rejection in an event handler can crash the process.
-  // Ask me how I know. (The answer is "production at 3am")
   return async (...args: T) => {
+    const traceId = newTraceId();
+    const wideEvent = new WideEventBuilder(traceId);
+
+    // Set interaction context for event
+    wideEvent.setInteraction({
+      kind: "event",
+      command: eventName,
+    });
+
+    // Extract context from event args
+    const contextIds = extractEventContext(args);
+    if (contextIds.guildId) {
+      wideEvent.addAttr("guildId", contextIds.guildId);
+    }
+    if (contextIds.userId) {
+      wideEvent.addAttr("userId", contextIds.userId);
+    }
+    if (contextIds.channelId) {
+      wideEvent.addAttr("channelId", contextIds.channelId);
+    }
+    if (contextIds.entityId) {
+      wideEvent.addAttr("entityId", contextIds.entityId);
+    }
+
+    // Set feature based on event name
+    const feature = inferFeatureFromEvent(eventName);
+    if (feature) {
+      wideEvent.setFeature(feature, eventName);
+    }
+
+    // Mark entering the handler
+    wideEvent.enterPhase("handler");
+
     try {
-      // Promise.race: first one to settle wins. Either the handler completes,
-      // or the timeout fires. Yes, the "losing" promise keeps running - we can't
-      // cancel it in JS. The timeout just lets us stop waiting and move on.
-      await Promise.race([
-        handler(...args),
-        new Promise<void>((_, reject) =>
-          setTimeout(() => reject(new Error(`Event handler timeout after ${timeoutMs}ms`)), timeoutMs)
-        ),
-      ]);
+      // Run handler within context that carries the wide event
+      await runWithCtx({ traceId, kind: "event", wideEvent }, async () => {
+        await Promise.race([
+          handler(...args),
+          new Promise<void>((_, reject) =>
+            setTimeout(() => reject(new Error(`Event handler timeout after ${timeoutMs}ms`)), timeoutMs)
+          ),
+        ]);
+      });
+
+      // Success
+      wideEvent.setOutcome("success");
+      emitWideEvent(wideEvent.finalize());
     } catch (err) {
       const classified = classifyError(err);
 
-      // Extract identifiers from common Discord.js event args for context.
-      // This gives us guild/user/channel IDs in logs without the handler
-      // having to pass them explicitly.
-      const contextIds = extractEventContext(args);
+      // Check if this is a timeout
+      const isTimeout = err instanceof Error && err.message.includes("timeout after");
+      if (isTimeout) {
+        wideEvent.setOutcome("timeout");
+      }
 
-      logger.error(
-        {
-          evt: "event_error",
-          event: eventName,
-          ...errorContext(classified, contextIds),
-          err,
-        },
-        `[${eventName}] event handler failed: ${classified.message}`
-      );
+      // Set error on wide event
+      let sentryEventId: string | null = null;
 
-      // Only report to Sentry if it's worth tracking.
-      // Most Discord operational errors (expired interactions, deleted channels)
-      // are filtered out by shouldReportToSentry.
+      // Report to Sentry if worth tracking
       if (shouldReportToSentry(classified)) {
-        captureException(err instanceof Error ? err : new Error(String(err)), {
+        sentryEventId = captureException(err instanceof Error ? err : new Error(String(err)), {
           event: eventName,
+          traceId,
           errorKind: classified.kind,
           ...contextIds,
         });
       }
 
+      wideEvent.setError(classified, { phase: "handler", sentryEventId });
+
+      // Emit the wide event (errors are always kept)
+      emitWideEvent(wideEvent.finalize());
+
       // IMPORTANT: Never re-throw. The bot must keep running even if one event
-      // handler fails. Unhandled promise rejections in event handlers can
-      // terminate the process depending on Node.js version and flags.
-      // Node 15+ with --unhandled-rejections=strict WILL kill your process.
+      // handler fails. Unhandled promise rejections can terminate the process.
     }
   };
 }
@@ -119,23 +159,14 @@ export function wrapEvent<T extends unknown[]>(
  *
  * Discord.js event payloads are polymorphic - different events pass different
  * objects. This function probes for common properties (guildId, user, channelId)
- * that appear on many Discord structures. It's intentionally defensive; unknown
- * object shapes should not throw.
- *
- * The resulting context is attached to error logs and Sentry reports for
- * debugging. Having guild/user/channel IDs makes it much easier to reproduce
- * issues in specific servers.
+ * that appear on many Discord structures.
  */
 function extractEventContext(args: unknown[]): Record<string, unknown> {
-  // Best-effort extraction of IDs from Discord.js event payloads. This is
-  // intentionally defensive - we probe for common properties and silently
-  // skip anything that doesn't match. Not every event has every field.
   const context: Record<string, unknown> = {};
 
   for (const arg of args) {
     if (!arg || typeof arg !== "object") continue;
 
-    // GuildMember, User, Message, Interaction, etc.
     const obj = arg as Record<string, unknown>;
 
     if ("guildId" in obj && typeof obj.guildId === "string") {
@@ -148,7 +179,6 @@ function extractEventContext(args: unknown[]): Record<string, unknown> {
       }
     }
     if ("id" in obj && typeof obj.id === "string") {
-      // Don't overwrite guildId with a generic id
       if (!context.entityId) {
         context.entityId = obj.id;
       }
@@ -166,3 +196,6 @@ function extractEventContext(args: unknown[]): Record<string, unknown> {
 
   return context;
 }
+
+// Re-export for convenience
+export { extractEventContext };

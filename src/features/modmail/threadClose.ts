@@ -20,6 +20,7 @@ import {
 import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import { captureException } from "../../lib/sentry.js";
+import { enrichEvent } from "../../lib/reqctx.js";
 import { getConfig } from "../../lib/config.js";
 import { logActionPretty } from "../../logging/pretty.js";
 import { SAFE_ALLOWED_MENTIONS } from "../../lib/constants.js";
@@ -343,7 +344,14 @@ export async function closeModmailThread(params: {
       logger.warn({ err, ticketId: ticket.id }, "[review] failed to refresh card after close");
     }
 
-    logger.info({ ticketId: ticket.id, threadId: ticket.thread_id }, "[modmail] thread closed");
+    // Track in wide event
+    enrichEvent((e) => {
+      e.setFeature("modmail", "close_thread");
+      e.addEntity({ type: "ticket", id: String(ticket.id) });
+      e.addEntity({ type: "user", id: ticket.user_id });
+      e.addAttr("transcriptLines", transcriptLines);
+      if (ticket.app_code) e.addAttr("appCode", ticket.app_code);
+    });
 
     // Log modmail close action (before auto-delete so we know which action was taken)
     let archiveAction: "delete" | "archive" = "archive";
@@ -581,18 +589,16 @@ export async function closeModmailForApplication(
       logger.debug({ err, ticketId }, "[modmail] close:review_card err (non-fatal)");
     }
 
-    logger.info(
-      {
-        ticketId,
-        threadId,
-        userId,
-        reason,
-        closingMsg: closingMessageResult,
-        transcript: transcriptLines,
-        archive: archiveResult.action,
-      },
-      "[modmail] close:complete auto-closed on decision"
-    );
+    // Track in wide event
+    enrichEvent((e) => {
+      e.setFeature("modmail", "auto_close");
+      e.addEntity({ type: "ticket", id: String(ticketId) });
+      e.addEntity({ type: "user", id: userId });
+      e.addAttr("reason", reason);
+      e.addAttr("transcriptLines", transcriptLines);
+      e.addAttr("archiveAction", archiveResult.action);
+      if (ticket.app_code) e.addAttr("appCode", ticket.app_code);
+    });
   } catch (err) {
     logger.error({ err, ticketId, threadId, reason }, "[modmail] close:fatal unexpected error");
     captureException(err, { area: "modmail:autoClose", ticketId });

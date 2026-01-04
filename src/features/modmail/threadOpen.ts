@@ -27,6 +27,7 @@ import type { GuildMember } from "discord.js";
 import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import { captureException } from "../../lib/sentry.js";
+import { enrichEvent } from "../../lib/reqctx.js";
 import { shortCode } from "../../lib/ids.js";
 import { hasManageGuild, isReviewer, canRunAllCommands } from "../../lib/config.js";
 import { logActionPretty } from "../../logging/pretty.js";
@@ -414,10 +415,14 @@ export async function openPublicModmailThreadFor(params: {
       });
     }
 
-    logger.info(
-      { ticketId, threadId: thread.id, userId, guildId: interaction.guildId },
-      "[modmail] thread opened"
-    );
+    // Track in wide event
+    enrichEvent((e) => {
+      e.setFeature("modmail", "open_thread");
+      e.addEntity({ type: "ticket", id: String(ticketId) });
+      e.addEntity({ type: "user", id: userId });
+      e.addAttr("threadId", thread.id);
+      if (appCode) e.addAttr("appCode", appCode);
+    });
 
     return {
       success: true,

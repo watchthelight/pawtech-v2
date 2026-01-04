@@ -48,6 +48,7 @@ import { ensureReviewMessage } from "./review.js";
 import { scanAvatar, type ScanResult } from "./avatarScan.js";
 import type { CmdCtx } from "../lib/cmdWrap.js";
 import { ensureDeferred, replyOrEdit, withSql } from "../lib/cmdWrap.js";
+import { enrichEvent } from "../lib/reqctx.js";
 import { logActionPretty } from "../logging/pretty.js";
 import { getQuestions as getQuestionsShared } from "./gate/questions.js";
 import { touchSyncMarker } from "../lib/syncMarker.js";
@@ -1313,6 +1314,12 @@ export async function handleGateModalSubmit(
   ctx.step("db_begin");
   submitApplication(db, draftRow.id, ctx);
   ctx.step("db_commit");
+
+  // Track submission in wide event
+  enrichEvent((e) => {
+    e.setFeature("gate", "submit");
+    e.addEntity({ type: "application", id: draftRow.id, code: shortCode(draftRow.id) });
+  });
 
   ctx.step("post_commit");
 

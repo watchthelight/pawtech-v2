@@ -9,7 +9,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 /**
  * Pawtropolis Tech Gatekeeper
- * Copyright (c) 2025 watchthelight (Bash) <admin@watchthelight.org>
+ * Copyright (c) 2026 watchthelight (Bash) <admin@watchthelight.org>
  * License: LicenseRef-ANW-1.0
  * Repo: https://github.com/watchthelight/pawtropolis-tech
  */
@@ -94,6 +94,10 @@ const raw = {
   SIGHTENGINE_API_USER: process.env.SIGHTENGINE_API_USER?.trim(),
   SIGHTENGINE_API_SECRET: process.env.SIGHTENGINE_API_SECRET?.trim(),
   OPTIC_API_KEY: process.env.OPTIC_API_KEY?.trim(),
+
+  // Wide Events configuration (optional)
+  WIDE_EVENT_ENABLED: process.env.WIDE_EVENT_ENABLED?.trim(),
+  WIDE_EVENT_SAMPLE_RATE: process.env.WIDE_EVENT_SAMPLE_RATE?.trim(),
 };
 
 /**
@@ -194,6 +198,13 @@ const schema = z.object({
   SIGHTENGINE_API_USER: z.string().optional(),
   SIGHTENGINE_API_SECRET: z.string().optional(),
   OPTIC_API_KEY: z.string().optional(),
+
+  // Wide Events configuration (optional)
+  // WIDE_EVENT_ENABLED: "true" (default) or "false" to disable wide event emission
+  // WIDE_EVENT_SAMPLE_RATE: 0.0-1.0 (default 0.1 = 10% of successful requests)
+  // Errors and timeouts are always kept regardless of sampling rate
+  WIDE_EVENT_ENABLED: z.string().optional().default("true"),
+  WIDE_EVENT_SAMPLE_RATE: z.string().optional().default("0.1"),
 });
 
 /**

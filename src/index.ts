@@ -1034,18 +1034,7 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
       });
 
       const startedAt = Date.now();
-      logger.info(
-        {
-          evt: "ix_enter",
-          traceId,
-          kind,
-          cmd: cmdId,
-          userId: interaction.user.id,
-          guildId: interaction.guildId ?? null,
-          channelId: interaction.channelId ?? null,
-        },
-        "interaction enter"
-      );
+      // Note: ix_enter log removed - now tracked by wide events in cmdWrap.ts
 
       if (kind === "modal" && interaction.isModalSubmit()) {
         const fields = Array.from(interaction.fields.fields.values()).map((field) => ({
@@ -1787,12 +1776,7 @@ client.on("interactionCreate", wrapEvent("interactionCreate", async (interaction
         }
       } finally {
         cancelWatchdog();
-        // Only log success metrics if we actually succeeded. Failed interactions
-        // already logged their errors above, and we don't want to pollute ix_ok stats.
-        if (succeeded) {
-          const duration = Date.now() - startedAt;
-          logger.info({ evt: "ix_ok", kind, id: cmdId, ms: duration, traceId }, "interaction ok");
-        }
+        // Note: ix_ok log removed - now tracked by wide events in cmdWrap.ts
       }
     }
   );

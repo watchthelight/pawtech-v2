@@ -17,6 +17,7 @@ import {
 import { db } from "../../db/db.js";
 import { logger } from "../../lib/logger.js";
 import { captureException } from "../../lib/sentry.js";
+import { enrichEvent } from "../../lib/reqctx.js";
 import type { ModmailTicket } from "./types.js";
 import {
   insertModmailMessage,
@@ -312,16 +313,13 @@ export async function routeThreadToDm(message: Message, ticket: ModmailTicket, c
 
     appendTranscript(ticket.id, "STAFF", transcriptContent);
 
-    logger.info(
-      {
-        ticketId: ticket.id,
-        threadId: ticket.thread_id,
-        userId: ticket.user_id,
-        messageId: message.id,
-        dmMessageId: dmMessage.id,
-      },
-      "[modmail] routed thread -> DM"
-    );
+    // Track in wide event
+    enrichEvent((e) => {
+      e.setFeature("modmail", "relay_message");
+      e.addEntity({ type: "ticket", id: String(ticket.id) });
+      e.addAttr("direction", "staff_to_user");
+      e.addAttr("messageLength", message.content.length);
+    });
   } catch (err) {
     logger.warn(
       { err, ticketId: ticket.id, userId: ticket.user_id },
@@ -432,16 +430,13 @@ export async function routeDmToThread(message: Message, ticket: ModmailTicket, c
     // Append to transcript buffer for audit trail (in-memory, also persisted above)
     appendTranscript(ticket.id, "USER", transcriptContent);
 
-    logger.info(
-      {
-        ticketId: ticket.id,
-        threadId: ticket.thread_id,
-        userId: ticket.user_id,
-        messageId: message.id,
-        threadMessageId: threadMessage.id,
-      },
-      "[modmail] routed DM -> thread"
-    );
+    // Track in wide event
+    enrichEvent((e) => {
+      e.setFeature("modmail", "relay_message");
+      e.addEntity({ type: "ticket", id: String(ticket.id) });
+      e.addAttr("direction", "user_to_staff");
+      e.addAttr("messageLength", message.content.length);
+    });
   } catch (err) {
     logger.warn(
       { err, ticketId: ticket.id, threadId: ticket.thread_id },

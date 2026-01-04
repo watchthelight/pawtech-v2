@@ -13,6 +13,7 @@
 import type { GuildMember, PartialGuildMember, TextChannel } from "discord.js";
 import { EmbedBuilder } from "discord.js";
 import { logger } from "../lib/logger.js";
+import { enrichEvent } from "../lib/reqctx.js";
 import { detectNsfwVision } from "./googleVision.js";
 import { getLoggingChannelId } from "../config/loggingStore.js";
 import { upsertNsfwFlag } from "../store/nsfwFlagsStore.js";
@@ -116,6 +117,14 @@ export async function handleAvatarChange(
     { guildId, userId, adultScore: visionResult.adultScore },
     "[avatarNsfwMonitor] NSFW avatar detected!"
   );
+
+  // Track in wide event
+  enrichEvent((e) => {
+    e.setFeature("nsfw_monitor", "avatar_flagged");
+    e.addEntity({ type: "user", id: userId });
+    e.addAttr("adultScore", visionResult.adultScore);
+    e.addAttr("trigger", "avatar_change");
+  });
 
   // Save to database
   upsertNsfwFlag({
@@ -254,6 +263,14 @@ export async function handleMemberJoin(member: GuildMember): Promise<void> {
     { guildId, userId, adultScore: visionResult.adultScore },
     "[avatarNsfwMonitor] NSFW avatar detected on new member!"
   );
+
+  // Track in wide event
+  enrichEvent((e) => {
+    e.setFeature("nsfw_monitor", "avatar_flagged");
+    e.addEntity({ type: "user", id: userId });
+    e.addAttr("adultScore", visionResult.adultScore);
+    e.addAttr("trigger", "member_join");
+  });
 
   // Save to database
   upsertNsfwFlag({

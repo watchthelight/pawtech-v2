@@ -15,6 +15,7 @@ import { logger } from "../../../lib/logger.js";
 import { captureException } from "../../../lib/sentry.js";
 import { getConfig } from "../../../lib/config.js";
 import { replyOrEdit } from "../../../lib/cmdWrap.js";
+import { enrichEvent } from "../../../lib/reqctx.js";
 import { shortCode } from "../../../lib/ids.js";
 import { logActionPretty } from "../../../logging/pretty.js";
 import { closeModmailForApplication } from "../../modmail.js";
@@ -90,6 +91,13 @@ export async function runApproveAction(
     });
     return;
   }
+
+  // Track approval in wide event
+  enrichEvent((e) => {
+    e.setFeature("review", "approve");
+    e.addEntity({ type: "application", id: app.id, code: shortCode(app.id) });
+    e.addAttr("applicantId", app.user_id);
+  });
 
   const cfg = getConfig(guild.id);
   let approvedMember: GuildMember | null = null;
@@ -269,6 +277,14 @@ export async function runRejectAction(
     return;
   }
 
+  // Track rejection in wide event
+  enrichEvent((e) => {
+    e.setFeature("review", "reject");
+    e.addEntity({ type: "application", id: app.id, code: shortCode(app.id) });
+    e.addAttr("applicantId", app.user_id);
+    e.addAttr("reason", trimmed.slice(0, 100));
+  });
+
   const user = await interaction.client.users.fetch(app.user_id).catch(() => null);
   const guildName = interaction.guild?.name ?? "this server";
   let dmDelivered = false;
@@ -395,6 +411,14 @@ export async function runPermRejectAction(
     });
     return;
   }
+
+  // Track permanent rejection in wide event
+  enrichEvent((e) => {
+    e.setFeature("review", "perm_reject");
+    e.addEntity({ type: "application", id: app.id, code: shortCode(app.id) });
+    e.addAttr("applicantId", app.user_id);
+    e.addAttr("reason", trimmed.slice(0, 100));
+  });
 
   const user = await interaction.client.users.fetch(app.user_id).catch(() => null);
   const guildName = interaction.guild?.name ?? "this server";
@@ -531,6 +555,14 @@ export async function runKickAction(
     });
     return;
   }
+
+  // Track kick in wide event
+  enrichEvent((e) => {
+    e.setFeature("review", "kick");
+    e.addEntity({ type: "application", id: app.id, code: shortCode(app.id) });
+    e.addAttr("applicantId", app.user_id);
+    if (reason) e.addAttr("reason", reason.slice(0, 100));
+  });
 
   const flow = await kickFlow(guild, app.user_id, reason ?? undefined);
   updateReviewActionMeta(tx.reviewActionId, flow);
