@@ -1,13 +1,13 @@
 # License FAQ
 
 ## Can I use code snippets?
-Yes. You can copy small pieces as long as you follow the limits in Section 3 of the LICENSE file and give credit.
+Yes. You can copy and modify small pieces as long as you follow the terms in the LICENSE file (Attribution–No Wholesale Copying License) and give credit.
 
 ## What's too much?
-Anything beyond the limits in Section 3. If you hit any of those caps, it's too much.
+Redistributing the entire project as-is without modification, or removing attribution. If you're modifying and building on it, you're fine as long as you credit the original.
 
 ## Can I use it commercially?
-Yes, for small excerpts only. You must give credit.
+Yes, as long as you're adding value with modifications. You cannot resell the unmodified project as-is.
 
 ## Is this open source?
 Not officially. It's source-available, but not OSI-approved.
@@ -16,8 +16,8 @@ Not officially. It's source-available, but not OSI-approved.
 
 ```
 Pawtropolis Tech Gatekeeper
-Copyright (c) 2025 watchthelight (Bash)
+Copyright (c) 2026 watchthelight (Bash)
 https://github.com/watchthelight/pawtropolis-tech
 
-Portions used under ANW-1.0 license excerpt limits.
+Used/modified under ANW-1.0 license.
 ```

@@ -10,7 +10,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 /**
  * Pawtropolis Tech Gatekeeper
- * Copyright (c) 2025 watchthelight (Bash) <admin@watchthelight.org>
+ * Copyright (c) 2026 watchthelight (Bash) <admin@watchthelight.org>
  * License: LicenseRef-ANW-1.0
  * Repo: https://github.com/watchthelight/pawtropolis-tech
  */
@@ -186,10 +186,10 @@ export function isSentryEnabled(): boolean {
 /**
  * Capture an exception in Sentry
  */
-export function captureException(error: Error | unknown, context?: Record<string, unknown>) {
-  if (!sentryEnabled) return;
+export function captureException(error: Error | unknown, context?: Record<string, unknown>): string | null {
+  if (!sentryEnabled) return null;
 
-  Sentry.captureException(error, {
+  return Sentry.captureException(error, {
     contexts: context ? { custom: context } : undefined,
   });
 }

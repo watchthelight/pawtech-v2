@@ -10,7 +10,7 @@
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 /**
  * Pawtropolis Tech Gatekeeper - Tests
- * Copyright (c) 2025 watchthelight (Bash) <admin@watchthelight.org>
+ * Copyright (c) 2026 watchthelight (Bash) <admin@watchthelight.org>
  * License: LicenseRef-ANW-1.0
  */
 
