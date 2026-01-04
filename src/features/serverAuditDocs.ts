@@ -12,6 +12,7 @@ import {
 } from "discord.js";
 import { writeFileSync, mkdirSync, existsSync } from "node:fs";
 import { join } from "node:path";
+import { execSync } from "node:child_process";
 
 // All permission flags we care about for the matrix
 const PERMISSION_FLAGS = [
@@ -139,6 +140,14 @@ export interface AuditResult {
   mediumCount: number;
   lowCount: number;
   outputDir: string;
+  commitUrl?: string;
+}
+
+export interface GitPushResult {
+  success: boolean;
+  commitHash?: string;
+  commitUrl?: string;
+  error?: string;
 }
 
 // Helper to get permission names from a permission bitfield
@@ -843,4 +852,85 @@ export async function generateAuditDocs(guild: Guild, outputDir?: string): Promi
     lowCount: low,
     outputDir: OUTPUT_DIR,
   };
+}
+
+/**
+ * Commit and push audit docs to GitHub
+ * Requires GITHUB_BOT_TOKEN, GITHUB_BOT_USERNAME, GITHUB_BOT_EMAIL, GITHUB_REPO env vars
+ */
+export async function commitAndPushDocs(result: AuditResult): Promise<GitPushResult> {
+  const token = process.env.GITHUB_BOT_TOKEN;
+  const username = process.env.GITHUB_BOT_USERNAME;
+  const email = process.env.GITHUB_BOT_EMAIL;
+  const repo = process.env.GITHUB_REPO;
+
+  if (!token || !username || !email || !repo) {
+    return {
+      success: false,
+      error: "Missing GitHub configuration (GITHUB_BOT_TOKEN, GITHUB_BOT_USERNAME, GITHUB_BOT_EMAIL, GITHUB_REPO)",
+    };
+  }
+
+  const cwd = process.cwd();
+
+  try {
+    // Check if there are changes to commit
+    const status = execSync("git status --porcelain docs/internal-info/", { cwd, encoding: "utf-8" });
+    if (!status.trim()) {
+      return {
+        success: true,
+        error: "No changes to commit",
+      };
+    }
+
+    // Configure git for this commit
+    execSync(`git config user.name "${username}"`, { cwd });
+    execSync(`git config user.email "${email}"`, { cwd });
+
+    // Stage the docs
+    execSync("git add docs/internal-info/", { cwd });
+
+    // Create commit message
+    const timestamp = new Date().toISOString().split("T")[0];
+    const commitMsg = `docs: update internal-info audit (${timestamp})
+
+Roles: ${result.roleCount}
+Channels: ${result.channelCount}
+Issues: ${result.issueCount} (${result.criticalCount} critical, ${result.highCount} high, ${result.mediumCount} medium, ${result.lowCount} low)
+
+[automated by /audit security]`;
+
+    execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { cwd });
+
+    // Get the commit hash
+    const commitHash = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8" }).trim();
+
+    // Push using token authentication
+    const remoteUrl = `https://${username}:${token}@github.com/${repo}.git`;
+    execSync(`git push ${remoteUrl} HEAD:main`, { cwd, encoding: "utf-8" });
+
+    // Reset remote to not expose token
+    execSync(`git remote set-url origin https://github.com/${repo}.git`, { cwd });
+
+    const commitUrl = `https://github.com/${repo}/commit/${commitHash}`;
+
+    return {
+      success: true,
+      commitHash,
+      commitUrl,
+    };
+  } catch (err) {
+    // Reset git config to original user if push failed
+    try {
+      execSync('git config user.name "watchthelight"', { cwd });
+      execSync('git config user.email "admin@watchthelight.org"', { cwd });
+    } catch {
+      // Ignore reset errors
+    }
+
+    return {
+      success: false,
+      error: err instanceof Error ? err.message : "Unknown error during git push",
+    };
+  }
 }

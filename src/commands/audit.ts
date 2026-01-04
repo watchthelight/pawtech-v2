@@ -49,7 +49,7 @@ import {
   type AuditSession,
 } from "../store/auditSessionStore.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
-import { generateAuditDocs } from "../features/serverAuditDocs.js";
+import { generateAuditDocs, commitAndPushDocs } from "../features/serverAuditDocs.js";
 
 // Allowed role IDs (Community Manager + Server Dev)
 // Uses centralized ROLE_IDS from roles.ts for consistency
@@ -130,16 +130,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   // Handle security subcommand (generates docs, doesn't need session tracking)
   if (subcommand === "security") {
-    await interaction.deferReply({ ephemeral: true });
+    await interaction.deferReply({ ephemeral: false }); // Public so link is visible
 
     try {
       logger.info({ userId: user.id, guildId }, "[audit:security] Starting security audit");
 
+      // Generate docs
       const result = await generateAuditDocs(guild);
+
+      // Commit and push to GitHub
+      const pushResult = await commitAndPushDocs(result);
 
       const embed = new EmbedBuilder()
         .setTitle("✅ Security Audit Complete")
-        .setDescription("Server documentation has been regenerated.")
         .setColor(0x22C55E)
         .addFields(
           { name: "Roles", value: result.roleCount.toLocaleString(), inline: true },
@@ -154,16 +157,36 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
               `🟢 Low: ${result.lowCount}`,
             ].join("\n"),
             inline: false,
-          },
-          { name: "Output", value: `\`${result.outputDir}\``, inline: false }
+          }
         )
-        .setFooter({ text: "See docs/internal-info/ for full details" })
         .setTimestamp();
+
+      // Add GitHub link or error
+      if (pushResult.success && pushResult.commitUrl) {
+        embed.setDescription(`Server documentation has been updated and pushed to GitHub.`);
+        embed.addFields({
+          name: "📎 View Changes",
+          value: `[View commit on GitHub](${pushResult.commitUrl})`,
+          inline: false,
+        });
+      } else if (pushResult.error === "No changes to commit") {
+        embed.setDescription("Server documentation regenerated. No changes detected since last audit.");
+      } else if (pushResult.error) {
+        embed.setDescription("Server documentation regenerated but push to GitHub failed.");
+        embed.addFields({
+          name: "⚠️ Push Error",
+          value: pushResult.error,
+          inline: false,
+        });
+        embed.setColor(0xF59E0B); // Warning color
+      } else {
+        embed.setDescription("Server documentation regenerated. GitHub push not configured.");
+      }
 
       await interaction.editReply({ embeds: [embed] });
 
       logger.info(
-        { userId: user.id, guildId, ...result },
+        { userId: user.id, guildId, ...result, pushResult },
         "[audit:security] Security audit complete"
       );
     } catch (err) {
