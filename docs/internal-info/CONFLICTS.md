@@ -1,50 +1,19 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-07T09:06:24.245Z
+**Generated:** 2026-01-07T09:26:47.135Z
 **Guild ID:** 896070888594759740
-**Active Issues:** 4
-**Acknowledged:** 6
+**Active Issues:** 1
+**Acknowledged:** 8
 
 ## Summary
 
 | Severity | Count |
 |----------|-------|
 | 🔴 Critical | 0 |
-| 🟠 High | 1 |
-| 🟡 Medium | 2 |
+| 🟠 High | 0 |
+| 🟡 Medium | 0 |
 | 🟢 Low | 1 |
-| ✅ Acknowledged | 6 |
-
----
-
-## 🟠 High Priority Issues
-
-### [HIGH-009] Privilege Escalation Risk
-
-- **Affected:** Role: Community Apps (896070888749940774)
-- **Issue:** Role has both BanMembers and ManageRoles permissions.
-- **Risk:** Users can potentially escalate privileges by assigning themselves roles up to this role's position.
-- **Recommendation:** Ensure role is high in hierarchy and only trusted staff have it. Consider splitting permissions.
-
----
-
-## 🟡 Medium Priority Issues
-
-### [MED-001] Administrator Permission on Bot Role
-
-- **Affected:** Role: Wick (1394581676579094600)
-- **Issue:** This role has full Administrator permission, bypassing all permission checks.
-- **Risk:** Bot roles with Admin can be compromised if the bot is vulnerable.
-- **Recommendation:** Review if bot actually needs Administrator. Most bots work with specific permissions.
-
----
-
-### [MED-010] Potentially Sensitive Channel Accessible
-
-- **Affected:** Channel: #「🐴」3d-modeling (1450227604152914131)
-- **Issue:** Channel name suggests it's sensitive, but @everyone ViewChannel is not explicitly denied.
-- **Risk:** May be unintentionally accessible to regular members.
-- **Recommendation:** Verify channel permissions are intentional. Add explicit ViewChannel deny for @everyone if private.
+| ✅ Acknowledged | 8 |
 
 ---
 
@@ -96,6 +65,17 @@ These issues have been reviewed by staff and marked as intentional.
 
 ---
 
+### [MED-001] Administrator Permission on Bot Role *(Acknowledged)*
+
+- **Affected:** Role: Wick (1394581676579094600)
+- **Issue:** This role has full Administrator permission, bypassing all permission checks.
+- **Acknowledged by:** <@697169405422862417> on 2026-01-07
+- **Reason:** Intentional, but should use Pawtech in the future probably. Look into it
+
+*To unacknowledge, use `/audit unacknowledge MED-001`*
+
+---
+
 ### [MED-002] Administrator Permission on Bot Role *(Acknowledged)*
 
 - **Affected:** Role: Server Owner (896070888779317254)
@@ -126,6 +106,17 @@ These issues have been reviewed by staff and marked as intentional.
 - **Reason:** This is intentional. Resolve conflict
 
 *To unacknowledge, use `/audit unacknowledge MED-006`*
+
+---
+
+### [MED-009] Potentially Sensitive Channel Accessible *(Acknowledged)*
+
+- **Affected:** Channel: #「🐴」3d-modeling (1450227604152914131)
+- **Issue:** Channel name suggests it's sensitive, but @everyone ViewChannel is not explicitly denied.
+- **Acknowledged by:** <@1402989891830153269> on 2026-01-04
+- **Reason:** Not a sensitive channel, this is the 3D modelling channel.
+
+*To unacknowledge, use `/audit unacknowledge MED-009`*
 
 ---
 

@@ -1,6 +1,6 @@
 # Server Information — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-07T09:06:24.245Z
+**Generated:** 2026-01-07T09:26:47.136Z
 
 ---
 
@@ -89,9 +89,9 @@
 | Metric | Count |
 |--------|-------|
 | Total Roles | 223 |
-| Total Channels | 227 |
+| Total Channels | 229 |
 | Categories | 30 |
-| Text Channels | 155 |
+| Text Channels | 157 |
 | Voice Channels | 22 |
 | Forum Channels | 15 |
 
@@ -102,7 +102,7 @@
 | Category | Count |
 |----------|-------|
 | Roles with Admin | 4 |
-| Roles with Mod Perms | 9 |
+| Roles with Mod Perms | 8 |
 | Bot Roles | 5 |
 | Mentionable Roles | 6 |
 | Hoisted Roles | 40 |
@@ -115,4 +115,4 @@
 |---------|-------|
 | NSFW Channels | 12 |
 | Channels with Slowmode | 2 |
-| Channels with Custom Perms | 223 |
+| Channels with Custom Perms | 225 |
