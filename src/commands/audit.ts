@@ -165,14 +165,37 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   if (subcommand === "security") {
     await interaction.deferReply({ ephemeral: false }); // Public so link is visible
 
+    // Helper to update progress with verbose status
+    const updateProgress = async (step: string, detail?: string) => {
+      const embed = new EmbedBuilder()
+        .setTitle("🔄 Security Audit in Progress")
+        .setDescription(`**${step}**${detail ? `\n\`${detail}\`` : ""}`)
+        .setColor(0x3B82F6)
+        .setTimestamp();
+
+      try {
+        await interaction.editReply({ embeds: [embed] });
+      } catch {
+        // Interaction may have expired, ignore
+      }
+    };
+
     try {
       logger.info({ userId: user.id, guildId }, "[audit:security] Starting security audit");
 
-      // Generate docs
+      // Step 1: Fetch roles
+      await updateProgress("Fetching server roles", `Analyzing ${guild.name}...`);
+
+      // Step 2: Generate docs (includes fetching channels, analyzing)
+      await updateProgress("Analyzing permissions", "Scanning roles and channels...");
       const result = await generateAuditDocs(guild);
 
-      // Commit and push to GitHub
-      const pushResult = await commitAndPushDocs(result);
+      await updateProgress("Documentation generated", `${result.roleCount} roles, ${result.channelCount} channels, ${result.issueCount} issues`);
+
+      // Step 3: Commit and push to GitHub with verbose progress
+      const pushResult = await commitAndPushDocs(result, async (step, detail) => {
+        await updateProgress(step, detail);
+      });
 
       const embed = new EmbedBuilder()
         .setTitle("✅ Security Audit Complete")

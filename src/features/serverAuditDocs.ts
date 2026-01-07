@@ -1007,14 +1007,26 @@ export async function analyzeSecurityOnly(guild: Guild): Promise<SecurityIssue[]
 }
 
 /**
+ * Progress callback for verbose status updates during git operations
+ */
+export type GitProgressCallback = (step: string, detail?: string) => Promise<void>;
+
+/**
  * Commit and push audit docs to GitHub
  * Requires GITHUB_BOT_TOKEN, GITHUB_BOT_USERNAME, GITHUB_BOT_EMAIL, GITHUB_REPO env vars
+ *
+ * Auto-syncs with remote before pushing to avoid conflicts (pulls + rebases if needed)
  */
-export async function commitAndPushDocs(result: AuditResult): Promise<GitPushResult> {
+export async function commitAndPushDocs(
+  result: AuditResult,
+  onProgress?: GitProgressCallback
+): Promise<GitPushResult> {
   const token = process.env.GITHUB_BOT_TOKEN;
   const username = process.env.GITHUB_BOT_USERNAME;
   const email = process.env.GITHUB_BOT_EMAIL;
   const repo = process.env.GITHUB_REPO;
+
+  const progress = onProgress ?? (async () => {});
 
   if (!token || !username || !email || !repo) {
     return {
@@ -1024,9 +1036,11 @@ export async function commitAndPushDocs(result: AuditResult): Promise<GitPushRes
   }
 
   const cwd = process.cwd();
+  const remoteUrl = `https://${username}:${token}@github.com/${repo}.git`;
 
   try {
-    // Check if there are changes to commit
+    // Step 1: Check if there are changes to commit
+    await progress("Checking for changes", "git status");
     const status = execSync("git status --porcelain docs/internal-info/", { cwd, encoding: "utf-8" });
     if (!status.trim()) {
       return {
@@ -1035,14 +1049,56 @@ export async function commitAndPushDocs(result: AuditResult): Promise<GitPushRes
       };
     }
 
-    // Configure git for this commit
+    // Step 2: Configure git for this commit
+    await progress("Configuring git", `user: ${username}`);
     execSync(`git config user.name "${username}"`, { cwd });
     execSync(`git config user.email "${email}"`, { cwd });
 
-    // Stage the docs
+    // Step 3: Fetch latest from remote (to detect conflicts)
+    await progress("Fetching remote", "git fetch origin main");
+    try {
+      execSync(`git fetch ${remoteUrl} main`, { cwd, encoding: "utf-8", stdio: "pipe" });
+    } catch {
+      // Fetch failed - might be network issue, continue anyway
+    }
+
+    // Step 4: Stash our changes temporarily
+    await progress("Stashing changes", "git stash");
+    execSync("git stash push -m 'audit-temp' -- docs/internal-info/", { cwd, stdio: "pipe" });
+
+    // Step 5: Pull and rebase to sync with remote
+    await progress("Syncing with remote", "git pull --rebase");
+    try {
+      execSync(`git pull ${remoteUrl} main --rebase`, { cwd, encoding: "utf-8", stdio: "pipe" });
+    } catch (pullErr) {
+      // Pull failed - try to recover by resetting to remote
+      await progress("Recovering from conflict", "git reset --hard origin/main");
+      try {
+        execSync("git fetch origin main && git reset --hard origin/main", { cwd, stdio: "pipe" });
+      } catch {
+        // If reset also fails, pop stash and continue - we'll report the error
+      }
+    }
+
+    // Step 6: Pop our stashed changes
+    await progress("Restoring changes", "git stash pop");
+    try {
+      execSync("git stash pop", { cwd, stdio: "pipe" });
+    } catch {
+      // Stash pop failed - changes might conflict, try to get them back
+      try {
+        execSync("git checkout stash -- docs/internal-info/", { cwd, stdio: "pipe" });
+        execSync("git stash drop", { cwd, stdio: "pipe" });
+      } catch {
+        // Give up on stash recovery, the files should still be there from generateAuditDocs
+      }
+    }
+
+    // Step 7: Stage the docs
+    await progress("Staging files", "git add docs/internal-info/");
     execSync("git add docs/internal-info/", { cwd });
 
-    // Create commit message
+    // Step 8: Create commit
     const timestamp = new Date().toISOString().split("T")[0];
     const commitMsg = `docs: update internal-info audit (${timestamp})
 
@@ -1052,20 +1108,23 @@ Issues: ${result.issueCount} (${result.criticalCount} critical, ${result.highCou
 
 [automated by /audit security]`;
 
+    await progress("Creating commit", "git commit");
     execSync(`git commit -m "${commitMsg.replace(/"/g, '\\"')}"`, { cwd });
 
-    // Get the commit hash
+    // Step 9: Get the commit hash
     const commitHash = execSync("git rev-parse HEAD", { cwd, encoding: "utf-8" }).trim();
 
-    // Push using token authentication
-    const remoteUrl = `https://${username}:${token}@github.com/${repo}.git`;
-    execSync(`git push ${remoteUrl} HEAD:main`, { cwd, encoding: "utf-8" });
+    // Step 10: Push to remote
+    await progress("Pushing to GitHub", `${repo}`);
+    execSync(`git push ${remoteUrl} HEAD:main`, { cwd, encoding: "utf-8", stdio: "pipe" });
 
     // Reset remote to not expose token
     execSync(`git remote set-url origin https://github.com/${repo}.git`, { cwd });
 
     const commitUrl = `https://github.com/${repo}/commit/${commitHash}`;
     const docsUrl = `https://github.com/${repo}/blob/main/docs/internal-info/CONFLICTS.md`;
+
+    await progress("Complete", commitHash.slice(0, 7));
 
     return {
       success: true,
@@ -1080,6 +1139,13 @@ Issues: ${result.issueCount} (${result.criticalCount} critical, ${result.highCou
       execSync('git config user.email "admin@watchthelight.org"', { cwd });
     } catch {
       // Ignore reset errors
+    }
+
+    // Try to clean up any leftover stash
+    try {
+      execSync("git stash drop", { cwd, stdio: "pipe" });
+    } catch {
+      // Ignore - no stash to drop
     }
 
     return {
