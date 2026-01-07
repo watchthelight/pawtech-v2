@@ -21,15 +21,22 @@ vi.mock("../../../src/lib/logger.js", () => ({
   logger: mockLogger,
 }));
 
-// Mock db to avoid database initialization
+// Mock db to avoid database initialization - use hoisted mocks
+const { mockDbGet, mockDbRun, mockDbAll, mockDbPrepare } = vi.hoisted(() => ({
+  mockDbGet: vi.fn(),
+  mockDbRun: vi.fn(),
+  mockDbAll: vi.fn(),
+  mockDbPrepare: vi.fn(),
+}));
+
+mockDbPrepare.mockReturnValue({
+  get: mockDbGet,
+  run: mockDbRun,
+  all: mockDbAll,
+});
+
 vi.mock("../../../src/db/db.js", () => ({
-  db: {
-    prepare: vi.fn().mockReturnValue({
-      get: vi.fn(),
-      run: vi.fn(),
-      all: vi.fn(),
-    }),
-  },
+  db: { prepare: mockDbPrepare },
 }));
 
 // Mock sentry
@@ -88,6 +95,12 @@ const mockGetTicketByThread = getTicketByThread as ReturnType<typeof vi.fn>;
 describe("forwardedMessages size-based eviction", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish db mock after clearAllMocks
+    mockDbPrepare.mockReturnValue({
+      get: mockDbGet,
+      run: mockDbRun,
+      all: mockDbAll,
+    });
     // Clear the Map before each test
     _testing.clearForwardedMessages();
   });
@@ -433,6 +446,12 @@ describe("buildUserToStaffEmbed", () => {
 describe("routeThreadToDm", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish db mock after clearAllMocks
+    mockDbPrepare.mockReturnValue({
+      get: mockDbGet,
+      run: mockDbRun,
+      all: mockDbAll,
+    });
     _testing.clearForwardedMessages();
   });
 
@@ -561,6 +580,12 @@ describe("routeThreadToDm", () => {
 describe("routeDmToThread", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish db mock after clearAllMocks
+    mockDbPrepare.mockReturnValue({
+      get: mockDbGet,
+      run: mockDbRun,
+      all: mockDbAll,
+    });
     _testing.clearForwardedMessages();
   });
 
@@ -679,6 +704,12 @@ describe("routeDmToThread", () => {
 describe("handleInboundDmForModmail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish db mock after clearAllMocks
+    mockDbPrepare.mockReturnValue({
+      get: mockDbGet,
+      run: mockDbRun,
+      all: mockDbAll,
+    });
   });
 
   it("skips bot messages", async () => {
@@ -689,10 +720,8 @@ describe("handleInboundDmForModmail", () => {
   });
 
   it("does nothing when no open ticket exists", async () => {
-    const { db } = await import("../../../src/db/db.js");
-    (db.prepare as any).mockReturnValue({
-      get: vi.fn().mockReturnValue(undefined),
-    });
+    // Mock db.prepare to return undefined for open ticket query
+    mockDbGet.mockReturnValue(undefined);
 
     const message = {
       author: { bot: false, id: "user-123" },
@@ -706,6 +735,12 @@ describe("handleInboundDmForModmail", () => {
 describe("handleInboundThreadMessageForModmail", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    // Re-establish db mock after clearAllMocks
+    mockDbPrepare.mockReturnValue({
+      get: mockDbGet,
+      run: mockDbRun,
+      all: mockDbAll,
+    });
   });
 
   it("skips bot messages", async () => {

@@ -955,3 +955,18 @@ export async function updateGameTierRole(guild: Guild, userId: string): Promise<
 
   return results;
 }
+
+// Testing helpers - only use in tests to reset module state between test cases
+export const _testing = {
+  clearAllState(): void {
+    gameSessions.clear();
+    activeGameEvents.clear();
+    stopGameSessionPersistence();
+  },
+  getActiveEventsCount(): number {
+    return activeGameEvents.size;
+  },
+  getSessionsCount(): number {
+    return gameSessions.size;
+  },
+};
