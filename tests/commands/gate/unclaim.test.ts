@@ -24,6 +24,12 @@ vi.mock("../../../src/commands/gate/shared.js", () => ({
     warn: vi.fn(),
     error: vi.fn(),
   },
+  // Admin+ override helpers
+  shouldBypass: vi.fn(() => false),
+  hasRoleOrAbove: vi.fn(() => false),
+  ROLE_IDS: {
+    ADMINISTRATOR: "admin-role-id",
+  },
 }));
 
 import { unclaimData, executeUnclaim } from "../../../src/commands/gate/unclaim.js";
@@ -35,6 +41,8 @@ import {
   clearClaim,
   CLAIMED_MESSAGE,
   replyOrEdit,
+  shouldBypass,
+  hasRoleOrAbove,
 } from "../../../src/commands/gate/shared.js";
 
 const mockRequireGatekeeper = requireGatekeeper as ReturnType<typeof vi.fn>;
@@ -44,6 +52,8 @@ const mockGetClaim = getClaim as ReturnType<typeof vi.fn>;
 const mockClearClaim = clearClaim as ReturnType<typeof vi.fn>;
 const mockReplyOrEdit = replyOrEdit as ReturnType<typeof vi.fn>;
 const mockClaimedMessage = CLAIMED_MESSAGE as ReturnType<typeof vi.fn>;
+const mockShouldBypass = shouldBypass as ReturnType<typeof vi.fn>;
+const mockHasRoleOrAbove = hasRoleOrAbove as ReturnType<typeof vi.fn>;
 
 function createMockContext(overrides: Record<string, unknown> = {}) {
   return {
@@ -240,13 +250,16 @@ describe("commands/gate/unclaim", () => {
       );
     });
 
-    it("rejects unclaim by non-claimer", async () => {
+    it("rejects unclaim by non-claimer (non-admin)", async () => {
       const ctx = createMockContext();
       ctx.interaction.options.getString = vi.fn((name) => (name === "app" ? "ABC123" : null));
       ctx.interaction.options.getUser = vi.fn(() => null);
 
       mockFindAppByShortCode.mockReturnValue({ id: "app-id" });
       mockGetClaim.mockReturnValue({ reviewer_id: "other-user" });
+      // Ensure non-admin path
+      mockShouldBypass.mockReturnValue(false);
+      mockHasRoleOrAbove.mockReturnValue(false);
 
       await executeUnclaim(ctx as any);
 
@@ -254,6 +267,46 @@ describe("commands/gate/unclaim", () => {
       expect(mockReplyOrEdit).toHaveBeenCalledWith(
         ctx.interaction,
         expect.objectContaining({ content: expect.stringContaining("Claimed by") })
+      );
+    });
+
+    it("allows admin to unclaim others applications", async () => {
+      const ctx = createMockContext();
+      ctx.interaction.options.getString = vi.fn((name) => (name === "app" ? "ABC123" : null));
+      ctx.interaction.options.getUser = vi.fn(() => null);
+
+      mockFindAppByShortCode.mockReturnValue({ id: "app-id" });
+      mockGetClaim.mockReturnValue({ reviewer_id: "other-user" }); // Claimed by someone else
+      // Admin override
+      mockShouldBypass.mockReturnValue(false);
+      mockHasRoleOrAbove.mockReturnValue(true); // User is Admin+
+
+      await executeUnclaim(ctx as any);
+
+      expect(mockClearClaim).toHaveBeenCalledWith("app-id");
+      expect(mockReplyOrEdit).toHaveBeenCalledWith(
+        ctx.interaction,
+        expect.objectContaining({ content: "Claim removed." })
+      );
+    });
+
+    it("allows bot owner to unclaim others applications", async () => {
+      const ctx = createMockContext();
+      ctx.interaction.options.getString = vi.fn((name) => (name === "app" ? "ABC123" : null));
+      ctx.interaction.options.getUser = vi.fn(() => null);
+
+      mockFindAppByShortCode.mockReturnValue({ id: "app-id" });
+      mockGetClaim.mockReturnValue({ reviewer_id: "other-user" }); // Claimed by someone else
+      // Bot owner bypass
+      mockShouldBypass.mockReturnValue(true);
+      mockHasRoleOrAbove.mockReturnValue(false);
+
+      await executeUnclaim(ctx as any);
+
+      expect(mockClearClaim).toHaveBeenCalledWith("app-id");
+      expect(mockReplyOrEdit).toHaveBeenCalledWith(
+        ctx.interaction,
+        expect.objectContaining({ content: "Claim removed." })
       );
     });
 

@@ -92,7 +92,7 @@ Commands restricted to the Gatekeeper role specifically. Higher roles do NOT aut
 | `/accept` | Accept an application by short code, user mention, or user ID |
 | `/reject` | Reject an application with a reason |
 | `/kick` | Kick an applicant from the server |
-| `/unclaim` | Release your claim on an application |
+| `/unclaim` | Release your claim on an application (Admin+ can unclaim anyone's) |
 | `/listopen` | View your currently claimed applications |
 | `/unblock` | Remove a permanent rejection from a user |
 | `/search` | Search application history by user |

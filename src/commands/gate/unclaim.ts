@@ -2,6 +2,7 @@
  * Pawtropolis Tech -- src/commands/gate/unclaim.ts
  * WHAT: /unclaim command for releasing application claims.
  * WHY: Allows moderators to release claims on applications.
+ *      Administrators+ can unclaim any application to resolve stalemates.
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -22,6 +23,10 @@ import {
   replyOrEdit,
   logger,
   type ApplicationRow,
+  hasRoleOrAbove,
+  ROLE_IDS,
+  shouldBypass,
+  type GuildMember,
 } from "./shared.js";
 
 /*
@@ -47,7 +52,8 @@ export const unclaimData = new SlashCommandBuilder()
 export async function executeUnclaim(ctx: CommandContext<ChatInputCommandInteraction>) {
   /**
    * executeUnclaim
-   * WHAT: Releases a claim on an application, if the caller is the claimer.
+   * WHAT: Releases a claim on an application.
+   * WHO: The claimer can release their own claim. Administrators+ can unclaim anyone's.
    * WHY: Prevents stalemates; enforced via claimGuard.
    */
   const { interaction } = ctx;
@@ -138,9 +144,15 @@ export async function executeUnclaim(ctx: CommandContext<ChatInputCommandInterac
   }
 
   // claim ≠ forever. use /unclaim like an adult
-  // Only the person who claimed it can release it. No stealing claims,
-  // no "helpful" unclaiming of someone else's work. Admins can go touch the DB directly.
-  if (claim.reviewer_id !== interaction.user.id) {
+  // The claimer can always release their own claim.
+  // Administrators+ can unclaim anyone's application to resolve stalemates
+  // without needing direct DB access.
+  const isOwnClaim = claim.reviewer_id === interaction.user.id;
+  const member = interaction.member as GuildMember | null;
+  const isAdminPlus = shouldBypass(interaction.user.id, member) ||
+    hasRoleOrAbove(member, ROLE_IDS.ADMINISTRATOR);
+
+  if (!isOwnClaim && !isAdminPlus) {
     await replyOrEdit(interaction, { content: CLAIMED_MESSAGE(claim.reviewer_id) });
     return;
   }

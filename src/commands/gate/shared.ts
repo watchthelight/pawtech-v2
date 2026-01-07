@@ -10,6 +10,9 @@ export {
   requireStaff,
   requireGatekeeper,
   getConfig,
+  hasRoleOrAbove,
+  ROLE_IDS,
+  shouldBypass,
 } from "../../lib/config.js";
 
 export {

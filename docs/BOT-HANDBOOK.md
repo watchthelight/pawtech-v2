@@ -264,9 +264,9 @@ This removes someone from the server but doesn't count as a formal rejection. Go
 ---
 
 ### `/unclaim`
-**Who can use it:** Staff
+**Who can use it:** Staff (Gatekeepers can unclaim their own; Administrators+ can unclaim anyone's)
 
-If you claimed an application but can't finish reviewing it, use this to release it so someone else can take over.
+If you claimed an application but can't finish reviewing it, use this to release it so someone else can take over. **Administrators and above** can also unclaim applications claimed by other staff members—useful when someone is unavailable and their claimed application needs to be reassigned.
 
 | Option | Required? | What it does |
 |--------|-----------|--------------|
