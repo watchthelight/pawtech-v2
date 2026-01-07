@@ -136,6 +136,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   const subcommand = interaction.options.getSubcommand();
 
+  // IMPORTANT: Defer EARLY for slow subcommands to avoid 3-second timeout
+  // Members/NSFW show confirmation buttons first, so they defer later
+  const deferEarly = ["security", "acknowledge", "unacknowledge"].includes(subcommand);
+  if (deferEarly) {
+    const isEphemeral = subcommand === "unacknowledge";
+    await interaction.deferReply({ ephemeral: isEphemeral });
+  }
+
   // Check if user has an allowed role or is bot owner/server dev
   const member = await guild.members.fetch(user.id);
   const hasAllowedRole = member.roles.cache.some((role) => ALLOWED_ROLES.includes(role.id));
@@ -149,11 +157,18 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
       acknowledge: "Acknowledges a security warning as intentional.",
       unacknowledge: "Removes acknowledgment from a security warning.",
     };
-    await postPermissionDenied(interaction, {
-      command: `audit ${subcommand}`,
-      description: descriptions[subcommand] || "Server audit command.",
-      requirements: [{ type: "roles", roleIds: ALLOWED_ROLES }],
-    });
+    // Use editReply if already deferred, otherwise use postPermissionDenied
+    if (deferEarly) {
+      await interaction.editReply({
+        content: `❌ You don't have permission to use \`/audit ${subcommand}\`. Required: Admin, Senior Admin, Community Manager, or Server Dev role.`,
+      });
+    } else {
+      await postPermissionDenied(interaction, {
+        command: `audit ${subcommand}`,
+        description: descriptions[subcommand] || "Server audit command.",
+        requirements: [{ type: "roles", roleIds: ALLOWED_ROLES }],
+      });
+    }
     logger.warn(
       { userId: user.id, guildId },
       "[audit] Unauthorized user attempted to run audit"
@@ -163,7 +178,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   // Handle security subcommand (generates docs, doesn't need session tracking)
   if (subcommand === "security") {
-    await interaction.deferReply({ ephemeral: false }); // Public so link is visible
+    // Already deferred above
 
     // Helper to update progress with verbose status
     const updateProgress = async (step: string, detail?: string) => {
@@ -257,7 +272,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   // Handle acknowledge subcommand
   if (subcommand === "acknowledge") {
-    await interaction.deferReply();
+    // Already deferred above
 
     const issueId = interaction.options.getString("issue", true).toUpperCase();
     const reason = interaction.options.getString("reason") ?? undefined;
@@ -330,7 +345,7 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
 
   // Handle unacknowledge subcommand
   if (subcommand === "unacknowledge") {
-    await interaction.deferReply({ ephemeral: true });
+    // Already deferred above
 
     const issueId = interaction.options.getString("issue", true).toUpperCase();
 

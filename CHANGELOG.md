@@ -2,7 +2,24 @@
 
 All changes to Pawtropolis Tech are tracked here.
 
-**Versions:** [4.9.1](#491---2026-01-07) | [4.9.0](#490---2026-01-04) | [4.8.0](#480---2025-12-08) | [4.7.1](#471---2025-12-03) | [4.7.0](#470---2025-12-03) | [4.6.0](#460---2025-12-03) | [4.5.0](#450---2025-12-02) | [4.4.4](#444---2025-12-03) | [4.4.3](#443---2025-12-03) | [4.4.2](#442---2025-12-03) | [4.4.1](#441---2025-12-03) | [4.4.0](#440---2025-12-03) | [4.3.0](#430---2025-12-02) | [4.2.0](#420---2025-12-01) | [4.1.0](#410---2025-12-01) | [4.0.3](#403---2025-12-01) | [4.0.2](#402---2025-12-01) | [4.0.1](#401---2025-12-01) | [4.0.0](#400---2025-12-01) | [Earlier versions](#earlier-versions)
+**Versions:** [4.9.2](#492---2026-01-07) | [4.9.1](#491---2026-01-07) | [4.9.0](#490---2026-01-04) | [4.8.0](#480---2025-12-08) | [4.7.1](#471---2025-12-03) | [4.7.0](#470---2025-12-03) | [4.6.0](#460---2025-12-03) | [4.5.0](#450---2025-12-02) | [4.4.4](#444---2025-12-03) | [4.4.3](#443---2025-12-03) | [4.4.2](#442---2025-12-03) | [4.4.1](#441---2025-12-03) | [4.4.0](#440---2025-12-03) | [4.3.0](#430---2025-12-02) | [4.2.0](#420---2025-12-01) | [4.1.0](#410---2025-12-01) | [4.0.3](#403---2025-12-01) | [4.0.2](#402---2025-12-01) | [4.0.1](#401---2025-12-01) | [4.0.0](#400---2025-12-01) | [Earlier versions](#earlier-versions)
+
+## [4.9.2] - 2026-01-07
+
+### Fixed
+
+- **`/audit acknowledge` & `/audit unacknowledge` Timeout** — Fixed "The application did not respond" error that occurred when these commands took too long. Interaction is now deferred immediately before permission checks.
+- **`/audit security` Git Sync** — Fixed push failures when the server's git repo was out of sync with remote. The command now auto-syncs (fetch, stash, pull --rebase, pop) before pushing.
+
+### Changed
+
+- **`/audit security` Verbose Progress** — Now shows real-time progress updates instead of "is thinking":
+  - Fetching server roles
+  - Analyzing permissions
+  - Git operations (sync, commit, push)
+  - Final summary with issue breakdown
+
+---
 
 ## [4.9.1] - 2026-01-07
 

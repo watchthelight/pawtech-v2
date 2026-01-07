@@ -916,3 +916,22 @@ export function bumpAttendance(
 
 // Export getMovieQualificationThreshold for use by commands
 export { getMovieQualificationThreshold };
+
+/**
+ * Testing helper to clear all module state.
+ * Used by tests to ensure clean state between test runs.
+ * DO NOT use in production code.
+ */
+export const _testing = {
+  clearAllState(): void {
+    movieSessions.clear();
+    activeEvents.clear();
+    stopSessionPersistence();
+  },
+  getActiveEventsCount(): number {
+    return activeEvents.size;
+  },
+  getSessionsCount(): number {
+    return movieSessions.size;
+  },
+};
