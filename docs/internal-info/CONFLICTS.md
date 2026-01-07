@@ -1,8 +1,8 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-04T20:33:03.800Z
+**Generated:** 2026-01-07T09:06:24.245Z
 **Guild ID:** 896070888594759740
-**Active Issues:** 3
+**Active Issues:** 4
 **Acknowledged:** 6
 
 ## Summary
@@ -10,10 +10,21 @@
 | Severity | Count |
 |----------|-------|
 | 🔴 Critical | 0 |
-| 🟠 High | 0 |
+| 🟠 High | 1 |
 | 🟡 Medium | 2 |
 | 🟢 Low | 1 |
 | ✅ Acknowledged | 6 |
+
+---
+
+## 🟠 High Priority Issues
+
+### [HIGH-009] Privilege Escalation Risk
+
+- **Affected:** Role: Community Apps (896070888749940774)
+- **Issue:** Role has both BanMembers and ManageRoles permissions.
+- **Risk:** Users can potentially escalate privileges by assigning themselves roles up to this role's position.
+- **Recommendation:** Ensure role is high in hierarchy and only trusted staff have it. Consider splitting permissions.
 
 ---
 
@@ -28,7 +39,7 @@
 
 ---
 
-### [MED-009] Potentially Sensitive Channel Accessible
+### [MED-010] Potentially Sensitive Channel Accessible
 
 - **Affected:** Channel: #「🐴」3d-modeling (1450227604152914131)
 - **Issue:** Channel name suggests it's sensitive, but @everyone ViewChannel is not explicitly denied.
@@ -42,7 +53,7 @@
 ### [LOW-008] Wide @everyone/@here Access
 
 - **Affected:** Role: Moderation Team (987662057069482024)
-- **Issue:** 17 members can mention @everyone/@here.
+- **Issue:** 16 members can mention @everyone/@here.
 - **Risk:** Potential for spam or disruption.
 - **Recommendation:** Consider restricting to staff roles or specific channels only.
 
