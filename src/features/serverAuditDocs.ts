@@ -937,6 +937,13 @@ export async function generateAuditDocs(guild: Guild, outputDir?: string): Promi
   const serverInfo = await fetchServerInfo(guild);
   const issues = analyzeSecurityIssues(roles, channels);
 
+  // Populate cache so /audit acknowledge can find these exact issues with matching IDs
+  // This ensures IDs like MED-010 stay consistent between the audit display and acknowledge
+  securityAnalysisCache.set(guild.id, {
+    issues,
+    expiresAt: Date.now() + SECURITY_CACHE_TTL_MS,
+  });
+
   // Fetch acknowledged issues and partition
   const acknowledged = getAcknowledgedIssues(guild.id);
   const partitioned = partitionIssues(issues, acknowledged);
@@ -977,11 +984,12 @@ export async function generateAuditDocs(guild: Guild, outputDir?: string): Promi
 }
 
 /**
- * Cache for security analysis results (60 second TTL).
- * Allows rapid-fire acknowledge commands without re-analyzing.
+ * Cache for security analysis results (5 minute TTL).
+ * Allows acknowledge commands to find the same issues displayed by /audit security.
+ * Extended from 60s to 5 minutes to give users time to review and acknowledge issues.
  */
 const securityAnalysisCache = new Map<string, { issues: SecurityIssue[]; expiresAt: number }>();
-const SECURITY_CACHE_TTL_MS = 60_000; // 60 seconds
+const SECURITY_CACHE_TTL_MS = 300_000; // 5 minutes
 
 /**
  * Run a fresh security analysis and return issues (for acknowledge command).
