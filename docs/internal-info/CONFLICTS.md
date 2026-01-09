@@ -1,9 +1,9 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-09T12:25:52.009Z
+**Generated:** 2026-01-09T12:29:21.156Z
 **Guild ID:** 896070888594759740
-**Active Issues:** 3
-**Acknowledged:** 7
+**Active Issues:** 1
+**Acknowledged:** 9
 
 ## Summary
 
@@ -11,22 +11,13 @@
 |----------|-------|
 | 🔴 Critical | 0 |
 | 🟠 High | 0 |
-| 🟡 Medium | 2 |
-| 🟢 Low | 1 |
-| ✅ Acknowledged | 7 |
+| 🟡 Medium | 1 |
+| 🟢 Low | 0 |
+| ✅ Acknowledged | 9 |
 
 ---
 
 ## 🟡 Medium Priority Issues
-
-### [MED-005] Administrator Permission on Bot Role
-
-- **Affected:** Role: Server Dev (1120074045883420753)
-- **Issue:** This role has full Administrator permission, bypassing all permission checks.
-- **Risk:** Bot roles with Admin can be compromised if the bot is vulnerable.
-- **Recommendation:** Review if bot actually needs Administrator. Most bots work with specific permissions.
-
----
 
 ### [MED-010] Potentially Sensitive Channel Accessible
 
@@ -34,17 +25,6 @@
 - **Issue:** Channel name suggests it's sensitive, but @everyone ViewChannel is not explicitly denied.
 - **Risk:** May be unintentionally accessible to regular members.
 - **Recommendation:** Verify channel permissions are intentional. Add explicit ViewChannel deny for @everyone if private.
-
----
-
-## 🟢 Low Priority / Notes
-
-### [LOW-009] Wide @everyone/@here Access
-
-- **Affected:** Role: Moderation Team (987662057069482024)
-- **Issue:** 16 members can mention @everyone/@here.
-- **Risk:** Potential for spam or disruption.
-- **Recommendation:** Consider restricting to staff roles or specific channels only.
 
 ---
 
@@ -107,6 +87,17 @@ These issues have been reviewed by staff and marked as intentional.
 
 ---
 
+### [MED-005] Administrator Permission on Bot Role *(Acknowledged)*
+
+- **Affected:** Role: Server Dev (1120074045883420753)
+- **Issue:** This role has full Administrator permission, bypassing all permission checks.
+- **Acknowledged by:** <@697169405422862417> on 2026-01-09
+- **Reason:** Intentional
+
+*To unacknowledge, use `/audit unacknowledge MED-005`*
+
+---
+
 ### [MED-006] Webhook Impersonation Risk *(Acknowledged)*
 
 - **Affected:** Role: Community Manager (1190093021170114680)
@@ -126,6 +117,17 @@ These issues have been reviewed by staff and marked as intentional.
 - **Reason:** This is intentional. Resolve conflict
 
 *To unacknowledge, use `/audit unacknowledge MED-007`*
+
+---
+
+### [LOW-009] Wide @everyone/@here Access *(Acknowledged)*
+
+- **Affected:** Role: Moderation Team (987662057069482024)
+- **Issue:** 16 members can mention @everyone/@here.
+- **Acknowledged by:** <@697169405422862417> on 2026-01-09
+- **Reason:** Intentional
+
+*To unacknowledge, use `/audit unacknowledge LOW-009`*
 
 ---
 
