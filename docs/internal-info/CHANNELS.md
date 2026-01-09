@@ -1,15 +1,15 @@
 # Server Channels — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-07T09:26:47.130Z
+**Generated:** 2026-01-09T12:25:52.004Z
 **Guild ID:** 896070888594759740
-**Total Channels:** 229
+**Total Channels:** 223
 
 ## Summary
 
 | Type | Count |
 |------|-------|
 | Categories | 30 |
-| Text Channels | 157 |
+| Text Channels | 151 |
 | Voice Channels | 22 |
 | Forum Channels | 15 |
 | Threads | 0 |
@@ -29,14 +29,9 @@
 | ticket-0881 | Text | `1449845274791903316` | No | 0s |
 | support-0894 | Text | `1452090466144227418` | No | 0s |
 | support-0900 | Text | `1454614477159796962` | No | 0s |
-| support-0907 | Text | `1456543740075315223` | No | 0s |
-| support-0909 | Text | `1457361335636459713` | No | 0s |
 | support-0910 | Text | `1457361751099310295` | No | 0s |
 | support-0911 | Text | `1458104370771263705` | No | 0s |
-| user-0422 | Text | `1458222992378036264` | No | 0s |
-| user-0423 | Text | `1458275852545556684` | No | 0s |
-| 2d-artist-0083 | Text | `1458386893791035475` | No | 0s |
-| support-0912 | Text | `1458391200603181137` | No | 0s |
+| support-0913 | Text | `1458783163185893427` | No | 0s |
 
 ### - discord.gg/floof -
 
@@ -45,7 +40,7 @@
 | Channel | Type | ID | NSFW | Slowmode |
 |---------|------|----|------|----------|
 | 「⭐」gallery | Forum | `1130445124413956147` | No | 0s |
-| 「🌎」Citizens: 5805 | Voice | `1438786295479533578` | No | 0s |
+| 「🌎」Citizens: 5829 | Voice | `1438786295479533578` | No | 0s |
 | 「💎」boosts | Text | `896070888779317256` | No | 0s |
 | 「🏆」Goal: 6000 | Voice | `1438646719892951070` | No | 0s |
 
@@ -217,7 +212,6 @@
 | 「🛸」ash-spaceship | Text | `1432530307826843748` | No | 0s |
 | 「🔥」Round the Fire | Voice | `1454583795729699030` | No | 0s |
 | 「💎」birbos-bizarre-adventures | Text | `1433189199351120055` | No | 0s |
-| 「🐺」attis-campfire | Text | `1454582806012498042` | No | 0s |
 | 「🐾」shadowfangs-corner | Text | `1456358548429869116` | No | 0s |
 
 ### [13] Unverified Area
@@ -438,11 +432,11 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Ticket Tool#4843 | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
-| Administrator | role | ViewChannel | - |
-| Senior Administrator | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, AddReactions |
 | Moderation Team | role | ViewChannel | - |
+| Administrator | role | ViewChannel | - |
+| Ticket Tool#4843 | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, AddReactions |
+| Senior Administrator | role | ViewChannel | - |
 
 ### #- discord.gg/floof -
 
@@ -500,24 +494,24 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 
 ### #[6] Creative Corner
 
@@ -554,8 +548,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | ViewChannel | - |
-| Community Apps | role | ViewChannel | - |
 | Administrator | role | ViewChannel | - |
+| Community Apps | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ViewChannel, SendMessages |
 
 ### #[11] [Booster💎] [ Patreon👑]
@@ -589,8 +583,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Staff on Break | role | ViewChannel | - |
-| Gatekeeper | role | ViewChannel | - |
 | Community Member | role | - | ViewChannel |
+| Gatekeeper | role | ViewChannel | - |
 | Administrator | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, AddReactions |
@@ -773,10 +767,10 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
+| Moderation Team | role | ViewChannel, SendMessages | - |
 | ash_thefurry11037 | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | universeofastargirl | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| Moderation Team | role | ViewChannel, SendMessages | - |
+| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | @everyone | role | - | ViewChannel |
 | Community Ambassador | role | ViewChannel, SendMessages | - |
 
@@ -795,42 +789,16 @@
 | @everyone | role | - | ViewChannel |
 | Community Ambassador | role | ViewChannel, SendMessages | - |
 
-### #support-0907
-
-**ID:** `1456543740075315223` | **Type:** Text
-
-| Target | Type | Allow | Deny |
-|--------|------|-------|------|
-| Moderation Team | role | ViewChannel, SendMessages | - |
-| Community Ambassador | role | ViewChannel, SendMessages | - |
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| teataum | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| @everyone | role | - | ViewChannel |
-| mr.isflcis | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-
-### #support-0909
-
-**ID:** `1457361335636459713` | **Type:** Text
-
-| Target | Type | Allow | Deny |
-|--------|------|-------|------|
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| universeofastargirl | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| watchthelight | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| Moderation Team | role | ViewChannel, SendMessages | - |
-| @everyone | role | - | ViewChannel |
-| Community Ambassador | role | ViewChannel, SendMessages | - |
-
 ### #support-0910
 
 **ID:** `1457361751099310295` | **Type:** Text
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Moderation Team | role | ViewChannel, SendMessages | - |
+| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | theodrum._ | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
 | entropyprotogen | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
+| Moderation Team | role | ViewChannel, SendMessages | - |
 | @everyone | role | - | ViewChannel |
 | Community Ambassador | role | ViewChannel, SendMessages | - |
 
@@ -840,59 +808,23 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| astellarkitty | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
+| Moderation Team | role | ViewChannel, SendMessages | - |
 | Community Apps | role | ViewChannel, SendMessages | - |
 | Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | kasthekasztan | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
-| Moderation Team | role | ViewChannel, SendMessages | - |
+| astellarkitty | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
 | @everyone | role | - | ViewChannel |
 | Community Ambassador | role | ViewChannel, SendMessages | - |
 
-### #user-0422
+### #support-0913
 
-**ID:** `1458222992378036264` | **Type:** Text
+**ID:** `1458783163185893427` | **Type:** Text
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| firebird455. | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles | ManageMessages |
+| haze20008 | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
 | Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| @everyone | role | - | ViewChannel |
-| Moderation Team | role | ViewChannel, SendMessages | - |
-
-### #user-0423
-
-**ID:** `1458275852545556684` | **Type:** Text
-
-| Target | Type | Allow | Deny |
-|--------|------|-------|------|
-| sf64 | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles | ManageMessages |
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| @everyone | role | - | ViewChannel |
-| Moderation Team | role | ViewChannel, SendMessages | - |
-
-### #2d-artist-0083
-
-**ID:** `1458386893791035475` | **Type:** Text
-
-| Target | Type | Allow | Deny |
-|--------|------|-------|------|
-| caddios | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles | ManageMessages |
-| Moderation Team | role | ViewChannel, SendMessages | - |
 | Community Apps | role | ViewChannel, SendMessages | - |
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
-| @everyone | role | - | ViewChannel |
-| Community Ambassador | role | ViewChannel, SendMessages | - |
-
-### #support-0912
-
-**ID:** `1458391200603181137` | **Type:** Text
-
-| Target | Type | Allow | Deny |
-|--------|------|-------|------|
-| executional_hits | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
-| Community Apps | role | ViewChannel, SendMessages | - |
-| entropyprotogen | member | ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | ManageMessages |
-| Ticket Tool#4843 | member | ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | Moderation Team | role | ViewChannel, SendMessages | - |
 | @everyone | role | - | ViewChannel |
 | Community Ambassador | role | ViewChannel, SendMessages | - |
@@ -951,8 +883,8 @@
 | Community Member | role | - | ViewChannel |
 | Donator | role | ViewChannel | - |
 | Booster Fur | role | - | ViewChannel |
-| Moderation Team | role | ViewChannel | ManageMessages |
 | VIP Fur | role | - | ViewChannel |
+| Moderation Team | role | ViewChannel | ManageMessages |
 | Administrator | role | ViewChannel | ManageMessages |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, SendMessages |
 
@@ -1062,8 +994,8 @@
 | Event Host | role | ViewChannel | - |
 | Administrator | role | ViewChannel | - |
 | Events Manager | role | ManageMessages, MentionEveryone, ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads |
 
 ### #「🎉」user-signup
 
@@ -1072,8 +1004,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Event Host | role | ViewChannel | - |
-| Events Manager | role | ViewChannel | - |
 | Administrator | role | ViewChannel | - |
+| Events Manager | role | ViewChannel | - |
 | Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads |
 
@@ -1249,8 +1181,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | wwerew0lf | member | ViewChannel, SendMessages, AttachFiles, ReadMessageHistory | - |
-| @everyone | role | - | ViewChannel, SendMessages, ReadMessageHistory |
 | _xxhiroxx_ | member | ViewChannel, SendMessages, AttachFiles, ReadMessageHistory | - |
+| @everyone | role | - | ViewChannel, SendMessages, ReadMessageHistory |
 
 ### #「🔑」Lead VC
 
@@ -1273,6 +1205,7 @@
 | Community Member | role | - | ViewChannel |
 | Senior Moderator | role | ViewChannel | ManageMessages |
 | Administrator | role | ManageMessages, ViewChannel | - |
+| Community Apps | role | ManageMessages, ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | - |
 | @everyone | role | SendMessages | ManageRoles, ManageChannels, ManageMessages, ViewChannel |
 
 ### #「🔐」leadership-chat
@@ -1283,8 +1216,8 @@
 |--------|------|-------|------|
 | Community Member | role | - | ViewChannel |
 | Administrator | role | ViewChannel | - |
-| Community Development Lead | role | ViewChannel | - |
 | VRC Group Lead | role | ViewChannel | - |
+| Community Development Lead | role | ViewChannel | - |
 | @everyone | role | SendMessages | ManageRoles, ManageChannels, ManageMessages, ViewChannel |
 
 ### #「🔑」Senior VC
@@ -1295,9 +1228,9 @@
 |--------|------|-------|------|
 | Community Member | role | - | ViewChannel |
 | Senior Moderator | role | ViewChannel, MuteMembers, DeafenMembers, MoveMembers | - |
-| Community Apps | role | ManageRoles, ManageChannels, ManageMessages, ManageWebhooks, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker | - |
-| Community Development Lead | role | ViewChannel, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, PrioritySpeaker | - |
 | Administrator | role | ViewChannel, MuteMembers, DeafenMembers, MoveMembers, PrioritySpeaker | - |
+| Community Development Lead | role | ViewChannel, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, PrioritySpeaker | - |
+| Community Apps | role | ManageRoles, ManageChannels, ManageMessages, ManageWebhooks, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker | - |
 | @everyone | role | Connect, Speak, Stream | ManageRoles, ManageChannels, ViewChannel, MuteMembers, DeafenMembers, MoveMembers, PrioritySpeaker |
 
 ### #「🔐」training-logging
@@ -1327,7 +1260,7 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | - | ViewChannel |
-| Community Apps | role | - | ViewChannel, SendMessages |
+| Community Apps | role | ViewChannel, SendMessages | - |
 | @everyone | role | - | ViewChannel |
 
 ### #「🔐」to-do-list
@@ -1412,8 +1345,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | ViewChannel | SendMessages |
-| Administrator | role | SendMessages | - |
 | Community Apps | role | ViewChannel | - |
+| Administrator | role | SendMessages | - |
 | Senior Administrator | role | SendMessages | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessagesInThreads, CreatePublicThreads, AddReactions |
 
@@ -1423,8 +1356,8 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | Connect, Speak | Stream |
 | Verified 2D Artist | role | ViewChannel, Connect, Speak, Stream | - |
+| Community Member | role | Connect, Speak | Stream |
 | Community Apps | role | ViewChannel, Connect, Speak | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles | - |
@@ -1474,13 +1407,13 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | ViewChannel, AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
+| Community Member | role | ViewChannel, AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Community Apps | role | ViewChannel | - |
 | [ The Pawtropolis Community ] | role | - | ViewChannel |
-| Moderation Team | role | ManageMessages, ViewChannel, SendMessages | - |
-| @everyone | role | EmbedLinks, AttachFiles | - |
 | OG Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
+| @everyone | role | EmbedLinks, AttachFiles | - |
+| Moderation Team | role | ManageMessages, ViewChannel, SendMessages | - |
 
 ### #「🖌️」verified-art-trades
 
@@ -1488,13 +1421,13 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
+| Community Member | role | AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Community Apps | role | ViewChannel | - |
 | [ The Pawtropolis Community ] | role | - | ViewChannel |
-| Moderation Team | role | ManageMessages, ViewChannel, SendMessages | - |
-| @everyone | role | EmbedLinks, AttachFiles | - |
 | OG Verified 2D Artist | role | EmbedLinks, AttachFiles | - |
+| @everyone | role | EmbedLinks, AttachFiles | - |
+| Moderation Team | role | ManageMessages, ViewChannel, SendMessages | - |
 
 ### #「🖌️」art-commissions
 
@@ -1502,13 +1435,13 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
 | Community Member | role | ViewChannel, AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
+| Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
 | Community Apps | role | ViewChannel | - |
 | [ The Pawtropolis Community ] | role | - | ViewChannel |
-| Moderation Team | role | ManageMessages, ViewChannel, SendMessages | - |
-| @everyone | role | EmbedLinks, AttachFiles | - |
 | OG Verified 2D Artist | role | EmbedLinks, AttachFiles | - |
+| @everyone | role | EmbedLinks, AttachFiles | - |
+| Moderation Team | role | ManageMessages, ViewChannel, SendMessages | - |
 
 ### #「🖌️」adopts
 
@@ -1516,8 +1449,8 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | ViewChannel, AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
+| Community Member | role | ViewChannel, AddReactions, UseExternalEmojis, ReadMessageHistory | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Community Apps | role | ViewChannel | - |
 | [ The Pawtropolis Community ] | role | - | ViewChannel |
 | OG Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
@@ -1544,13 +1477,13 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
 | Community Member | role | ViewChannel, SendMessages, AddReactions, UseExternalEmojis, ReadMessageHistory | CreatePublicThreads, CreatePrivateThreads |
+| Verified 2D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis | MentionEveryone |
 | Community Apps | role | ViewChannel | - |
 | [ The Pawtropolis Community ] | role | - | ViewChannel |
-| OG Verified 2D Artist | role | SendMessages, EmbedLinks, AttachFiles | - |
-| @everyone | role | EmbedLinks, AttachFiles | - |
 | Moderation Team | role | ManageMessages, SendMessages | - |
+| @everyone | role | EmbedLinks, AttachFiles | - |
+| OG Verified 2D Artist | role | SendMessages, EmbedLinks, AttachFiles | - |
 
 ### #「🍬」october-showcase
 
@@ -1604,13 +1537,15 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
+| Veteran Fur ‹‹ LVL 60 ›› | role | ViewChannel | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | ViewChannel | - |
 | Donator | role | ViewChannel | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | ViewChannel | - |
 | thefox07 | member | ManageMessages, ViewChannel, MuteMembers, DeafenMembers, PrioritySpeaker | - |
-| VIP Fur | role | ViewChannel | - |
-| Mythic Fur ‹‹ LVL 90 ›› | role | ViewChannel | - |
 | Booster Fur | role | ViewChannel | - |
+| VIP Fur | role | ViewChannel | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | ViewChannel | - |
+| Mythic Fur ‹‹ LVL 90 ›› | role | ViewChannel | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | ViewChannel | - |
 | @everyone | role | - | ViewChannel |
 
@@ -1623,18 +1558,18 @@
 | Community Member | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
 | Community Apps | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
 | entropyprotogen | member | ViewChannel | - |
-| Community Manager | role | ManageRoles, ManageChannels, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads | - |
 | kasthekasztan | member | ViewChannel | - |
+| Community Manager | role | ManageRoles, ManageChannels, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads | - |
 | stuffypaw | member | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
 | newtbytes | member | ViewChannel | - |
 | Server Dev | role | ViewChannel | - |
 | blueberrythecheesecake3eevee | member | ViewChannel | - |
 | dusty_9933 | member | ViewChannel | - |
-| watchthelight | member | ViewChannel | - |
+| laskiasfpt2 | member | ViewChannel | - |
 | birbostreams | member | ViewChannel | - |
 | @everyone | role | - | ViewChannel, SendMessages |
-| laskiasfpt2 | member | ViewChannel | - |
+| watchthelight | member | ViewChannel | - |
 
 ### #「🪐」Golden Forum
 
@@ -1642,7 +1577,7 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | ViewChannel, SendMessages, ReadMessageHistory | Connect |
+| Community Member | role | ViewChannel, SendMessages, ReadMessageHistory | - |
 | Community Manager | role | ManageRoles, ManageChannels, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, Connect | - |
 | Community Apps | role | ViewChannel, Connect, Speak | - |
 | entropyprotogen | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker | - |
@@ -1660,8 +1595,8 @@
 | Community Member | role | ViewChannel | Connect |
 | entropyprotogen | member | ManageMessages, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | SendMessages, EmbedLinks, AttachFiles | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
 | Community Manager | role | ManageChannels, ViewChannel | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
@@ -1684,9 +1619,9 @@
 |--------|------|-------|------|
 | Green | role | ViewChannel | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | ViewChannel | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | ViewChannel | - |
-| hattoris_katana_59227 | member | ViewChannel | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | ViewChannel | - |
+| hattoris_katana_59227 | member | ViewChannel | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | ViewChannel | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | ViewChannel | - |
 | Community Manager | role | ManageRoles, ManageChannels, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads | - |
 | Active Fur ‹‹ LVL 20 ›› | role | ViewChannel | - |
@@ -1694,9 +1629,9 @@
 | Known Fur ‹‹ LVL 30 ›› | role | ViewChannel | - |
 | Experienced Fur ‹‹ LVL 40 ›› | role | ViewChannel | - |
 | watchthelight | member | ManageMessages, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
-| Elite Fur ‹‹ LVL 70 ›› | role | ViewChannel | - |
-| @everyone | role | - | ViewChannel |
 | theatti | member | ViewChannel | - |
+| @everyone | role | - | ViewChannel |
+| Elite Fur ‹‹ LVL 70 ›› | role | ViewChannel | - |
 
 ### #「⛰️」The Stray Mutt's Den
 
@@ -1716,15 +1651,15 @@
 |--------|------|-------|------|
 | newtbytes | member | EmbedLinks, AttachFiles | - |
 | Community Member | role | ViewChannel | Connect |
-| teataum | member | ManageMessages, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, AttachFiles | - |
+| Moderation Team | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
 | Server Dev | role | ViewChannel | - |
 | entropyprotogen | member | EmbedLinks, AttachFiles | - |
 | ash_thefurry11037 | member | EmbedLinks, AttachFiles | - |
 | kasthekasztan | member | EmbedLinks, AttachFiles | - |
 | watchthelight | member | EmbedLinks, AttachFiles | - |
-| birbostreams | member | EmbedLinks, AttachFiles | - |
+| teataum | member | ManageMessages, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, AttachFiles | - |
 | @everyone | role | - | ViewChannel |
-| Moderation Team | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
+| birbostreams | member | EmbedLinks, AttachFiles | - |
 
 ### #「🐄」Moooo-ing Meadows
 
@@ -1779,28 +1714,19 @@
 | birbostreams | member | ManageMessages | - |
 | @everyone | role | - | ViewChannel |
 
-### #「🐺」attis-campfire
-
-**ID:** `1454582806012498042` | **Type:** Text
-
-| Target | Type | Allow | Deny |
-|--------|------|-------|------|
-| Community Member | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ViewChannel |
-
 ### #「🐾」shadowfangs-corner
 
 **ID:** `1456358548429869116` | **Type:** Text
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Eternal Fur ‹‹ LVL 100+ ›› | role | ViewChannel | - |
 | Donator | role | ViewChannel | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | ViewChannel | - |
 | thefox07 | member | ManageMessages | - |
 | Booster Fur | role | ViewChannel | - |
 | VIP Fur | role | ViewChannel | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | ViewChannel | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | ViewChannel | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ViewChannel |
 
@@ -1856,10 +1782,10 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | ViewChannel | SendMessages |
-| Community Apps | role | ViewChannel | - |
+| Administrator | role | ManageMessages, SendMessages | - |
 | Community Development Lead | role | SendMessages | - |
 | Senior Administrator | role | ManageMessages, SendMessages | - |
-| Administrator | role | ManageMessages, SendMessages | - |
+| Community Apps | role | ViewChannel | - |
 | Moderation Team | role | SendMessages | - |
 | @everyone | role | AddReactions | ManageRoles, ManageChannels, ManageMessages, SendMessages, CreatePublicThreads, CreatePrivateThreads |
 
@@ -1871,10 +1797,10 @@
 |--------|------|-------|------|
 | Event Host | role | SendMessages | - |
 | Community Member | role | ViewChannel | SendMessages |
-| Community Apps | role | ViewChannel, SendMessages | - |
+| Administrator | role | SendMessages | - |
 | VRC Group Lead | role | SendMessages | - |
 | Senior Administrator | role | SendMessages | - |
-| Administrator | role | SendMessages | - |
+| Community Apps | role | ViewChannel, SendMessages | - |
 | Events Manager | role | ManageMessages, SendMessages | - |
 | VRC Group Team | role | SendMessages | - |
 | @everyone | role | AddReactions | ManageRoles, ManageChannels, ManageMessages, SendMessages, CreatePublicThreads, CreatePrivateThreads |
@@ -1906,9 +1832,9 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Administrator | role | ViewChannel | - |
-| Moderation Team | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Ticket Tool#4843 | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
+| Moderation Team | role | ViewChannel | - |
 
 ### #「📂」staff-log
 
@@ -1926,9 +1852,9 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Administrator | role | ViewChannel | - |
-| Moderation Team | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Ticket Tool#4843 | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
+| Moderation Team | role | ViewChannel | - |
 
 ### #「📂」user-log
 
@@ -1937,9 +1863,9 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Administrator | role | ViewChannel | - |
-| Moderation Team | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Ticket Tool#4843 | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
+| Moderation Team | role | ViewChannel | - |
 
 ### #「📂」fursuit-log
 
@@ -1980,10 +1906,10 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Moderation Team | role | ViewChannel | - |
+| VRC Group Team | role | ViewChannel | - |
 | Administrator | role | ViewChannel | - |
 | VRC Group Lead | role | ViewChannel | - |
-| VRC Group Team | role | ViewChannel | - |
+| Moderation Team | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Ticket Tool#4843 | member | ManageRoles, ManageChannels, ManageMessages, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
 
@@ -2014,24 +1940,24 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
-| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | ManageRoles, ManageChannels, CreatePublicThreads, CreatePrivateThreads |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 
 ### #「🎹」music-promotion
 
@@ -2051,24 +1977,24 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
-| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | ManageRoles, ManageChannels, CreatePublicThreads, CreatePrivateThreads |
-| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 
 ### #「🐴」3d-modeling
 
@@ -2076,8 +2002,8 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | AddReactions | - |
 | Verified 3D Artist | role | ViewChannel, SendMessages, EmbedLinks, AttachFiles | - |
+| Community Member | role | AddReactions | - |
 | @everyone | role | - | ManageRoles, ManageChannels, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads |
 
 ### #「⭐」gallery
@@ -2091,7 +2017,7 @@
 | Moderation Team | role | ViewChannel, SendMessagesInThreads, AttachFiles | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, SendMessages, SendMessagesInThreads, AddReactions, Connect |
 
-### #「🌎」Citizens: 5805
+### #「🌎」Citizens: 5829
 
 **ID:** `1438786295479533578` | **Type:** Voice
 
@@ -2182,9 +2108,9 @@
 | Community Apps | role | EmbedLinks, AttachFiles | ManageMessages |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
-| Pawtropolis Tech#2205 | member | MentionEveryone | - |
-| Community Ambassador | role | EmbedLinks, AttachFiles | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
+| Community Ambassador | role | EmbedLinks, AttachFiles | - |
+| Pawtropolis Tech#2205 | member | MentionEveryone | - |
 | Administrator | role | EmbedLinks, AttachFiles | - |
 | Senior Administrator | role | EmbedLinks, AttachFiles | - |
 | Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
@@ -2192,8 +2118,8 @@
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles |
 | Engaged Fur ‹‹ LVL 15 ›› | role | AttachFiles, UseExternalEmojis, UseExternalStickers | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
-| Mimu#5713 | member | ManageMessages | - |
 | Donator | role | EmbedLinks, AttachFiles | - |
+| Mimu#5713 | member | ManageMessages | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, UseExternalEmojis, UseExternalStickers | - |
 | Booster Fur | role | EmbedLinks, AttachFiles | - |
@@ -2225,14 +2151,14 @@
 | Experienced Fur ‹‹ LVL 40 ›› | role | ViewChannel | - |
 | @everyone | role | - | ViewChannel, CreatePublicThreads, CreatePrivateThreads |
 | Veteran Fur ‹‹ LVL 60 ›› | role | ViewChannel | - |
-| Donator | role | ViewChannel | - |
-| Mimu#5713 | member | ManageMessages | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | ViewChannel | - |
+| Mimu#5713 | member | ManageMessages | - |
+| Donator | role | ViewChannel | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | ViewChannel | - |
-| Staff Emeritus | role | ViewChannel | - |
+| Booster Fur | role | ViewChannel | - |
 | VIP Fur | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
-| Booster Fur | role | ViewChannel | - |
+| Staff Emeritus | role | ViewChannel | - |
 | Known Fur ‹‹ LVL 30 ›› | role | ViewChannel | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | ViewChannel | - |
 
@@ -2344,14 +2270,14 @@
 | Active Fur ‹‹ LVL 20 ›› | role | ReadMessageHistory | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | ReadMessageHistory | - |
 | Server Dev | role | ViewChannel | - |
-| Beginner Fur ‹‹ LVL 5 ›› | role | AttachFiles, ReadMessageHistory | - |
 | Experienced Fur ‹‹ LVL 40 ›› | role | ReadMessageHistory | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | AttachFiles, ReadMessageHistory | - |
 | @everyone | role | - | SendMessages, CreatePublicThreads, CreatePrivateThreads |
 | Engaged Fur ‹‹ LVL 15 ›› | role | ReadMessageHistory | - |
-| Verified 2D Artist | role | EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | ReadMessageHistory | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | ReadMessageHistory | - |
+| Verified 2D Artist | role | EmbedLinks, AttachFiles, ReadMessageHistory | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | ReadMessageHistory | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | ReadMessageHistory | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | ReadMessageHistory | - |
 | Known Fur ‹‹ LVL 30 ›› | role | ReadMessageHistory | - |
 | Newcomer Fur ‹‹ LVL 1 ›› | role | - | ReadMessageHistory |
@@ -2365,8 +2291,8 @@
 |--------|------|-------|------|
 | Server Dev | role | ViewChannel | - |
 | Community Member | role | - | ViewChannel |
-| Administrator | role | ViewChannel | - |
 | Community Apps | role | ViewChannel | - |
+| Administrator | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ViewChannel, SendMessages |
 
 ### #「🌐」affiliates
@@ -2401,9 +2327,9 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | ViewChannel | SendMessages |
-| Community Apps | role | ViewChannel | - |
-| Community Development Lead | role | ViewChannel | - |
 | Administrator | role | ManageMessages, MentionEveryone, ViewChannel | - |
+| Community Development Lead | role | ViewChannel | - |
+| Community Apps | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ViewChannel, SendMessages |
 
 ### #「🔑」answers
@@ -2413,16 +2339,16 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Server Dev | role | ManageMessages, ViewChannel | - |
-| Gatekeeper | role | ViewChannel, SendMessagesInThreads | - |
-| Dyno#3861 | member | ViewChannel | - |
-| Community Apps | role | - | ManageMessages, ViewChannel |
 | Community Member | role | - | ViewChannel |
+| Gatekeeper | role | ViewChannel, SendMessagesInThreads | - |
+| Community Apps | role | - | ManageMessages, ViewChannel |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, CreatePublicThreads, CreatePrivateThreads |
 | Moderator | role | SendMessagesInThreads | - |
 | Junior Moderator | role | SendMessagesInThreads | - |
 | Senior Moderator | role | SendMessagesInThreads | - |
 | Moderation Team | role | SendMessages, SendMessagesInThreads | ManageMessages |
 | Pawtropolis Tech#2205 | member | ManageRoles, ManageChannels, ManageMessages, ManageWebhooks, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, CreatePublicThreads, CreatePrivateThreads |
+| Dyno#3861 | member | ViewChannel | - |
 
 ### #「🛬」user-join
 
@@ -2430,8 +2356,8 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Gatekeeper | role | ViewChannel | SendMessages |
 | Community Member | role | - | ViewChannel, SendMessages |
+| Gatekeeper | role | ViewChannel | SendMessages |
 | Administrator | role | ViewChannel | - |
 | Community Apps | role | ViewChannel, SendMessages | - |
 | Moderation Team | role | ViewChannel | - |
@@ -2456,8 +2382,8 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | - | ViewChannel |
 | Gatekeeper | role | ViewChannel | - |
+| Community Member | role | - | ViewChannel |
 | Administrator | role | ViewChannel | - |
 | Community Apps | role | ViewChannel, SendMessages | - |
 | Moderation Team | role | ViewChannel | - |
@@ -2494,8 +2420,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Server Dev | role | ViewChannel, SendMessages | - |
-| Community Member | role | - | ViewChannel |
 | Gatekeeper | role | ViewChannel | - |
+| Community Member | role | - | ViewChannel |
 | @everyone | role | ViewChannel | ManageRoles, ManageChannels, ManageMessages, SendMessages, CreatePublicThreads, CreatePrivateThreads |
 
 ### #「🔑」Staff
@@ -2516,11 +2442,10 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| electromutt | member | ViewChannel | - |
 | Community Member | role | - | ViewChannel |
+| Junior Moderator | role | ViewChannel | - |
 | Administrator | role | ManageMessages, ViewChannel | - |
 | Community Apps | role | ViewChannel, SendMessages | - |
-| Junior Moderator | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
 | @everyone | role | SendMessages, EmbedLinks, AttachFiles, AddReactions | ManageRoles, ManageChannels, ManageMessages, ViewChannel |
 
@@ -2592,11 +2517,11 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Server Dev | role | ViewChannel | - |
-| Community Member | role | - | ViewChannel |
-| Gatekeeper | role | ViewChannel | - |
-| Administrator | role | ViewChannel | - |
 | Staff on Break | role | ViewChannel | - |
+| Gatekeeper | role | ViewChannel | - |
+| Community Member | role | - | ViewChannel |
+| Administrator | role | ViewChannel | - |
+| Server Dev | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
@@ -2606,11 +2531,11 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Staff on Break | role | ViewChannel | - |
-| Gatekeeper | role | ViewChannel | - |
 | Server Dev | role | ViewChannel | - |
-| Administrator | role | ViewChannel | - |
 | Community Member | role | - | ViewChannel |
+| Staff on Break | role | ViewChannel | - |
+| Administrator | role | ViewChannel | - |
+| Gatekeeper | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
@@ -2621,8 +2546,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Staff on Break | role | ViewChannel | SendMessages, SendMessagesInThreads |
-| Community Member | role | - | ViewChannel |
 | Gatekeeper | role | ViewChannel | ManageMessages |
+| Community Member | role | - | ViewChannel |
 | Administrator | role | ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | ManageMessages |
 | Server Dev | role | ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
 | Moderation Team | role | ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | ManageMessages |
@@ -2661,22 +2586,22 @@
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
 | Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 
 ### #「🎮」gaming
 
@@ -2688,22 +2613,22 @@
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
-| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
 | [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 
 ### #「🔉」Smol VC 1
 
@@ -2714,24 +2639,24 @@
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
+| Community Apps | role | ViewChannel | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
+| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Community Apps | role | ViewChannel | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 | Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
 | Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 
 ### #「📸」photography
 
@@ -2743,19 +2668,19 @@
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 | Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
-| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
 | Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
@@ -2768,17 +2693,17 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Community Apps | role | ViewChannel | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
+| Community Apps | role | ViewChannel | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
@@ -2796,24 +2721,24 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
-| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 | Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
 | Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 
 ### #「🎭」cosplay
 
@@ -2823,24 +2748,24 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
-| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
 | [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 
 ### #「💤」AFK
 
@@ -2850,24 +2775,24 @@
 |--------|------|-------|------|
 | Engaged Fur ‹‹ LVL 15 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Veteran Fur ‹‹ LVL 60 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
-| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
-| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
+| Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
+| Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 | Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
 | [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
+| Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 
 ### #「🏎️」automotive
 
@@ -2880,21 +2805,21 @@
 | [Patreon] Council Member | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Worker | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] Legendary Fiona | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
 | Chatty Fur ‹‹ LVL 10 ›› | role | EmbedLinks, AttachFiles | - |
 | Legendary Fur ‹‹ LVL 80 ›› | role | EmbedLinks, AttachFiles, Stream | - |
-| Eternal Fur ‹‹ LVL 100+ ›› | role | Stream | - |
-| [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Noble Fur ‹‹ LVL 50 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Active Fur ‹‹ LVL 20 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Mythic Fur ‹‹ LVL 90 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Mayor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 | [Patreon] City Benefactor | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
-| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
-| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | Experienced Fur ‹‹ LVL 40 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| Newcomer Fur ‹‹ LVL 1 ›› | role | AttachFiles | - |
+| Beginner Fur ‹‹ LVL 5 ›› | role | EmbedLinks, AttachFiles | - |
 | Elite Fur ‹‹ LVL 70 ›› | role | EmbedLinks, AttachFiles, Stream | - |
 | @everyone | role | - | CreatePublicThreads, CreatePrivateThreads |
-| Known Fur ‹‹ LVL 30 ›› | role | EmbedLinks, AttachFiles, Stream | - |
+| [Patreon] Citizen | role | EmbedLinks, AttachFiles, Connect, Stream | - |
 
 ### #「📂」message﹒logs
 
@@ -2905,8 +2830,8 @@
 | Community Member | role | - | ViewChannel, SendMessages, AddReactions |
 | Administrator | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
-| Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
+| Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
 
 ### #「📂」server﹒logs
 
@@ -2929,8 +2854,8 @@
 | Community Member | role | - | ViewChannel, SendMessages, AddReactions |
 | Administrator | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
 ### #「📂」admin-logs
 
@@ -2951,10 +2876,10 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Gatekeeper | role | ViewChannel | - |
-| InviteLogger#5780 | member | ViewChannel, SendMessages | - |
-| Community Apps | role | - | ViewChannel |
 | Community Member | role | - | ViewChannel |
 | Administrator | role | ViewChannel | - |
+| Community Apps | role | - | ViewChannel |
+| InviteLogger#5780 | member | ViewChannel, SendMessages | - |
 | Moderation Team | role | ViewChannel | - |
 | @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
@@ -2967,8 +2892,8 @@
 | Community Member | role | - | ViewChannel, SendMessages, AddReactions |
 | Administrator | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
 ### #「📂」moderation﹒logs
 
@@ -2992,8 +2917,8 @@
 | Community Member | role | - | ViewChannel, SendMessages, AddReactions |
 | Administrator | role | ViewChannel | - |
 | Dyno#3861 | member | ViewChannel, SendMessages | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
 ### #「📂」kick﹒logs
 
@@ -3016,8 +2941,8 @@
 | Community Member | role | - | ViewChannel, SendMessages, AddReactions |
 | Administrator | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
-| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 | Sapphire#8184 | member | ManageWebhooks, ViewChannel, SendMessages, SendMessagesInThreads, EmbedLinks, AttachFiles | - |
+| @everyone | role | - | ManageRoles, ManageChannels, ManageMessages, ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads, AddReactions |
 
 ### #「📂」automod﹒logs
 
@@ -3071,10 +2996,10 @@
 
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
-| Community Member | role | - | ViewChannel |
 | Gatekeeper | role | ViewChannel | - |
-| Administrator | role | ViewChannel | - |
+| Community Member | role | - | ViewChannel |
 | Community Apps | role | ViewChannel, SendMessages | - |
+| Administrator | role | ViewChannel | - |
 | Moderator | role | ManageChannels, ViewChannel, Connect | - |
 | Server Owner | role | ViewChannel | - |
 | Moderation Team | role | ViewChannel | - |
@@ -3087,11 +3012,11 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | - | ViewChannel, SendMessages, CreatePublicThreads, CreatePrivateThreads |
-| Administrator | role | ManageRoles, ManageChannels, ManageMessages, ManageWebhooks, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker | - |
+| Community Apps | role | ViewChannel, SendMessages | - |
 | [ The Pawtropolis Community ] | role | - | ViewChannel |
 | Moderation Team | role | ViewChannel | SendMessages |
 | @everyone | role | - | ViewChannel, SendMessages |
-| Community Apps | role | ViewChannel, SendMessages | - |
+| Administrator | role | ManageRoles, ManageChannels, ManageMessages, ManageWebhooks, MentionEveryone, ViewChannel, SendMessages, SendMessagesInThreads, CreatePublicThreads, CreatePrivateThreads, EmbedLinks, AttachFiles, AddReactions, UseExternalEmojis, UseExternalStickers, ReadMessageHistory, Connect, Speak, Stream, MuteMembers, DeafenMembers, MoveMembers, UseVAD, PrioritySpeaker | - |
 
 ### #「🎀」meme-that
 
@@ -3100,8 +3025,8 @@
 | Target | Type | Allow | Deny |
 |--------|------|-------|------|
 | Community Member | role | SendMessagesInThreads, EmbedLinks, AttachFiles | ViewChannel, SendMessages |
-| Administrator | role | ManageRoles, ManageChannels, ViewChannel, SendMessages | - |
 | Community Apps | role | ViewChannel, SendMessages | - |
+| Administrator | role | ManageRoles, ManageChannels, ViewChannel, SendMessages | - |
 | @everyone | role | - | ViewChannel |
 
 ### #🍨﹕dept-info
@@ -3294,14 +3219,9 @@
 | ticket-0881 | Text | `1449845274791903316` | Tickets |
 | support-0894 | Text | `1452090466144227418` | Tickets |
 | support-0900 | Text | `1454614477159796962` | Tickets |
-| support-0907 | Text | `1456543740075315223` | Tickets |
-| support-0909 | Text | `1457361335636459713` | Tickets |
 | support-0910 | Text | `1457361751099310295` | Tickets |
 | support-0911 | Text | `1458104370771263705` | Tickets |
-| user-0422 | Text | `1458222992378036264` | Tickets |
-| user-0423 | Text | `1458275852545556684` | Tickets |
-| 2d-artist-0083 | Text | `1458386893791035475` | Tickets |
-| support-0912 | Text | `1458391200603181137` | Tickets |
+| support-0913 | Text | `1458783163185893427` | Tickets |
 | 「💎」vip-colors | Text | `896070891174260763` | [11] [Booster💎] [ Patreon👑] |
 | 「💎」Lounge | Voice | `896070891174260764` | [11] [Booster💎] [ Patreon👑] |
 | 「👑」Werewolf's Den | Voice | `1234323389892788284` | [11] [Booster💎] [ Patreon👑] |
@@ -3373,7 +3293,6 @@
 | 「🛸」ash-spaceship | Text | `1432530307826843748` | [12] Custom Channels |
 | 「🔥」Round the Fire | Voice | `1454583795729699030` | [12] Custom Channels |
 | 「💎」birbos-bizarre-adventures | Text | `1433189199351120055` | [12] Custom Channels |
-| 「🐺」attis-campfire | Text | `1454582806012498042` | [12] Custom Channels |
 | 「🐾」shadowfangs-corner | Text | `1456358548429869116` | [12] Custom Channels |
 | 「📰」news | Announcement | `896197065720332328` | [2] Announcements |
 | 「📰」world-updates | Announcement | `1438540553867362304` | [2] Announcements |
@@ -3397,7 +3316,7 @@
 | 「🕹️」vrchat | Text | `1393493112365780992` | [8] Alt Creative Corner |
 | 「🐴」3d-modeling | Text | `1450227604152914131` | [8] Alt Creative Corner |
 | 「⭐」gallery | Forum | `1130445124413956147` | - discord.gg/floof - |
-| 「🌎」Citizens: 5805 | Voice | `1438786295479533578` | - discord.gg/floof - |
+| 「🌎」Citizens: 5829 | Voice | `1438786295479533578` | - discord.gg/floof - |
 | 「💎」boosts | Text | `896070888779317256` | - discord.gg/floof - |
 | 「🏆」Goal: 6000 | Voice | `1438646719892951070` | - discord.gg/floof - |
 | 「📜」rules | Text | `896070889005781038` | [1] Board |

@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-07T09:26:47.128Z
+**Generated:** 2026-01-09T12:25:51.999Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 223
 
@@ -21,33 +21,33 @@
 | Position | Role | Color | Members | Managed | Key Permissions |
 |----------|------|-------|---------|---------|-----------------|
 | 222 | Wick | default | 1 | Bot | Administrator, BanMembers, ManageMessages |
-| 221 | Quarantined | #ffffff | 0 |  | - |
+| 221 | Quarantined | #ffffff | 1 |  | - |
 | 220 | Server Owner | #090314 | 1 | Integration | Administrator, BanMembers, KickMembers |
-| 219 | Community Manager | #b41b46 | 1 |  | Administrator, BanMembers, ManageChannels |
+| 219 | Community Manager | default | 2 |  | Administrator, BanMembers, ManageChannels |
 | 218 | Community Development Lead | #99aab5 | 0 |  | - |
 | 217 | Mooster | #8a18ed | 1 |  | - |
-| 216 | Senior Administrator | default | 1 |  | Administrator, BanMembers, KickMembers |
+| 216 | Senior Administrator | default | 2 |  | Administrator, BanMembers, KickMembers |
 | 215 | Enter Key | #e86f01 | 1 |  | - |
-| 214 | Server Dev | #1e402f | 1 | Integration | - |
+| 214 | Server Dev | #1e402f | 1 | Integration | Administrator |
 | 213 | Staff of the Month | default | 1 |  | - |
-| 212 | Administrator | default | 2 |  | BanMembers, KickMembers, ManageChannels |
+| 212 | Administrator | default | 1 |  | BanMembers, KickMembers, ManageChannels |
 | 211 | VRC Group Lead | default | 1 |  | ManageRoles |
-| 210 | Senior Moderator | default | 0 |  | ManageRoles |
-| 209 | Atters | #ffffff | 1 |  | - |
-| 208 | Moderator | default | 6 |  | - |
-| 207 | Junior Moderator | default | 1 |  | - |
+| 210 | Senior Moderator | default | 3 |  | ManageRoles |
+| 209 | Atters | #ffffff | 0 |  | - |
+| 208 | Moderator | default | 4 |  | - |
+| 207 | Junior Moderator | default | 0 |  | - |
 | 206 | Dyno | #2576cf | 1 | Bot | BanMembers, KickMembers, ModerateMembers |
 | 205 | Beemo | #faba15 | 1 | Bot | BanMembers, KickMembers |
 | 204 | Moderation Team | default | 16 |  | ManageMessages, MentionEveryone, ModerateMembers |
-| 203 | Staff on Break | default | 1 |  | - |
-| 202 | Gatekeeper | default | 8 |  | MentionEveryone |
+| 203 | Staff on Break | default | 0 |  | - |
+| 202 | Gatekeeper | default | 7 |  | MentionEveryone |
 | 201 | Community Apps | #0b7c54 | 25 |  | ManageChannels, ManageRoles, ModerateMembers |
-| 200 | VRC Group Team | default | 1 |  | - |
+| 200 | VRC Group Team | default | 2 |  | - |
 | 199 | Events Manager | default | 0 |  | - |
-| 198 | Event Host | default | 2 |  | - |
+| 198 | Event Host | default | 1 |  | - |
 | 197 | Ness :3 | #a37dff | 1 |  | - |
 | 196 | vroom vroom | #314e82 | 1 |  | - |
-| 195 | Community Ambassador | default | 6 |  | ManageMessages, MentionEveryone, ModerateMembers |
+| 195 | Community Ambassador | default | 5 |  | ManageMessages, MentionEveryone, ModerateMembers |
 | 194 | Sleepy car enthusiasts 𓆩⚝𓆪 | #9e6bff | 1 |  | - |
 | 193 | Finn the Fishbowl | #a3ecf0 | 1 |  | - |
 | 192 | SHRIMPO X FINN #1 SHIPPER | #a3fff9 | 1 |  | - |
@@ -80,32 +80,32 @@
 | 165 | Minty Green | #97ffca | 1 |  | - |
 | 164 | Coral Reef | #fe6954 | 6 |  | - |
 | 163 | Dark Cyan | #0f4c4c | 5 |  | - |
-| 162 | Dark Matter | #26003c | 17 |  | - |
+| 162 | Dark Matter | #26003c | 16 |  | - |
 | 161 | Sky Blue | #90e7ff | 13 |  | - |
 | 160 | Crimson | #640e0e | 4 |  | - |
 | 159 | Discord Color | #5865f2 | 4 |  | - |
 | 158 | Angel White | #dbeef1 | 15 |  | - |
-| 157 | Red | #e42525 | 142 |  | - |
-| 156 | Orange | #e38840 | 82 |  | - |
+| 157 | Red | #e42525 | 143 |  | - |
+| 156 | Orange | #e38840 | 81 |  | - |
 | 155 | Yellow | #f0d557 | 56 |  | - |
-| 154 | Green | #5dd85d | 88 |  | - |
-| 153 | Blue | #5b86e2 | 165 |  | - |
-| 152 | Purple | #c34fe1 | 217 |  | - |
+| 154 | Green | #5dd85d | 89 |  | - |
+| 153 | Blue | #5b86e2 | 163 |  | - |
+| 152 | Purple | #c34fe1 | 220 |  | - |
 | 151 | Pink | #df3fbd | 181 |  | - |
-| 150 | Black | #000005 | 79 |  | - |
-| 149 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Membership ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 49 |  | - |
+| 150 | Black | #000005 | 80 |  | - |
+| 149 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Membership ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 51 |  | - |
 | 148 | Server Artist | #2f0099 | 6 |  | - |
 | 147 | Patreon | #e57843 | 1 | Bot | KickMembers, ManageRoles |
 | 146 | [Patreon] Legendary Fiona | #a9c9ff | 1 |  | - |
-| 145 | [Patreon] City Benefactor | #eac80d | 2 |  | - |
+| 145 | [Patreon] City Benefactor | #eac80d | 1 |  | - |
 | 144 | [Patreon] Mayor | #7e0554 | 0 |  | - |
 | 143 | [Patreon] Council Member | #28324b | 0 |  | - |
 | 142 | [Patreon] City Worker | #22352c | 0 |  | - |
 | 141 | [Patreon] Citizen | #2a2f4a | 0 |  | - |
-| 140 | Donator | #e834f5 | 3 |  | - |
-| 139 | Booster Fur | #e834f5 | 29 | Integration | - |
+| 140 | Donator | #e834f5 | 2 |  | - |
+| 139 | Booster Fur | #e834f5 | 31 | Integration | - |
 | 138 | VIP Fur | #ffa9e4 | 23 |  | - |
-| 137 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Community ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5755 |  | - |
+| 137 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ Community ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5778 |  | - |
 | 136 | OG Verified 2D Artist | #369876 | 11 |  | - |
 | 135 | Verified 2D Artist | #52e5ff | 165 |  | - |
 | 134 | Verified 3D Artist | #368192 | 0 |  | - |
@@ -117,43 +117,43 @@
 | 128 | Eternal Fur ‹‹ LVL 100+ ›› | #2b193d | 5 |  | - |
 | 127 | Mythic Fur ‹‹ LVL 90 ›› | #3a2a77 | 0 |  | - |
 | 126 | Legendary Fur ‹‹ LVL 80 ›› | #462e85 | 4 |  | - |
-| 125 | Elite Fur ‹‹ LVL 70 ›› | #5a3b76 | 5 |  | - |
-| 124 | Veteran Fur ‹‹ LVL 60 ›› | #704c6c | 3 |  | - |
-| 123 | Noble Fur ‹‹ LVL 50 ›› | #7d3e4b | 11 |  | - |
+| 125 | Elite Fur ‹‹ LVL 70 ›› | #5a3b76 | 6 |  | - |
+| 124 | Veteran Fur ‹‹ LVL 60 ›› | #704c6c | 2 |  | - |
+| 123 | Noble Fur ‹‹ LVL 50 ›› | #7d3e4b | 9 |  | - |
 | 122 | Experienced Fur ‹‹ LVL 40 ›› | #993531 | 5 |  | - |
-| 121 | Known Fur ‹‹ LVL 30 ›› | #b13b2d | 21 |  | - |
-| 120 | Active Fur ‹‹ LVL 20 ›› | #c24c28 | 38 |  | - |
-| 119 | Engaged Fur ‹‹ LVL 15 ›› | #d47a35 | 30 |  | - |
-| 118 | Chatty Fur ‹‹ LVL 10 ›› | #e9a64d | 94 |  | - |
-| 117 | Beginner Fur ‹‹ LVL 5 ›› | #e3b16e | 268 |  | - |
-| 116 | Newcomer Fur ‹‹ LVL 1 ›› | #d6a77a | 696 |  | - |
+| 121 | Known Fur ‹‹ LVL 30 ›› | #b13b2d | 22 |  | - |
+| 120 | Active Fur ‹‹ LVL 20 ›› | #c24c28 | 37 |  | - |
+| 119 | Engaged Fur ‹‹ LVL 15 ›› | #d47a35 | 32 |  | - |
+| 118 | Chatty Fur ‹‹ LVL 10 ›› | #e9a64d | 96 |  | - |
+| 117 | Beginner Fur ‹‹ LVL 5 ›› | #e3b16e | 261 |  | - |
+| 116 | Newcomer Fur ‹‹ LVL 1 ›› | #d6a77a | 694 |  | - |
 | 115 | OG Citizen | #ffb833 | 114 |  | - |
 | 114 | Community Contributor | #2b89ac | 84 |  | - |
-| 113 | Community Member | #e69f74 | 2664 |  | - |
-| 112 | Pings Ok | #ce3355 | 631 |  | - |
-| 111 | Important Pings only | #ce3355 | 245 |  | - |
-| 110 | No Pings | #ce3355 | 71 |  | - |
+| 113 | Community Member | #e69f74 | 2657 |  | - |
+| 112 | Pings Ok | #ce3355 | 632 |  | - |
+| 111 | Important Pings only | #ce3355 | 243 |  | - |
+| 110 | No Pings | #ce3355 | 70 |  | - |
 | 109 | DM's Open | #ce3355 | 768 |  | - |
 | 108 | Important DM's Only | #ce3355 | 140 |  | - |
-| 107 | DM's Closed | #ce3355 | 27 |  | - |
-| 106 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5778 |  | - |
-| 105 | Fur Voter [ 2x EXP ] | #fab2fd | 3 |  | - |
-| 104 | Spooktober 2025 Participant | #f58d3d | 28 |  | - |
+| 107 | DM's Closed | #ce3355 | 26 |  | - |
+| 106 | ⠀⠀⠀‎⠀⠀⠀⠀Exclusive/Items⠀⠀⠀⠀⠀‎⠀ | default | 5801 |  | - |
+| 105 | Fur Voter [ 2x EXP ] | #fab2fd | 1 |  | - |
+| 104 | Spooktober 2025 Participant | #f58d3d | 27 |  | - |
 | 103 | Cinematic Royalty | #6a0dad | 0 |  | - |
 | 102 | Director’s Cut | #d4843d | 0 |  | - |
 | 101 | Popcorn Club | #f4d35e | 0 |  | - |
-| 100 | Red Carpet Guest | #b22222 | 22 |  | - |
+| 100 | Red Carpet Guest | #b22222 | 20 |  | - |
 | 99 | NoLife Token | #e22126 | 0 |  | - |
 | 98 | Trophy Hunter | #f5bc00 | 0 |  | - |
 | 97 | Key Masher | #9c34c2 | 0 |  | - |
-| 96 | Night Builder | #71c598 | 9 |  | - |
+| 96 | Night Builder | #71c598 | 8 |  | - |
 | 95 | AllByte Token [Mythic] | #a9c9ff | 2 |  | - |
 | 94 | AllByte Token [Legendary] | #d4843d | 23 |  | - |
-| 93 | AllByte Token [Epic] | #ff806d | 34 |  | - |
+| 93 | AllByte Token [Epic] | #ff806d | 32 |  | - |
 | 92 | Byte Token [Mythic] | #a9c9ff | 13 |  | - |
 | 91 | Byte Token [Legendary] | #d4843d | 6 |  | - |
 | 90 | Byte Token [Epic] | #ff806d | 26 |  | - |
-| 89 | Byte Token [Rare] | #5aadf6 | 93 |  | - |
+| 89 | Byte Token [Rare] | #5aadf6 | 94 |  | - |
 | 88 | Byte Token [Common] | #749472 | 214 |  | - |
 | 87 | [x10] Byte | #ffffff | 1 |  | - |
 | 86 | [5x] Byte | #ff4848 | 0 |  | - |
@@ -166,83 +166,83 @@
 | 79 | [2x XP Multiplier] | #9b59b6 | 23 |  | - |
 | 78 | Mocha's Spirit | #f6b191 | 4 |  | - |
 | 77 | Meme Lord | #7eff83 | 3 |  | - |
-| 76 | Cutest Fur | #ff6960 | 26 |  | - |
-| 75 | BoyKisser | #ff68b2 | 10 |  | - |
-| 74 | Custom Role Ticket (Gradient-Color) | #aa3b3b | 1 |  | - |
+| 76 | Cutest Fur | #ff6960 | 25 |  | - |
+| 75 | BoyKisser | #ff68b2 | 9 |  | - |
+| 74 | Custom Role Ticket (Gradient-Color) | #aa3b3b | 0 |  | - |
 | 73 | Custom Role Ticket (Solid-Color) | #9e6bff | 0 |  | - |
-| 72 | Custom Voice Channel Ticket | #4cadd0 | 2 |  | - |
-| 71 | Custom Text Channel Ticket | #369876 | 2 |  | - |
+| 72 | Custom Voice Channel Ticket | #4cadd0 | 1 |  | - |
+| 71 | Custom Text Channel Ticket | #369876 | 1 |  | - |
 | 70 | OC Full-body Ticket | #a9c9ff | 0 |  | - |
 | 69 | OC Half-body Ticket | #d4843d | 8 |  | - |
 | 68 | OC Emoji Ticket | #4cadd0 | 0 |  | - |
-| 67 | OC Headshot Ticket | #aa65ff | 11 |  | - |
-| 66 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀‎About Me⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5727 |  | - |
+| 67 | OC Headshot Ticket | #aa65ff | 10 |  | - |
+| 66 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀‎About Me⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5750 |  | - |
 | 65 | He/Him | #8cbeff | 1815 |  | - |
-| 64 | She/Her | #8cbeff | 1356 |  | - |
-| 63 | They/Them | #8cbeff | 692 |  | - |
+| 64 | She/Her | #8cbeff | 1353 |  | - |
+| 63 | They/Them | #8cbeff | 691 |  | - |
 | 62 | Any/All | #8cbeff | 58 |  | - |
 | 61 | Questioning | #8cbeff | 0 |  | - |
-| 60 | Other/Ask | #8cbeff | 307 |  | - |
-| 59 | Male | #ff93bc | 984 |  | - |
-| 58 | Female | #ff93bc | 595 |  | - |
+| 60 | Other/Ask | #8cbeff | 306 |  | - |
+| 59 | Male | #ff93bc | 983 |  | - |
+| 58 | Female | #ff93bc | 592 |  | - |
 | 57 | Non-Binary | #ff93bc | 186 |  | - |
-| 56 | Gender-Fluid | #ff93bc | 186 |  | - |
-| 55 | Transgender | #ff93bc | 216 |  | - |
+| 56 | Gender-Fluid | #ff93bc | 187 |  | - |
+| 55 | Transgender | #ff93bc | 217 |  | - |
 | 54 | Questioning | #ff93bc | 0 |  | - |
 | 53 | Unique | #ff93bc | 0 |  | - |
-| 52 | Hetero | #9bffe6 | 141 |  | - |
-| 51 | Homo | #9bffe6 | 244 |  | - |
-| 50 | Bi | #9bffe6 | 435 |  | - |
-| 49 | Ace | #9bffe6 | 86 |  | - |
+| 52 | Hetero | #9bffe6 | 138 |  | - |
+| 51 | Homo | #9bffe6 | 243 |  | - |
+| 50 | Bi | #9bffe6 | 439 |  | - |
+| 49 | Ace | #9bffe6 | 88 |  | - |
 | 48 | Questioning | #9bffe6 | 75 |  | - |
-| 47 | Other/Ask | #9bffe6 | 181 |  | - |
+| 47 | Other/Ask | #9bffe6 | 180 |  | - |
 | 46 | PC | #eccbff | 799 |  | - |
-| 45 | Virtual Reality | #eccbff | 358 |  | - |
-| 44 | Nintendo | #eccbff | 258 |  | - |
-| 43 | Xbox | #eccbff | 288 |  | - |
-| 42 | Playstation | #eccbff | 238 |  | - |
-| 41 | Mobile | #eccbff | 516 |  | - |
-| 40 | Furry | #cdffcb | 994 |  | - |
+| 45 | Virtual Reality | #eccbff | 357 |  | - |
+| 44 | Nintendo | #eccbff | 259 |  | - |
+| 43 | Xbox | #eccbff | 286 |  | - |
+| 42 | Playstation | #eccbff | 237 |  | - |
+| 41 | Mobile | #eccbff | 515 |  | - |
+| 40 | Furry | #cdffcb | 996 |  | - |
 | 39 | Gamer | #cdffcb | 834 |  | - |
 | 38 | VRChat Enthusiast | #cdffcb | 432 |  | - |
-| 37 | Content Creator | #cdffcb | 175 |  | - |
-| 36 | Photographer | #cdffcb | 202 |  | - |
-| 35 | Programmer | #cdffcb | 133 |  | - |
-| 34 | Streamer | #cdffcb | 110 |  | - |
-| 33 | Musician | #cdffcb | 358 |  | - |
-| 32 | Artist | #cdffcb | 582 |  | - |
+| 37 | Content Creator | #cdffcb | 174 |  | - |
+| 36 | Photographer | #cdffcb | 204 |  | - |
+| 35 | Programmer | #cdffcb | 135 |  | - |
+| 34 | Streamer | #cdffcb | 107 |  | - |
+| 33 | Musician | #cdffcb | 361 |  | - |
+| 32 | Artist | #cdffcb | 579 |  | - |
 | 31 | Writer | #cdffcb | 262 |  | - |
 | 30 | Gymnast | #cdffcb | 84 |  | - |
 | 29 | Cosplay | #cdffcb | 120 |  | - |
-| 28 | North America | #ffbfa8 | 1507 |  | - |
-| 27 | Europe | #ffbfa8 | 648 |  | - |
-| 26 | Oceania | #ffbfa8 | 129 |  | - |
+| 28 | North America | #ffbfa8 | 1502 |  | - |
+| 27 | Europe | #ffbfa8 | 647 |  | - |
+| 26 | Oceania | #ffbfa8 | 130 |  | - |
 | 25 | Asia | #ffbfa8 | 183 |  | - |
 | 24 | South America | #ffbfa8 | 208 |  | - |
-| 23 | Africa | #ffbfa8 | 98 |  | - |
-| 22 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀Pings Roles⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5684 |  | - |
-| 21 | Announcements | #df713b | 755 |  | - |
-| 20 | World Updates | #73cac6 | 20 |  | - |
-| 19 | Community Updates | #3498db | 529 |  | - |
+| 23 | Africa | #ffbfa8 | 99 |  | - |
+| 22 | ⠀⠀⠀⠀⠀‎⠀⠀⠀⠀Pings Roles⠀⠀⠀⠀⠀‎⠀⠀⠀⠀ | default | 5708 |  | - |
+| 21 | Announcements | #df713b | 751 |  | - |
+| 20 | World Updates | #73cac6 | 22 |  | - |
+| 19 | Community Updates | #3498db | 527 |  | - |
 | 18 | Xp Announcement Ping | #5b5eec | 12 |  | - |
-| 17 | Events | #ed9856 | 573 |  | - |
+| 17 | Events | #ed9856 | 574 |  | - |
 | 16 | VRChat Events | #1abc9c | 202 |  | - |
-| 15 | Giveaways | #e91e63 | 672 |  | - |
+| 15 | Giveaways | #e91e63 | 670 |  | - |
 | 14 | Reminders | #e74c3c | 133 |  | - |
 | 13 | Polls | #2ecc71 | 431 |  | - |
-| 12 | Welcome Party | #afffae | 397 |  | - |
-| 11 | Affiliates | #e91e63 | 205 |  | - |
-| 10 | Bump Remind | #9b59b6 | 244 |  | - |
-| 9 | Looking to VC | #1f8b4c | 191 |  | - |
-| 8 | Important! | #ff0004 | 575 |  | - |
+| 12 | Welcome Party | #afffae | 396 |  | - |
+| 11 | Affiliates | #e91e63 | 206 |  | - |
+| 10 | Bump Remind | #9b59b6 | 245 |  | - |
+| 9 | Looking to VC | #1f8b4c | 190 |  | - |
+| 8 | Important! | #ff0004 | 572 |  | - |
 | 7 | QOTD | #ad1457 | 427 |  | - |
-| 6 | Chat Reviver | #1abc9c | 573 |  | - |
-| 5 | Ping Squad | #2ecc71 | 250 |  | - |
-| 4 | Verified Art | #fff3ad | 172 |  | - |
-| 3 | Art Comms | #fff3ad | 136 |  | - |
-| 2 | Art Adopts | #fff3ad | 100 |  | - |
-| 1 | [ The Pawtropolis Community ] | #ffa5fa | 5754 |  | - |
-| 0 | @everyone | default | 5805 |  | - |
+| 6 | Chat Reviver | #1abc9c | 570 |  | - |
+| 5 | Ping Squad | #2ecc71 | 249 |  | - |
+| 4 | Verified Art | #fff3ad | 171 |  | - |
+| 3 | Art Comms | #fff3ad | 137 |  | - |
+| 2 | Art Adopts | #fff3ad | 101 |  | - |
+| 1 | [ The Pawtropolis Community ] | #ffa5fa | 5777 |  | - |
+| 0 | @everyone | default | 5829 |  | - |
 
 ---
 
@@ -260,7 +260,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 | Mooster | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Senior Administrator | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ |
 | Enter Key | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Server Dev | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
+| Server Dev | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Staff of the Month | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Administrator | ❌ | ✅ | ✅ | ✅ | ✅ | ✅ | ✅ | ❌ |
 | VRC Group Lead | ❌ | ❌ | ✅ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -312,7 +312,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 ### Community Manager
 - **ID:** 1190093021170114680
 - **Position:** 219
-- **Members:** 1
+- **Members:** 2
 - **Mentionable:** No
 - **Hoisted:** Yes
 - **Permissions:** AddReactions, Administrator, AttachFiles, BanMembers, Connect, CreatePrivateThreads, CreatePublicThreads, DeafenMembers, EmbedLinks, ManageChannels, ManageEmojisAndStickers, ManageGuild, ManageMessages, ManageNicknames, ManageRoles, ManageWebhooks, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, Stream, UseExternalEmojis, UseExternalStickers, UseVAD, ViewAuditLog, ViewChannel
@@ -320,7 +320,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 ### Senior Administrator
 - **ID:** 1420440472169746623
 - **Position:** 216
-- **Members:** 1
+- **Members:** 2
 - **Mentionable:** No
 - **Hoisted:** Yes
 - **Permissions:** AddReactions, Administrator, AttachFiles, BanMembers, Connect, CreatePrivateThreads, CreatePublicThreads, DeafenMembers, EmbedLinks, KickMembers, ManageChannels, ManageEmojisAndStickers, ManageGuild, ManageMessages, ManageNicknames, ManageRoles, ManageWebhooks, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, Stream, UseExternalEmojis, UseExternalStickers, UseVAD, ViewAuditLog, ViewChannel
@@ -328,7 +328,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 ### Administrator
 - **ID:** 896070888779317248
 - **Position:** 212
-- **Members:** 2
+- **Members:** 1
 - **Mentionable:** No
 - **Hoisted:** Yes
 - **Permissions:** AddReactions, AttachFiles, BanMembers, Connect, CreatePrivateThreads, CreatePublicThreads, DeafenMembers, EmbedLinks, KickMembers, ManageChannels, ManageEmojisAndStickers, ManageGuild, ManageMessages, ManageNicknames, ManageRoles, MentionEveryone, ModerateMembers, MoveMembers, MuteMembers, PrioritySpeaker, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, Stream, UseExternalEmojis, UseExternalStickers, UseVAD, ViewAuditLog, ViewChannel
@@ -344,7 +344,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 ### Senior Moderator
 - **ID:** 1095757038899953774
 - **Position:** 210
-- **Members:** 0
+- **Members:** 3
 - **Mentionable:** No
 - **Hoisted:** Yes
 - **Permissions:** ManageRoles
@@ -360,7 +360,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 ### Gatekeeper
 - **ID:** 896070888762535969
 - **Position:** 202
-- **Members:** 8
+- **Members:** 7
 - **Mentionable:** No
 - **Hoisted:** Yes
 - **Permissions:** AttachFiles, EmbedLinks, MentionEveryone, PrioritySpeaker, Stream, ViewChannel
@@ -376,7 +376,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 ### Community Ambassador
 - **ID:** 896070888762535967
 - **Position:** 195
-- **Members:** 6
+- **Members:** 5
 - **Mentionable:** No
 - **Hoisted:** Yes
 - **Permissions:** AttachFiles, EmbedLinks, ManageMessages, ManageNicknames, MentionEveryone, ModerateMembers, MuteMembers, PrioritySpeaker, Stream, UseVAD, ViewChannel
