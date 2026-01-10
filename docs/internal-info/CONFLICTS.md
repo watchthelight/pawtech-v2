@@ -1,9 +1,9 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-10T19:34:00.633Z
+**Generated:** 2026-01-10T20:31:55.692Z
 **Guild ID:** 896070888594759740
-**Active Issues:** 2
-**Acknowledged:** 8
+**Active Issues:** 1
+**Acknowledged:** 9
 
 ## Summary
 
@@ -11,22 +11,13 @@
 |----------|-------|
 | 🔴 Critical | 0 |
 | 🟠 High | 0 |
-| 🟡 Medium | 2 |
+| 🟡 Medium | 1 |
 | 🟢 Low | 0 |
-| ✅ Acknowledged | 8 |
+| ✅ Acknowledged | 9 |
 
 ---
 
 ## 🟡 Medium Priority Issues
-
-### [MED-004] Administrator Permission on Bot Role
-
-- **Affected:** Role: Server Dev (1120074045883420753)
-- **Issue:** This role has full Administrator permission, bypassing all permission checks.
-- **Risk:** Bot roles with Admin can be compromised if the bot is vulnerable.
-- **Recommendation:** Review if bot actually needs Administrator. Most bots work with specific permissions.
-
----
 
 ### [MED-010] Potentially Sensitive Channel Accessible
 
@@ -93,6 +84,17 @@ These issues have been reviewed by staff and marked as intentional.
 - **Reason:** This is intentional, it's part of an old linked role.
 
 *To unacknowledge, use `/audit unacknowledge MED-002`*
+
+---
+
+### [MED-004] Administrator Permission on Bot Role *(Acknowledged)*
+
+- **Affected:** Role: Server Dev (1120074045883420753)
+- **Issue:** This role has full Administrator permission, bypassing all permission checks.
+- **Acknowledged by:** <@600968933293424640> on 2026-01-10
+- **Reason:** Batch acknowledged after hash fix deployment
+
+*To unacknowledge, use `/audit unacknowledge MED-004`*
 
 ---
 

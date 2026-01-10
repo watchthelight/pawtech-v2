@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-10T19:34:00.627Z
+**Generated:** 2026-01-10T20:31:55.681Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 222
 
@@ -79,7 +79,7 @@
 | 165 | Minty Green | #97ffca | 1 |  | - |
 | 164 | Coral Reef | #fe6954 | 6 |  | - |
 | 163 | Dark Cyan | #0f4c4c | 5 |  | - |
-| 162 | Dark Matter | #26003c | 17 |  | - |
+| 162 | Dark Matter | #530f7a | 17 |  | - |
 | 161 | Sky Blue | #90e7ff | 13 |  | - |
 | 160 | Crimson | #640e0e | 5 |  | - |
 | 159 | Discord Color | #5865f2 | 4 |  | - |
