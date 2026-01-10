@@ -1,9 +1,9 @@
 # Permission Conflicts & Security Concerns — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-09T12:29:21.156Z
+**Generated:** 2026-01-10T19:34:00.633Z
 **Guild ID:** 896070888594759740
-**Active Issues:** 1
-**Acknowledged:** 9
+**Active Issues:** 2
+**Acknowledged:** 8
 
 ## Summary
 
@@ -11,13 +11,22 @@
 |----------|-------|
 | 🔴 Critical | 0 |
 | 🟠 High | 0 |
-| 🟡 Medium | 1 |
+| 🟡 Medium | 2 |
 | 🟢 Low | 0 |
-| ✅ Acknowledged | 9 |
+| ✅ Acknowledged | 8 |
 
 ---
 
 ## 🟡 Medium Priority Issues
+
+### [MED-004] Administrator Permission on Bot Role
+
+- **Affected:** Role: Server Dev (1120074045883420753)
+- **Issue:** This role has full Administrator permission, bypassing all permission checks.
+- **Risk:** Bot roles with Admin can be compromised if the bot is vulnerable.
+- **Recommendation:** Review if bot actually needs Administrator. Most bots work with specific permissions.
+
+---
 
 ### [MED-010] Potentially Sensitive Channel Accessible
 
@@ -43,14 +52,14 @@ These issues have been reviewed by staff and marked as intentional.
 
 ---
 
-### [CRIT-004] Administrator Permission on User Role *(Acknowledged)*
+### [CRIT-005] Administrator Permission on User Role *(Acknowledged)*
 
 - **Affected:** Role: Senior Administrator (1420440472169746623)
 - **Issue:** This role has full Administrator permission, bypassing all permission checks.
 - **Acknowledged by:** <@697169405422862417> on 2026-01-04
 - **Reason:** Giving the Administrator role to Senior Admin is intentional, and this is only given to vetted, trusted users.
 
-*To unacknowledge, use `/audit unacknowledge CRIT-004`*
+*To unacknowledge, use `/audit unacknowledge CRIT-005`*
 
 ---
 
@@ -87,17 +96,6 @@ These issues have been reviewed by staff and marked as intentional.
 
 ---
 
-### [MED-005] Administrator Permission on Bot Role *(Acknowledged)*
-
-- **Affected:** Role: Server Dev (1120074045883420753)
-- **Issue:** This role has full Administrator permission, bypassing all permission checks.
-- **Acknowledged by:** <@697169405422862417> on 2026-01-09
-- **Reason:** Intentional
-
-*To unacknowledge, use `/audit unacknowledge MED-005`*
-
----
-
 ### [MED-006] Webhook Impersonation Risk *(Acknowledged)*
 
 - **Affected:** Role: Community Manager (1190093021170114680)
@@ -123,7 +121,7 @@ These issues have been reviewed by staff and marked as intentional.
 ### [LOW-009] Wide @everyone/@here Access *(Acknowledged)*
 
 - **Affected:** Role: Moderation Team (987662057069482024)
-- **Issue:** 16 members can mention @everyone/@here.
+- **Issue:** 15 members can mention @everyone/@here.
 - **Acknowledged by:** <@697169405422862417> on 2026-01-09
 - **Reason:** Intentional
 
