@@ -261,6 +261,14 @@ commands.set(art.data.name, wrapCommand("art", art.execute));
 import * as help from "./commands/help/index.js";
 commands.set(help.data.name, wrapCommand("help", help.execute));
 
+// One-time commands (delete after use)
+import * as utility from "./commands/utility.js";
+commands.set(utility.data.name, wrapCommand("utility", utility.execute));
+
+// Developer/debugging tools
+import * as developer from "./commands/developer.js";
+commands.set(developer.data.name, wrapCommand("developer", developer.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work

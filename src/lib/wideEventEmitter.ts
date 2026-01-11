@@ -12,6 +12,7 @@
 import { logger } from "./logger.js";
 import { env } from "./env.js";
 import type { WideEvent, PhaseRecord } from "./wideEvent.js";
+import { storeTrace } from "./traceStore.js";
 
 // ===== Configuration =====
 
@@ -220,6 +221,9 @@ export function emitWideEvent(event: WideEvent): void {
   } else {
     logger.info({ evt: "wide_event", ...flattened }, message);
   }
+
+  // Store trace for /developer trace command retrieval
+  storeTrace(event);
 }
 
 /**
@@ -238,4 +242,7 @@ export function emitWideEventForced(event: WideEvent): void {
   } else {
     logger.info({ evt: "wide_event", forced: true, ...flattened }, message);
   }
+
+  // Store trace for /developer trace command retrieval
+  storeTrace(event);
 }

@@ -468,7 +468,9 @@ function analyzeSecurityIssues(roles: RoleData[], channels: ChannelData[]): Secu
       const viewDenied = everyoneOverwrite?.deny.includes("ViewChannel");
       if (!viewDenied && channel.type !== "Category") {
         // Hash channel overwrites for change detection
-        const hashData = `${channel.id}:${JSON.stringify(channel.overwrites)}`;
+        // Sort by ID for deterministic hashing - Discord API can return overwrites in varying order
+        const sortedOverwrites = [...channel.overwrites].sort((a, b) => a.id.localeCompare(b.id));
+        const hashData = `${channel.id}:${JSON.stringify(sortedOverwrites)}`;
         issues.push({
           severity: "medium",
           id: `MED-${String(issueId++).padStart(3, "0")}`,

@@ -2,7 +2,31 @@
 
 All changes to Pawtropolis Tech are tracked here.
 
-**Versions:** [4.9.2](#492---2026-01-07) | [4.9.1](#491---2026-01-07) | [4.9.0](#490---2026-01-04) | [4.8.0](#480---2025-12-08) | [4.7.1](#471---2025-12-03) | [4.7.0](#470---2025-12-03) | [4.6.0](#460---2025-12-03) | [4.5.0](#450---2025-12-02) | [4.4.4](#444---2025-12-03) | [4.4.3](#443---2025-12-03) | [4.4.2](#442---2025-12-03) | [4.4.1](#441---2025-12-03) | [4.4.0](#440---2025-12-03) | [4.3.0](#430---2025-12-02) | [4.2.0](#420---2025-12-01) | [4.1.0](#410---2025-12-01) | [4.0.3](#403---2025-12-01) | [4.0.2](#402---2025-12-01) | [4.0.1](#401---2025-12-01) | [4.0.0](#400---2025-12-01) | [Earlier versions](#earlier-versions)
+**Versions:** [Unreleased](#unreleased) | [4.9.2](#492---2026-01-07) | [4.9.1](#491---2026-01-07) | [4.9.0](#490---2026-01-04) | [4.8.0](#480---2025-12-08) | [4.7.1](#471---2025-12-03) | [4.7.0](#470---2025-12-03) | [4.6.0](#460---2025-12-03) | [4.5.0](#450---2025-12-02) | [4.4.4](#444---2025-12-03) | [4.4.3](#443---2025-12-03) | [4.4.2](#442---2025-12-03) | [4.4.1](#441---2025-12-03) | [4.4.0](#440---2025-12-03) | [4.3.0](#430---2025-12-02) | [4.2.0](#420---2025-12-01) | [4.1.0](#410---2025-12-01) | [4.0.3](#403---2025-12-01) | [4.0.2](#402---2025-12-01) | [4.0.1](#401---2025-12-01) | [4.0.0](#400---2025-12-01) | [Earlier versions](#earlier-versions)
+
+## [Unreleased]
+
+### Added
+
+- **`/utility` Command** — Internal command for community managers and bot developers to perform mass role operations. Not relevant for general staff use.
+- **`/developer trace` Command** — Staff can now look up verbose trace details from error card trace IDs:
+  - Request overview (command, user, guild, outcome, duration)
+  - Execution timeline with individual phase timings
+  - Database queries with SQL and timing
+  - User context (roles, permissions)
+  - Full error details (kind, code, message, stack trace in dev)
+  - Custom attributes and affected entities
+  - Traces stored in-memory for 30 minutes (500 trace max)
+- **`/developer stats` Command** — Shows trace cache statistics (size, TTL, memory estimate)
+- **Slash Command System Documentation** — Comprehensive developer guide at `docs/SLASH-COMMANDS.md` covering:
+  - Command file structure and required exports
+  - Registration in `buildCommands.ts` and `index.ts`
+  - Deployment process and runtime auto-sync
+  - Interaction handlers (buttons, modals, autocomplete)
+  - Helper patterns (withStep, withSql, permissions)
+  - Troubleshooting guide and checklist for new commands
+
+---
 
 ## [4.9.2] - 2026-01-07
 
