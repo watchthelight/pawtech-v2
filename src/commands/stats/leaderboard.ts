@@ -2,6 +2,9 @@
  * Pawtropolis Tech -- src/commands/stats/leaderboard.ts
  * WHAT: Handler for /stats leaderboard - moderator rankings.
  * WHY: Provides gamification and transparency for review team performance.
+ * FLOWS:
+ *  - /stats leaderboard [days] -> Shows image-based leaderboard
+ *  - /stats leaderboard [days] export:true -> Exports CSV file
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -15,6 +18,10 @@ import {
   requireMinRole,
   ROLE_IDS,
   getAvgClaimToDecision,
+  withStep,
+  withSql,
+  ensureDeferred,
+  type CommandContext,
 } from "./shared.js";
 import { generateLeaderboardImage, type ModStats } from "../../lib/leaderboardImage.js";
 
@@ -23,8 +30,10 @@ import { generateLeaderboardImage, type ModStats } from "../../lib/leaderboardIm
  * Shows ranked list of moderators by decisions with optional CSV export.
  */
 export async function handleLeaderboard(
-  interaction: ChatInputCommandInteraction
+  ctx: CommandContext<ChatInputCommandInteraction>
 ): Promise<void> {
+  const { interaction } = ctx;
+
   if (!interaction.guildId) {
     await interaction.reply({
       content: "This command must be run in a guild.",
@@ -40,15 +49,20 @@ export async function handleLeaderboard(
     requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.GATEKEEPER }],
   })) return;
 
-  await interaction.deferReply();
+  await withStep(ctx, "defer", async () => {
+    await ensureDeferred(interaction);
+  });
 
-  const days = interaction.options.getInteger("days") ?? 30;
-  const exportCsv = interaction.options.getBoolean("export") ?? false;
-  const windowStartS = nowUtc() - days * 86400;
+  const { days, exportCsv, windowStartS } = await withStep(ctx, "parse_options", async () => {
+    return {
+      days: interaction.options.getInteger("days") ?? 30,
+      exportCsv: interaction.options.getBoolean("export") ?? false,
+      windowStartS: nowUtc() - (interaction.options.getInteger("days") ?? 30) * 86400,
+    };
+  });
 
-  const rows = db
-    .prepare(
-      `
+  const rows = await withStep(ctx, "fetch_data", async () => {
+    const leaderboardQuery = `
       SELECT
         actor_id,
         COUNT(*) as total,
@@ -64,21 +78,25 @@ export async function handleLeaderboard(
       GROUP BY actor_id
       ORDER BY total DESC, approvals DESC
       LIMIT 100
-    `
-    )
-    .all(interaction.guildId, windowStartS) as Array<{
-    actor_id: string;
-    total: number;
-    approvals: number;
-    rejections: number;
-    modmail: number;
-    perm_reject: number;
-    kicks: number;
-  }>;
+    `;
+    return withSql(ctx, leaderboardQuery, () => {
+      return db.prepare(leaderboardQuery).all(interaction.guildId, windowStartS) as Array<{
+        actor_id: string;
+        total: number;
+        approvals: number;
+        rejections: number;
+        modmail: number;
+        perm_reject: number;
+        kicks: number;
+      }>;
+    });
+  });
 
   if (rows.length === 0) {
-    await interaction.editReply({
-      content: `No decisions found in the last ${days} days.`,
+    await withStep(ctx, "reply_empty", async () => {
+      await interaction.editReply({
+        content: `No decisions found in the last ${days} days.`,
+      });
     });
     return;
   }

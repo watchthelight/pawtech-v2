@@ -52,19 +52,19 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
       break;
 
     case "leaderboard":
-      await handleLeaderboard(interaction);
+      await handleLeaderboard(ctx);
       break;
 
     case "user":
-      await handleUser(interaction);
+      await handleUser(ctx);
       break;
 
     case "export":
-      await handleExport(interaction);
+      await handleExport(ctx);
       break;
 
     case "reset":
-      await handleReset(interaction);
+      await handleReset(ctx);
       break;
 
     case "history":

@@ -1,0 +1,246 @@
+/**
+ * Pawtropolis Tech -- src/commands/example.ts
+ * WHAT: Brief description of what this command does.
+ * WHY: Why this command exists and what problem it solves.
+ * FLOWS:
+ *  - /example foo <option> -> Does X with the option
+ *  - /example bar -> Does Y
+ * DOCS:
+ *  - https://discord.js.org/#/docs/discord.js/main/class/ChatInputCommandInteraction
+ */
+// SPDX-License-Identifier: LicenseRef-ANW-1.0
+
+import {
+  SlashCommandBuilder,
+  EmbedBuilder,
+  type ChatInputCommandInteraction,
+  MessageFlags,
+} from "discord.js";
+import {
+  withStep,
+  withSql,
+  ensureDeferred,
+  replyOrEdit,
+  type CommandContext,
+} from "../lib/cmdWrap.js";
+import { requireMinRole, ROLE_IDS } from "../lib/config.js";
+import { db } from "../db/db.js";
+import { logger } from "../lib/logger.js";
+
+// ============================================================================
+// COMMAND DEFINITION
+// ============================================================================
+
+export const data = new SlashCommandBuilder()
+  .setName("example")
+  .setDescription("Example command demonstrating best practices")
+  .addSubcommand((sub) =>
+    sub
+      .setName("foo")
+      .setDescription("Does foo with an option")
+      .addStringOption((opt) =>
+        opt
+          .setName("input")
+          .setDescription("The input to process")
+          .setRequired(true)
+      )
+  )
+  .addSubcommand((sub) =>
+    sub.setName("bar").setDescription("Does bar without options")
+  );
+
+// ============================================================================
+// EXECUTE HANDLER
+// ============================================================================
+
+/**
+ * Main command executor.
+ *
+ * Pattern:
+ * 1. Permission check at TOP (before any routing)
+ * 2. Extract subcommand
+ * 3. Route via switch statement
+ * 4. Default case for unknown subcommand
+ */
+export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
+  const { interaction } = ctx;
+
+  // -------------------------------------------------------------------------
+  // 1. Permission Check (always first, before routing)
+  // -------------------------------------------------------------------------
+  // Use the appropriate helper:
+  // - requireStaff(interaction) - Any staff member
+  // - requireMinRole(interaction, ROLE_IDS.X, opts) - Hierarchical (X or above)
+  // - requireExactRoles(interaction, [...], opts) - Specific roles only
+  // - requireGatekeeper(interaction, cmd, desc) - Gatekeeper only
+  // - requireOwnerOnly(interaction, cmd, desc) - Bot owner/server dev only
+  if (
+    !requireMinRole(interaction, ROLE_IDS.MODERATOR, {
+      command: "example",
+      description: "Example command demonstrating best practices.",
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.MODERATOR }],
+    })
+  ) {
+    return;
+  }
+
+  // -------------------------------------------------------------------------
+  // 2. Route to Subcommand Handler
+  // -------------------------------------------------------------------------
+  const subcommand = interaction.options.getSubcommand();
+
+  switch (subcommand) {
+    case "foo":
+      await handleFoo(ctx);
+      break;
+    case "bar":
+      await handleBar(ctx);
+      break;
+    default:
+      await interaction.reply({
+        content: "Unknown subcommand.",
+        flags: MessageFlags.Ephemeral,
+      });
+  }
+}
+
+// ============================================================================
+// SUBCOMMAND HANDLERS
+// ============================================================================
+
+/**
+ * Handles /example foo <input>
+ *
+ * Pattern:
+ * 1. Extract options
+ * 2. Defer if operation takes >1s
+ * 3. Use withStep for each logical phase
+ * 4. Use withSql for database operations
+ * 5. Reply with replyOrEdit
+ */
+async function handleFoo(ctx: CommandContext<ChatInputCommandInteraction>) {
+  const { interaction } = ctx;
+
+  // -------------------------------------------------------------------------
+  // Parse Options
+  // -------------------------------------------------------------------------
+  const input = await withStep(ctx, "parse_options", async () => {
+    return interaction.options.getString("input", true);
+  });
+
+  // -------------------------------------------------------------------------
+  // Defer for Long Operations
+  // -------------------------------------------------------------------------
+  // Use ensureDeferred when:
+  // - Making external API calls
+  // - Processing images
+  // - Running complex DB queries
+  // - Any operation that might take >1s
+  await withStep(ctx, "defer", async () => {
+    await ensureDeferred(interaction);
+  });
+
+  // -------------------------------------------------------------------------
+  // Database Operations (use withSql)
+  // -------------------------------------------------------------------------
+  const data = await withStep(ctx, "fetch_data", async () => {
+    // withSql wraps the DB call for:
+    // - Query timing (recorded in wide event)
+    // - Error context (SQL shown in error cards if query fails)
+    //
+    // The SQL string should match the actual query being executed.
+    // Note: better-sqlite3 is synchronous, but we return it from withSql.
+    return withSql(ctx, "SELECT * FROM example_table WHERE input = ?", () => {
+      return db.prepare("SELECT * FROM example_table WHERE input = ?").get(input);
+    });
+  });
+
+  // -------------------------------------------------------------------------
+  // Business Logic
+  // -------------------------------------------------------------------------
+  const result = await withStep(ctx, "process", async () => {
+    // Process the data...
+    return {
+      processed: true,
+      input,
+      data,
+    };
+  });
+
+  // -------------------------------------------------------------------------
+  // Reply
+  // -------------------------------------------------------------------------
+  await withStep(ctx, "reply", async () => {
+    const embed = new EmbedBuilder()
+      .setTitle("Example Result")
+      .setColor(0x57f287)
+      .setDescription(`Processed: ${result.input}`)
+      .setTimestamp();
+
+    // replyOrEdit handles interaction state:
+    // - Fresh interaction → reply()
+    // - Deferred → editReply()
+    // - Already replied → followUp()
+    await replyOrEdit(interaction, {
+      embeds: [embed],
+      // Omit flags for public reply
+      // Use MessageFlags.Ephemeral for private reply
+    });
+  });
+}
+
+/**
+ * Handles /example bar
+ *
+ * Simple handler without deferral (quick operation).
+ */
+async function handleBar(ctx: CommandContext<ChatInputCommandInteraction>) {
+  const { interaction } = ctx;
+
+  // For quick operations (<1s), no need to defer
+  await withStep(ctx, "process", async () => {
+    // Quick processing...
+    logger.info({ userId: interaction.user.id }, "Bar subcommand executed");
+  });
+
+  await withStep(ctx, "reply", async () => {
+    await interaction.reply({
+      content: "Bar executed successfully!",
+      flags: MessageFlags.Ephemeral,
+    });
+  });
+}
+
+// ============================================================================
+// HELPER FUNCTIONS
+// ============================================================================
+
+/**
+ * Example helper function.
+ *
+ * Move reusable logic to helpers at the bottom of the file.
+ * For complex commands, consider a separate shared.ts file.
+ */
+function formatResult(value: unknown): string {
+  return JSON.stringify(value, null, 2);
+}
+
+// ============================================================================
+// BUTTON/MODAL HANDLERS (if needed)
+// ============================================================================
+
+// For commands with interactive components, export handlers separately.
+// These get registered in index.ts for button/modal routing.
+//
+// Example:
+//
+// export async function handleExampleButton(
+//   ctx: CommandContext<ButtonInteraction>
+// ) {
+//   const { interaction } = ctx;
+//   const customId = interaction.customId; // e.g., "example:confirm:123"
+//
+//   await withStep(ctx, "handle_button", async () => {
+//     // Handle button click...
+//   });
+// }
