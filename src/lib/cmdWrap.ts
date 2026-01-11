@@ -320,9 +320,44 @@ export function wrapCommand<I extends InstrumentedInteraction>(
       // Build error context for wide event
       wideEvent.setError(classified, { phase, lastSql, sentryEventId });
 
-      // Emit the wide event (errors are always kept, no sampling)
-      const finalEvent = wideEvent.finalize();
-      emitWideEvent(finalEvent);
+      // ─────────────────────────────────────────────────────────────────────────
+      // ERROR CARD DELIVERY
+      // ─────────────────────────────────────────────────────────────────────────
+      // Try to show the user an error card with trace ID they can report.
+      // Track whether this succeeds so we know if the user saw anything useful.
+      //
+      // WHY THIS MATTERS:
+      // If the error card fails, the user sees Discord's generic "interaction failed"
+      // message with no trace ID to report. This is terrible UX - we want to know
+      // when this happens so we can debug the error card delivery itself.
+
+      let errorCardSent = false;
+      try {
+        const { postErrorCardV2 } = await import("./errorCardV2.js");
+        await postErrorCardV2(interaction, {
+          wideEvent: wideEvent.snapshot(), // Use snapshot, not finalize (we need to set errorCardSent first)
+          classified,
+          sentryEventId,
+        });
+        errorCardSent = true;
+      } catch (cardErr) {
+        // Error card delivery failed - user saw nothing useful
+        const cardErrCode = (cardErr as { code?: unknown })?.code;
+        const cardErrMsg = cardErr instanceof Error ? cardErr.message : String(cardErr);
+
+        // Record why we couldn't show the error card
+        wideEvent.setResponseFailure(
+          cardErrCode ? `Error card failed: ${cardErrCode}` : `Error card failed: ${cardErrMsg}`
+        );
+
+        logger.error(
+          { err: cardErr, traceId, code: cardErrCode, evt: "error_card_fail" },
+          "Failed to post error card - user saw no useful error message"
+        );
+      }
+
+      // Record error card delivery status in wide event
+      wideEvent.setErrorCardSent(errorCardSent);
 
       // Update Sentry tags
       setTag("phase", phase);
@@ -330,20 +365,9 @@ export function wrapCommand<I extends InstrumentedInteraction>(
       setTag("traceId", traceId);
       setTag("errorKind", classified.kind);
 
-      // Show the user the redesigned error card
-      try {
-        const { postErrorCardV2 } = await import("./errorCardV2.js");
-        await postErrorCardV2(interaction, {
-          wideEvent: finalEvent,
-          classified,
-          sentryEventId,
-        });
-      } catch (cardErr) {
-        logger.error(
-          { err: cardErr, traceId, evt: "error_card_fail" },
-          "Failed to post error card"
-        );
-      }
+      // Emit the wide event AFTER we know the error card status
+      // (errors are always kept, no sampling)
+      emitWideEvent(wideEvent.finalize());
     }
   };
 }

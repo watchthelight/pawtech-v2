@@ -103,98 +103,109 @@ export async function handleLeaderboard(
 
   // Handle CSV export
   if (exportCsv) {
-    const csvLines = [
-      "Moderator ID,Total Decisions,Approvals,Rejections,Modmail,Perm Reject,Kicks,Avg Response Time (seconds)",
-    ];
+    await withStep(ctx, "generate_csv", async () => {
+      const csvLines = [
+        "Moderator ID,Total Decisions,Approvals,Rejections,Modmail,Perm Reject,Kicks,Avg Response Time (seconds)",
+      ];
 
-    for (const row of rows) {
-      const avgTime = getAvgClaimToDecision(interaction.guildId, row.actor_id, windowStartS);
-      csvLines.push(
-        `${row.actor_id},${row.total},${row.approvals},${row.rejections},${row.modmail},${row.perm_reject},${row.kicks},${avgTime ?? ""}`
+      for (const row of rows) {
+        const avgTime = getAvgClaimToDecision(interaction.guildId!, row.actor_id, windowStartS);
+        csvLines.push(
+          `${row.actor_id},${row.total},${row.approvals},${row.rejections},${row.modmail},${row.perm_reject},${row.kicks},${avgTime ?? ""}`
+        );
+      }
+
+      const csvContent = csvLines.join("\n");
+      const attachment = new AttachmentBuilder(Buffer.from(csvContent, "utf-8"), {
+        name: `stats-leaderboard-${days}d-${Date.now()}.csv`,
+      });
+
+      await interaction.editReply({
+        content: `**Moderator Leaderboard Export** (last ${days} days)\n${rows.length} moderators`,
+        files: [attachment],
+      });
+
+      logger.info(
+        { guildId: interaction.guildId, days, count: rows.length },
+        "[stats:leaderboard] CSV export generated"
       );
+    });
+    return;
+  }
+
+  // Display image-based leaderboard
+  const modStatsData = await withStep(ctx, "build_stats", async () => {
+    const displayRows = rows.slice(0, 15);
+    const memberIds = displayRows.map(r => r.actor_id);
+    let members: Map<string, import("discord.js").GuildMember> | undefined;
+    try {
+      members = await interaction.guild?.members.fetch({ user: memberIds });
+    } catch {
+      // If batch fetch fails, continue with empty map
     }
 
-    const csvContent = csvLines.join("\n");
-    const attachment = new AttachmentBuilder(Buffer.from(csvContent, "utf-8"), {
-      name: `stats-leaderboard-${days}d-${Date.now()}.csv`,
-    });
+    const statsData: ModStats[] = [];
 
+    for (let i = 0; i < displayRows.length; i++) {
+      const row = displayRows[i];
+      const avgTime = getAvgClaimToDecision(interaction.guildId!, row.actor_id, windowStartS);
+      const rejects = row.rejections + row.perm_reject + row.kicks;
+
+      let displayName = "Unknown";
+      let roleColor: string | undefined;
+      const member = members?.get(row.actor_id);
+      if (member) {
+        displayName = member.displayName || "Unknown";
+        const hexColor = member.displayHexColor;
+        if (hexColor && hexColor !== "#000000") {
+          roleColor = hexColor;
+        }
+      }
+
+      statsData.push({
+        rank: i + 1,
+        displayName,
+        total: row.total,
+        approvals: row.approvals,
+        rejections: rejects,
+        modmail: row.modmail,
+        avgTimeSeconds: avgTime ?? 0,
+        roleColor,
+      });
+    }
+
+    return statsData;
+  });
+
+  const { embed, attachment } = await withStep(ctx, "generate_image", async () => {
+    const imageBuffer = await generateLeaderboardImage(modStatsData);
+    const imgAttachment = new AttachmentBuilder(imageBuffer, { name: "leaderboard.png" });
+
+    const imgEmbed = new EmbedBuilder()
+      .setTitle("Moderator Leaderboard")
+      .setDescription(`Top moderators by decisions (last ${days} days)`)
+      .setImage("attachment://leaderboard.png")
+      .setColor(0x5865f2)
+      .setTimestamp();
+
+    if (rows.length > 15) {
+      imgEmbed.setFooter({
+        text: `Showing top 15 of ${rows.length} moderators. Use export=true for full list.`,
+      });
+    }
+
+    return { embed: imgEmbed, attachment: imgAttachment };
+  });
+
+  await withStep(ctx, "reply", async () => {
     await interaction.editReply({
-      content: `**Moderator Leaderboard Export** (last ${days} days)\n${rows.length} moderators`,
+      embeds: [embed],
       files: [attachment],
     });
 
     logger.info(
       { guildId: interaction.guildId, days, count: rows.length },
-      "[stats:leaderboard] CSV export generated"
+      "[stats:leaderboard] displayed"
     );
-    return;
-  }
-
-  // Display image-based leaderboard
-  const displayRows = rows.slice(0, 15);
-
-  const memberIds = displayRows.map(r => r.actor_id);
-  let members: Map<string, import("discord.js").GuildMember> | undefined;
-  try {
-    members = await interaction.guild?.members.fetch({ user: memberIds });
-  } catch {
-    // If batch fetch fails, continue with empty map
-  }
-
-  const modStatsData: ModStats[] = [];
-
-  for (let i = 0; i < displayRows.length; i++) {
-    const row = displayRows[i];
-    const avgTime = getAvgClaimToDecision(interaction.guildId, row.actor_id, windowStartS);
-    const rejects = row.rejections + row.perm_reject + row.kicks;
-
-    let displayName = "Unknown";
-    let roleColor: string | undefined;
-    const member = members?.get(row.actor_id);
-    if (member) {
-      displayName = member.displayName || "Unknown";
-      const hexColor = member.displayHexColor;
-      if (hexColor && hexColor !== "#000000") {
-        roleColor = hexColor;
-      }
-    }
-
-    modStatsData.push({
-      rank: i + 1,
-      displayName,
-      total: row.total,
-      approvals: row.approvals,
-      rejections: rejects,
-      modmail: row.modmail,
-      avgTimeSeconds: avgTime ?? 0,
-      roleColor,
-    });
-  }
-
-  const imageBuffer = await generateLeaderboardImage(modStatsData);
-  const attachment = new AttachmentBuilder(imageBuffer, { name: "leaderboard.png" });
-
-  const embed = new EmbedBuilder()
-    .setTitle("Moderator Leaderboard")
-    .setDescription(`Top moderators by decisions (last ${days} days)`)
-    .setImage("attachment://leaderboard.png")
-    .setColor(0x5865f2)
-    .setTimestamp();
-
-  if (rows.length > 15) {
-    embed.setFooter({
-      text: `Showing top 15 of ${rows.length} moderators. Use export=true for full list.`,
-    });
-  }
-
-  await interaction.editReply({
-    embeds: [embed],
-    files: [attachment],
   });
-
-  logger.info(
-    { guildId: interaction.guildId, days, count: rows.length },
-    "[stats:leaderboard] displayed"
-  );
 }

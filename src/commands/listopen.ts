@@ -22,9 +22,9 @@ import {
 } from "discord.js";
 import { db } from "../db/db.js";
 import { shortCode } from "../lib/ids.js";
-import { logActionPretty } from "../logging/pretty.js";
+import { logActionPretty, type ActionType } from "../logging/pretty.js";
 import { logger } from "../lib/logger.js";
-import type { CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep, withSql } from "../lib/cmdWrap.js";
 import { randomBytes } from "node:crypto";
 import {
   postPermissionDenied,
@@ -513,81 +513,108 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
 
   // Runtime permission check: Gatekeeper role only (Bot Owner/Server Dev bypass)
   // This follows the project pattern: make command discoverable, enforce at runtime
-  const member = interaction.member ? (await interaction.guild.members.fetch(reviewerId).catch(() => null)) : null;
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    const member = interaction.member ? (await interaction.guild!.members.fetch(reviewerId).catch(() => null)) : null;
 
-  const hasBypass = shouldBypass(reviewerId, member);
-  const isGatekeeper = hasRole(member, ROLE_IDS.GATEKEEPER);
+    const hasBypass = shouldBypass(reviewerId, member);
+    const isGatekeeper = hasRole(member, ROLE_IDS.GATEKEEPER);
 
-  if (!hasBypass && !isGatekeeper) {
-    await postPermissionDenied(interaction, {
-      command: "listopen",
-      description: "Lists claimed applications that need review.",
-      requirements: [{ type: "roles", roleIds: GATEKEEPER_ONLY }],
-    });
+    if (!hasBypass && !isGatekeeper) {
+      await postPermissionDenied(interaction, {
+        command: "listopen",
+        description: "Lists claimed applications that need review.",
+        requirements: [{ type: "roles", roleIds: GATEKEEPER_ONLY }],
+      });
 
-    logger.warn(
-      { userId: reviewerId, guildId, hasBypass, isGatekeeper },
-      "[listopen] unauthorized access attempt"
-    );
-    return;
-  }
+      logger.warn(
+        { userId: reviewerId, guildId, hasBypass, isGatekeeper },
+        "[listopen] unauthorized access attempt"
+      );
+      return false;
+    }
+    return true;
+  });
+  if (!hasPermission) return;
 
   // Check scope option (default to "mine")
-  const scope = (interaction.options.getString("scope") ?? "mine") as "mine" | "all" | "drafts";
+  const scope = await withStep(ctx, "parse_options", async () => {
+    return (interaction.options.getString("scope") ?? "mine") as "mine" | "all" | "drafts";
+  });
 
   // Always defer publicly (ephemeral toggle removed)
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
   try {
     // Fetch applications based on view mode
-    let totalCount: number;
-    let apps: OpenApplication[];
+    const { totalCount, apps } = await withStep(ctx, "fetch_applications", async () => {
+      let totalCount: number;
+      let apps: OpenApplication[];
 
-    if (scope === "all") {
-      totalCount = countAllOpenApplications(guildId);
-      apps = getAllOpenApplications(guildId, PAGE_SIZE, 0);
-    } else if (scope === "drafts") {
-      totalCount = countDraftApplications(guildId);
-      apps = getDraftApplications(guildId, PAGE_SIZE, 0);
-    } else {
-      totalCount = countOpenApplications(guildId, reviewerId);
-      apps = getOpenApplications(guildId, reviewerId, PAGE_SIZE, 0);
-    }
+      if (scope === "all") {
+        totalCount = withSql(ctx, "SELECT COUNT(*) FROM application (all open)", () =>
+          countAllOpenApplications(guildId)
+        );
+        apps = withSql(ctx, "SELECT apps (all open)", () =>
+          getAllOpenApplications(guildId, PAGE_SIZE, 0)
+        );
+      } else if (scope === "drafts") {
+        totalCount = withSql(ctx, "SELECT COUNT(*) FROM application (drafts)", () =>
+          countDraftApplications(guildId)
+        );
+        apps = withSql(ctx, "SELECT apps (drafts)", () =>
+          getDraftApplications(guildId, PAGE_SIZE, 0)
+        );
+      } else {
+        totalCount = withSql(ctx, "SELECT COUNT(*) FROM application (mine)", () =>
+          countOpenApplications(guildId, reviewerId)
+        );
+        apps = withSql(ctx, "SELECT apps (mine)", () =>
+          getOpenApplications(guildId, reviewerId, PAGE_SIZE, 0)
+        );
+      }
+
+      return { totalCount, apps };
+    });
 
     // Build embed with clickable links
-    const { embed, appUrls } = await buildListEmbed(interaction, apps, 0, totalCount, scope);
-
-    // Build pagination buttons
-    const nonce = generateNonce();
-    const components = buildPaginationButtons(0, totalCount, nonce, scope);
-
-    // Reply
-    await interaction.editReply({
-      embeds: [embed],
-      components,
+    const { embed, appUrls } = await withStep(ctx, "build_embed", async () => {
+      return buildListEmbed(interaction, apps, 0, totalCount, scope);
     });
 
-    // Log action with appLink metadata
-    const actionNames: Record<string, string> = {
-      mine: "listopen_view",
-      all: "listopen_view_all",
-      drafts: "listopen_view_drafts",
-    };
-    await logActionPretty(interaction.guild, {
-      actorId: reviewerId,
-      action: actionNames[scope],
-      meta: {
-        count: totalCount,
-        page: 1,
-        appLink: true,
-        viewMode: scope,
-      },
-    });
+    // Build pagination buttons and reply
+    await withStep(ctx, "reply", async () => {
+      const nonce = generateNonce();
+      const components = buildPaginationButtons(0, totalCount, nonce, scope);
 
-    logger.info(
-      { guildId, reviewerId, totalCount, viewMode: scope },
-      "[listopen] moderator viewed open applications"
-    );
+      await interaction.editReply({
+        embeds: [embed],
+        components,
+      });
+
+      // Log action with appLink metadata
+      const actionNames: Record<"mine" | "all" | "drafts", ActionType> = {
+        mine: "listopen_view",
+        all: "listopen_view_all",
+        drafts: "listopen_view_drafts",
+      };
+      await logActionPretty(interaction.guild!, {
+        actorId: reviewerId,
+        action: actionNames[scope],
+        meta: {
+          count: totalCount,
+          page: 1,
+          appLink: true,
+          viewMode: scope,
+        },
+      });
+
+      logger.info(
+        { guildId, reviewerId, totalCount, viewMode: scope },
+        "[listopen] moderator viewed open applications"
+      );
+    });
   } catch (err) {
     logger.error({ err, guildId, reviewerId }, "[listopen] command failed");
 

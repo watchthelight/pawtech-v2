@@ -21,7 +21,7 @@ import {
   EmbedBuilder,
   ChannelType,
 } from "discord.js";
-import type { CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep, withSql, ensureDeferred } from "../lib/cmdWrap.js";
 import { db } from "../db/db.js";
 import { logger } from "../lib/logger.js";
 import { requireMinRole, ROLE_IDS, MODERATOR_PLUS } from "../lib/config.js";
@@ -188,7 +188,7 @@ export const data = new SlashCommandBuilder()
   );
 
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
-  const interaction = ctx.interaction;
+  const { interaction } = ctx;
 
   if (!interaction.guild) {
     await interaction.reply({
@@ -199,35 +199,38 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 
   // Require Moderator+ role
-  if (!requireMinRole(interaction, ROLE_IDS.MODERATOR, {
-    command: "movie",
-    description: "Movie night attendance tracking and tier role management.",
-    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.MODERATOR }],
-  })) return;
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    return requireMinRole(interaction, ROLE_IDS.MODERATOR, {
+      command: "movie",
+      description: "Movie night attendance tracking and tier role management.",
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.MODERATOR }],
+    });
+  });
+  if (!hasPermission) return;
 
   const subcommand = interaction.options.getSubcommand();
 
   switch (subcommand) {
     case "start":
-      await handleStart(interaction);
+      await handleStart(ctx);
       break;
     case "end":
-      await handleEnd(interaction);
+      await handleEnd(ctx);
       break;
     case "attendance":
-      await handleAttendance(interaction);
+      await handleAttendance(ctx);
       break;
     case "add":
-      await handleAdd(interaction);
+      await handleAdd(ctx);
       break;
     case "credit":
-      await handleCredit(interaction);
+      await handleCredit(ctx);
       break;
     case "bump":
-      await handleBump(interaction);
+      await handleBump(ctx);
       break;
     case "resume":
-      await handleResume(interaction);
+      await handleResume(ctx);
       break;
     default:
       await interaction.reply({
@@ -237,7 +240,8 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   }
 }
 
-async function handleStart(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleStart(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
   const guild = interaction.guild!;
   const channel = interaction.options.getChannel("channel", true);
 
@@ -250,42 +254,51 @@ async function handleStart(interaction: ChatInputCommandInteraction): Promise<vo
   }
 
   // Defer since initializing existing members may take a moment
-  await interaction.deferReply();
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply();
+  });
 
-  const eventDate = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
-  const { retroactiveCount } = await startMovieEvent(guild, channel.id, eventDate);
-  const threshold = getMovieQualificationThreshold(guild.id);
+  const { eventDate, retroactiveCount, threshold } = await withStep(ctx, "start_event", async () => {
+    const date = new Date().toISOString().split("T")[0]; // YYYY-MM-DD
+    const result = await startMovieEvent(guild, channel.id, date);
+    const thresh = getMovieQualificationThreshold(guild.id);
 
-  logger.info({
-    evt: "movie_start_command",
-    guildId: guild.id,
-    channelId: channel.id,
-    eventDate,
-    retroactiveCount,
-    invokedBy: interaction.user.id,
-  }, `Movie night started in ${channel.name}`);
+    logger.info({
+      evt: "movie_start_command",
+      guildId: guild.id,
+      channelId: channel.id,
+      eventDate: date,
+      retroactiveCount: result.retroactiveCount,
+      invokedBy: interaction.user.id,
+    }, `Movie night started in ${channel.name}`);
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Movie Night Started!")
-    .setDescription(`Now tracking attendance in <#${channel.id}>`)
-    .addFields(
-      { name: "Date", value: eventDate, inline: true },
-      { name: "Minimum Time", value: `${threshold} minutes to qualify`, inline: true }
-    )
-    .setColor(0x5865F2)
-    .setTimestamp();
+    return { eventDate: date, retroactiveCount: result.retroactiveCount, threshold: thresh };
+  });
 
-  if (retroactiveCount > 0) {
-    embed.addFields({
-      name: "Already in VC",
-      value: `${retroactiveCount} user${retroactiveCount > 1 ? "s" : ""} already in the channel have been credited`,
-    });
-  }
+  await withStep(ctx, "reply", async () => {
+    const embed = new EmbedBuilder()
+      .setTitle("🎬 Movie Night Started!")
+      .setDescription(`Now tracking attendance in <#${channel.id}>`)
+      .addFields(
+        { name: "Date", value: eventDate, inline: true },
+        { name: "Minimum Time", value: `${threshold} minutes to qualify`, inline: true }
+      )
+      .setColor(0x5865F2)
+      .setTimestamp();
 
-  await interaction.editReply({ embeds: [embed] });
+    if (retroactiveCount > 0) {
+      embed.addFields({
+        name: "Already in VC",
+        value: `${retroactiveCount} user${retroactiveCount > 1 ? "s" : ""} already in the channel have been credited`,
+      });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+  });
 }
 
-async function handleEnd(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleEnd(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
   const guild = interaction.guild!;
 
   const event = getActiveMovieEvent(guild.id);
@@ -302,75 +315,101 @@ async function handleEnd(interaction: ChatInputCommandInteraction): Promise<void
    * many users (fetches each member, updates roles). Discord gives us 15 minutes
    * after deferring, plenty of time for even large events.
    */
-  await interaction.deferReply();
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply();
+  });
 
-  logger.info({
-    evt: "movie_end_command",
-    guildId: guild.id,
-    eventDate: event.eventDate,
-    invokedBy: interaction.user.id,
-  }, "Movie night ending");
+  await withStep(ctx, "finalize_attendance", async () => {
+    logger.info({
+      evt: "movie_end_command",
+      guildId: guild.id,
+      eventDate: event.eventDate,
+      invokedBy: interaction.user.id,
+    }, "Movie night ending");
 
-  // Finalize attendance
-  await finalizeMovieAttendance(guild);
+    // Finalize attendance
+    await finalizeMovieAttendance(guild);
+  });
 
   // Get all qualified users from this event
-  const qualifiedUsers = db.prepare(`
-    SELECT user_id, duration_minutes, longest_session_minutes
-    FROM movie_attendance
-    WHERE guild_id = ? AND event_date = ? AND qualified = 1
-    ORDER BY duration_minutes DESC
-  `).all(guild.id, event.eventDate) as Array<{
-    user_id: string;
-    duration_minutes: number;
-    longest_session_minutes: number;
-  }>;
+  const qualifiedUsers = await withStep(ctx, "fetch_qualified", async () => {
+    const query = `
+      SELECT user_id, duration_minutes, longest_session_minutes
+      FROM movie_attendance
+      WHERE guild_id = ? AND event_date = ? AND qualified = 1
+      ORDER BY duration_minutes DESC
+    `;
+    return withSql(ctx, query, () => {
+      return db.prepare(query).all(guild.id, event.eventDate) as Array<{
+        user_id: string;
+        duration_minutes: number;
+        longest_session_minutes: number;
+      }>;
+    });
+  });
 
   // Update tier roles for all qualified users
-  for (const user of qualifiedUsers) {
-    await updateMovieTierRole(guild, user.user_id);
-  }
+  await withStep(ctx, "update_roles", async () => {
+    for (const user of qualifiedUsers) {
+      await updateMovieTierRole(guild, user.user_id);
+    }
+  });
 
-  const totalAttendees = db.prepare(`
-    SELECT COUNT(*) as count
-    FROM movie_attendance
-    WHERE guild_id = ? AND event_date = ?
-  `).get(guild.id, event.eventDate) as { count: number };
+  const totalAttendees = await withStep(ctx, "count_attendees", async () => {
+    const countQuery = `
+      SELECT COUNT(*) as count
+      FROM movie_attendance
+      WHERE guild_id = ? AND event_date = ?
+    `;
+    return withSql(ctx, countQuery, () => {
+      return db.prepare(countQuery).get(guild.id, event.eventDate) as { count: number };
+    });
+  });
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Movie Night Ended!")
-    .setDescription(`Attendance has been recorded for ${event.eventDate}`)
-    .addFields(
-      { name: "Total Participants", value: totalAttendees.count.toString(), inline: true },
-      { name: "Qualified (30+ min)", value: qualifiedUsers.length.toString(), inline: true }
-    )
-    .setColor(0x57F287)
-    .setTimestamp();
+  await withStep(ctx, "reply", async () => {
+    const embed = new EmbedBuilder()
+      .setTitle("🎬 Movie Night Ended!")
+      .setDescription(`Attendance has been recorded for ${event.eventDate}`)
+      .addFields(
+        { name: "Total Participants", value: totalAttendees.count.toString(), inline: true },
+        { name: "Qualified (30+ min)", value: qualifiedUsers.length.toString(), inline: true }
+      )
+      .setColor(0x57F287)
+      .setTimestamp();
 
-  if (qualifiedUsers.length > 0) {
-    const topAttendees = qualifiedUsers.slice(0, 5).map((u, i) =>
-      `${i + 1}. <@${u.user_id}> - ${u.duration_minutes} min`
-    ).join("\n");
-    embed.addFields({ name: "Top Attendees", value: topAttendees });
-  }
+    if (qualifiedUsers.length > 0) {
+      const topAttendees = qualifiedUsers.slice(0, 5).map((u, i) =>
+        `${i + 1}. <@${u.user_id}> - ${u.duration_minutes} min`
+      ).join("\n");
+      embed.addFields({ name: "Top Attendees", value: topAttendees });
+    }
 
-  await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
+  });
 }
 
-async function handleAttendance(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleAttendance(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
   const guild = interaction.guild!;
   const user = interaction.options.getUser("user");
 
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
   // If no user specified, show all attendees from the most recent event
   if (!user) {
-    const latestEvent = db.prepare(`
-      SELECT DISTINCT event_date FROM movie_attendance
-      WHERE guild_id = ?
-      ORDER BY event_date DESC
-      LIMIT 1
-    `).get(guild.id) as { event_date: string } | undefined;
+    const latestEvent = await withStep(ctx, "fetch_latest_event", async () => {
+      const query = `
+        SELECT DISTINCT event_date FROM movie_attendance
+        WHERE guild_id = ?
+        ORDER BY event_date DESC
+        LIMIT 1
+      `;
+      return withSql(ctx, query, () => {
+        return db.prepare(query).get(guild.id) as { event_date: string } | undefined;
+      });
+    });
 
     if (!latestEvent) {
       await interaction.editReply({
@@ -379,133 +418,152 @@ async function handleAttendance(interaction: ChatInputCommandInteraction): Promi
       return;
     }
 
-    const allAttendees = db.prepare(`
-      SELECT user_id, duration_minutes, longest_session_minutes, qualified
-      FROM movie_attendance
-      WHERE guild_id = ? AND event_date = ?
-      ORDER BY duration_minutes DESC
-    `).all(guild.id, latestEvent.event_date) as Array<{
-      user_id: string;
-      duration_minutes: number;
-      longest_session_minutes: number;
-      qualified: number;
-    }>;
-
-    const embed = new EmbedBuilder()
-      .setTitle(`🎬 Movie Night Attendance`)
-      .setDescription(`All attendees from ${latestEvent.event_date}`)
-      .setColor(0x5865F2)
-      .setTimestamp();
-
-    const lines = allAttendees.map((a, i) => {
-      const status = a.qualified ? "✅" : "❌";
-      return `${status} <@${a.user_id}> — ${a.duration_minutes}min total (longest: ${a.longest_session_minutes}min)`;
+    const allAttendees = await withStep(ctx, "fetch_attendees", async () => {
+      const query = `
+        SELECT user_id, duration_minutes, longest_session_minutes, qualified
+        FROM movie_attendance
+        WHERE guild_id = ? AND event_date = ?
+        ORDER BY duration_minutes DESC
+      `;
+      return withSql(ctx, query, () => {
+        return db.prepare(query).all(guild.id, latestEvent.event_date) as Array<{
+          user_id: string;
+          duration_minutes: number;
+          longest_session_minutes: number;
+          qualified: number;
+        }>;
+      });
     });
 
-    if (lines.length > 0) {
-      // Split into chunks if too long
-      const chunkSize = 10;
-      for (let i = 0; i < lines.length; i += chunkSize) {
-        const chunk = lines.slice(i, i + chunkSize);
-        embed.addFields({
-          name: i === 0 ? `Attendees (${allAttendees.length} total)` : "​", // zero-width space for continuation
-          value: chunk.join("\n"),
-        });
+    await withStep(ctx, "reply", async () => {
+      const embed = new EmbedBuilder()
+        .setTitle(`🎬 Movie Night Attendance`)
+        .setDescription(`All attendees from ${latestEvent.event_date}`)
+        .setColor(0x5865F2)
+        .setTimestamp();
+
+      const lines = allAttendees.map((a, i) => {
+        const status = a.qualified ? "✅" : "❌";
+        return `${status} <@${a.user_id}> — ${a.duration_minutes}min total (longest: ${a.longest_session_minutes}min)`;
+      });
+
+      if (lines.length > 0) {
+        // Split into chunks if too long
+        const chunkSize = 10;
+        for (let i = 0; i < lines.length; i += chunkSize) {
+          const chunk = lines.slice(i, i + chunkSize);
+          embed.addFields({
+            name: i === 0 ? `Attendees (${allAttendees.length} total)` : "​", // zero-width space for continuation
+            value: chunk.join("\n"),
+          });
+        }
+      } else {
+        embed.addFields({ name: "Attendees", value: "No attendees recorded" });
       }
-    } else {
-      embed.addFields({ name: "Attendees", value: "No attendees recorded" });
-    }
 
-    const qualifiedCount = allAttendees.filter(a => a.qualified).length;
-    embed.setFooter({ text: `${qualifiedCount} qualified (30+ min) out of ${allAttendees.length} total` });
+      const qualifiedCount = allAttendees.filter(a => a.qualified).length;
+      embed.setFooter({ text: `${qualifiedCount} qualified (30+ min) out of ${allAttendees.length} total` });
 
-    await interaction.editReply({ embeds: [embed] });
+      await interaction.editReply({ embeds: [embed] });
+    });
     return;
   }
 
   // Show stats for a specific user
-  const qualifiedCount = getUserQualifiedMovieCount(guild.id, user.id);
+  const { qualifiedCount, recentAttendance } = await withStep(ctx, "fetch_user_stats", async () => {
+    const count = getUserQualifiedMovieCount(guild.id, user.id);
 
-  const recentAttendance = db.prepare(`
-    SELECT event_date, duration_minutes, longest_session_minutes, qualified
-    FROM movie_attendance
-    WHERE guild_id = ? AND user_id = ?
-    ORDER BY event_date DESC
-    LIMIT 10
-  `).all(guild.id, user.id) as Array<{
-    event_date: string;
-    duration_minutes: number;
-    longest_session_minutes: number;
-    qualified: number;
-  }>;
-
-  const embed = new EmbedBuilder()
-    .setTitle(`🎬 Movie Night Attendance`)
-    .setDescription(`Stats for ${user}`)
-    .setThumbnail(user.displayAvatarURL())
-    .addFields(
-      { name: "Total Qualified Movies", value: qualifiedCount.toString(), inline: true }
-    )
-    .setColor(0x5865F2)
-    .setTimestamp();
-
-  /*
-   * Tier calculation logic:
-   * - tiers is ordered highest-to-lowest for currentTier lookup (first match wins)
-   * - For nextTier, we reverse and find the first tier the user HASN'T reached
-   *
-   * Example: User has 7 qualified movies
-   *   - currentTier: Popcorn Club (threshold 5, first one they meet going down)
-   *   - nextTier: Director's Cut (threshold 10, first one above their count)
-   */
-  const tiers = [
-    { name: "Cinematic Royalty", threshold: 20 },
-    { name: "Director's Cut", threshold: 10 },
-    { name: "Popcorn Club", threshold: 5 },
-    { name: "Red Carpet Guest", threshold: 1 },
-  ];
-
-  const currentTier = tiers.find(t => qualifiedCount >= t.threshold);
-  const nextTier = tiers.slice().reverse().find(t => qualifiedCount < t.threshold);
-
-  if (currentTier) {
-    embed.addFields({ name: "Current Tier", value: currentTier.name, inline: true });
-  }
-  if (nextTier) {
-    const needed = nextTier.threshold - qualifiedCount;
-    embed.addFields({
-      name: "Next Tier",
-      value: `${nextTier.name} (${needed} more movie${needed === 1 ? "" : "s"})`,
-      inline: true
+    const query = `
+      SELECT event_date, duration_minutes, longest_session_minutes, qualified
+      FROM movie_attendance
+      WHERE guild_id = ? AND user_id = ?
+      ORDER BY event_date DESC
+      LIMIT 10
+    `;
+    const recent = withSql(ctx, query, () => {
+      return db.prepare(query).all(guild.id, user.id) as Array<{
+        event_date: string;
+        duration_minutes: number;
+        longest_session_minutes: number;
+        qualified: number;
+      }>;
     });
-  }
 
-  if (recentAttendance.length > 0) {
-    const history = recentAttendance.map(a => {
-      const status = a.qualified ? "✅" : "❌";
-      return `${status} ${a.event_date}: ${a.duration_minutes}min (longest: ${a.longest_session_minutes}min)`;
-    }).join("\n");
-    embed.addFields({ name: "Recent Attendance", value: history });
-  } else {
-    embed.addFields({ name: "Recent Attendance", value: "No attendance records yet" });
-  }
+    return { qualifiedCount: count, recentAttendance: recent };
+  });
 
-  await interaction.editReply({ embeds: [embed] });
+  await withStep(ctx, "reply", async () => {
+    const embed = new EmbedBuilder()
+      .setTitle(`🎬 Movie Night Attendance`)
+      .setDescription(`Stats for ${user}`)
+      .setThumbnail(user.displayAvatarURL())
+      .addFields(
+        { name: "Total Qualified Movies", value: qualifiedCount.toString(), inline: true }
+      )
+      .setColor(0x5865F2)
+      .setTimestamp();
+
+    /*
+     * Tier calculation logic:
+     * - tiers is ordered highest-to-lowest for currentTier lookup (first match wins)
+     * - For nextTier, we reverse and find the first tier the user HASN'T reached
+     *
+     * Example: User has 7 qualified movies
+     *   - currentTier: Popcorn Club (threshold 5, first one they meet going down)
+     *   - nextTier: Director's Cut (threshold 10, first one above their count)
+     */
+    const tiers = [
+      { name: "Cinematic Royalty", threshold: 20 },
+      { name: "Director's Cut", threshold: 10 },
+      { name: "Popcorn Club", threshold: 5 },
+      { name: "Red Carpet Guest", threshold: 1 },
+    ];
+
+    const currentTier = tiers.find(t => qualifiedCount >= t.threshold);
+    const nextTier = tiers.slice().reverse().find(t => qualifiedCount < t.threshold);
+
+    if (currentTier) {
+      embed.addFields({ name: "Current Tier", value: currentTier.name, inline: true });
+    }
+    if (nextTier) {
+      const needed = nextTier.threshold - qualifiedCount;
+      embed.addFields({
+        name: "Next Tier",
+        value: `${nextTier.name} (${needed} more movie${needed === 1 ? "" : "s"})`,
+        inline: true
+      });
+    }
+
+    if (recentAttendance.length > 0) {
+      const history = recentAttendance.map(a => {
+        const status = a.qualified ? "✅" : "❌";
+        return `${status} ${a.event_date}: ${a.duration_minutes}min (longest: ${a.longest_session_minutes}min)`;
+      }).join("\n");
+      embed.addFields({ name: "Recent Attendance", value: history });
+    } else {
+      embed.addFields({ name: "Recent Attendance", value: "No attendance records yet" });
+    }
+
+    await interaction.editReply({ embeds: [embed] });
+  });
 }
 
-async function handleAdd(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleAdd(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
   const guild = interaction.guild!;
   const user = interaction.options.getUser("user", true);
   const minutes = interaction.options.getInteger("minutes", true);
   const reason = interaction.options.getString("reason") ?? undefined;
 
-  const success = addManualAttendance(
-    guild.id,
-    user.id,
-    minutes,
-    interaction.user.id,
-    reason
-  );
+  const success = await withStep(ctx, "add_attendance", async () => {
+    return addManualAttendance(
+      guild.id,
+      user.id,
+      minutes,
+      interaction.user.id,
+      reason
+    );
+  });
 
   if (!success) {
     await interaction.reply({
@@ -516,31 +574,36 @@ async function handleAdd(interaction: ChatInputCommandInteraction): Promise<void
   }
 
   // Log the action
-  await logActionPretty(guild, {
-    actorId: interaction.user.id,
-    subjectId: user.id,
-    action: "movie_manual_add",
-    reason: reason ?? `Manually added ${minutes} minutes`,
-    meta: {
-      minutes,
-      eventDate: getActiveMovieEvent(guild.id)?.eventDate ?? "unknown",
-    },
-  }).catch(() => {});
+  await withStep(ctx, "audit_log", async () => {
+    await logActionPretty(guild, {
+      actorId: interaction.user.id,
+      subjectId: user.id,
+      action: "movie_manual_add",
+      reason: reason ?? `Manually added ${minutes} minutes`,
+      meta: {
+        minutes,
+        eventDate: getActiveMovieEvent(guild.id)?.eventDate ?? "unknown",
+      },
+    }).catch(() => {});
+  });
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Attendance Updated")
-    .setDescription(`Added **${minutes} minutes** to ${user}'s attendance`)
-    .setColor(0x57F287)
-    .setTimestamp();
+  await withStep(ctx, "reply", async () => {
+    const embed = new EmbedBuilder()
+      .setTitle("🎬 Attendance Updated")
+      .setDescription(`Added **${minutes} minutes** to ${user}'s attendance`)
+      .setColor(0x57F287)
+      .setTimestamp();
 
-  if (reason) {
-    embed.addFields({ name: "Reason", value: reason });
-  }
+    if (reason) {
+      embed.addFields({ name: "Reason", value: reason });
+    }
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  });
 }
 
-async function handleCredit(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleCredit(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
   const guild = interaction.guild!;
   const user = interaction.options.getUser("user", true);
   const dateStr = interaction.options.getString("date", true);
@@ -566,51 +629,62 @@ async function handleCredit(interaction: ChatInputCommandInteraction): Promise<v
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: true });
+  });
 
-  creditHistoricalAttendance(
-    guild.id,
-    user.id,
-    dateStr,
-    minutes,
-    interaction.user.id,
-    reason
-  );
+  await withStep(ctx, "credit_attendance", async () => {
+    creditHistoricalAttendance(
+      guild.id,
+      user.id,
+      dateStr,
+      minutes,
+      interaction.user.id,
+      reason
+    );
+  });
 
   // Check if they now qualify for a tier upgrade
-  await updateMovieTierRole(guild, user.id);
+  await withStep(ctx, "update_tier", async () => {
+    await updateMovieTierRole(guild, user.id);
+  });
 
   // Log the action
-  await logActionPretty(guild, {
-    actorId: interaction.user.id,
-    subjectId: user.id,
-    action: "movie_credit",
-    reason: reason ?? `Credited ${minutes} minutes for ${dateStr}`,
-    meta: {
-      minutes,
-      eventDate: dateStr,
-    },
-  }).catch(() => {});
+  await withStep(ctx, "audit_log", async () => {
+    await logActionPretty(guild, {
+      actorId: interaction.user.id,
+      subjectId: user.id,
+      action: "movie_credit",
+      reason: reason ?? `Credited ${minutes} minutes for ${dateStr}`,
+      meta: {
+        minutes,
+        eventDate: dateStr,
+      },
+    }).catch(() => {});
+  });
 
-  const newCount = getUserQualifiedMovieCount(guild.id, user.id);
+  await withStep(ctx, "reply", async () => {
+    const newCount = getUserQualifiedMovieCount(guild.id, user.id);
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Attendance Credited")
-    .setDescription(`Credited **${minutes} minutes** to ${user} for ${dateStr}`)
-    .addFields(
-      { name: "Total Qualified Movies", value: newCount.toString(), inline: true }
-    )
-    .setColor(0x57F287)
-    .setTimestamp();
+    const embed = new EmbedBuilder()
+      .setTitle("🎬 Attendance Credited")
+      .setDescription(`Credited **${minutes} minutes** to ${user} for ${dateStr}`)
+      .addFields(
+        { name: "Total Qualified Movies", value: newCount.toString(), inline: true }
+      )
+      .setColor(0x57F287)
+      .setTimestamp();
 
-  if (reason) {
-    embed.addFields({ name: "Reason", value: reason });
-  }
+    if (reason) {
+      embed.addFields({ name: "Reason", value: reason });
+    }
 
-  await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
+  });
 }
 
-async function handleBump(interaction: ChatInputCommandInteraction): Promise<void> {
+async function handleBump(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
   const guild = interaction.guild!;
   const user = interaction.options.getUser("user", true);
   const dateStr = interaction.options.getString("date") ?? new Date().toISOString().split("T")[0];
@@ -625,15 +699,19 @@ async function handleBump(interaction: ChatInputCommandInteraction): Promise<voi
     return;
   }
 
-  await interaction.deferReply({ ephemeral: true });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: true });
+  });
 
-  const result = bumpAttendance(
-    guild.id,
-    user.id,
-    dateStr,
-    interaction.user.id,
-    reason
-  );
+  const result = await withStep(ctx, "bump_attendance", async () => {
+    return bumpAttendance(
+      guild.id,
+      user.id,
+      dateStr,
+      interaction.user.id,
+      reason
+    );
+  });
 
   if (result.previouslyQualified) {
     await interaction.editReply({
@@ -643,39 +721,49 @@ async function handleBump(interaction: ChatInputCommandInteraction): Promise<voi
   }
 
   // Check if they now qualify for a tier upgrade
-  await updateMovieTierRole(guild, user.id);
+  await withStep(ctx, "update_tier", async () => {
+    await updateMovieTierRole(guild, user.id);
+  });
 
   // Log the action
-  await logActionPretty(guild, {
-    actorId: interaction.user.id,
-    subjectId: user.id,
-    action: "movie_bump",
-    reason: reason ?? `Bump compensation for ${dateStr}`,
-    meta: {
-      eventDate: dateStr,
-    },
-  }).catch(() => {});
+  await withStep(ctx, "audit_log", async () => {
+    await logActionPretty(guild, {
+      actorId: interaction.user.id,
+      subjectId: user.id,
+      action: "movie_bump",
+      reason: reason ?? `Bump compensation for ${dateStr}`,
+      meta: {
+        eventDate: dateStr,
+      },
+    }).catch(() => {});
+  });
 
-  const newCount = getUserQualifiedMovieCount(guild.id, user.id);
+  await withStep(ctx, "reply", async () => {
+    const newCount = getUserQualifiedMovieCount(guild.id, user.id);
 
-  const embed = new EmbedBuilder()
-    .setTitle("⬆️ Attendance Bumped")
-    .setDescription(`${user} has been given full credit for ${dateStr}`)
-    .addFields(
-      { name: "Total Qualified Movies", value: newCount.toString(), inline: true }
-    )
-    .setColor(0x57F287)
-    .setTimestamp();
+    const embed = new EmbedBuilder()
+      .setTitle("⬆️ Attendance Bumped")
+      .setDescription(`${user} has been given full credit for ${dateStr}`)
+      .addFields(
+        { name: "Total Qualified Movies", value: newCount.toString(), inline: true }
+      )
+      .setColor(0x57F287)
+      .setTimestamp();
 
-  if (reason) {
-    embed.addFields({ name: "Reason", value: reason });
-  }
+    if (reason) {
+      embed.addFields({ name: "Reason", value: reason });
+    }
 
-  await interaction.editReply({ embeds: [embed] });
+    await interaction.editReply({ embeds: [embed] });
+  });
 }
 
-async function handleResume(interaction: ChatInputCommandInteraction): Promise<void> {
-  const status = getRecoveryStatus();
+async function handleResume(ctx: CommandContext<ChatInputCommandInteraction>): Promise<void> {
+  const { interaction } = ctx;
+
+  const status = await withStep(ctx, "get_recovery_status", async () => {
+    return getRecoveryStatus();
+  });
 
   if (!status.hasActiveEvent) {
     await interaction.reply({
@@ -685,17 +773,19 @@ async function handleResume(interaction: ChatInputCommandInteraction): Promise<v
     return;
   }
 
-  const embed = new EmbedBuilder()
-    .setTitle("🎬 Movie Night Session Status")
-    .setDescription("Session recovered from database after bot restart")
-    .addFields(
-      { name: "Channel", value: `<#${status.channelId}>`, inline: true },
-      { name: "Event Date", value: status.eventDate ?? "Unknown", inline: true },
-      { name: "Active Sessions", value: status.sessionCount.toString(), inline: true },
-      { name: "Total Recovered Minutes", value: status.totalRecoveredMinutes.toString(), inline: true }
-    )
-    .setColor(0x5865F2)
-    .setTimestamp();
+  await withStep(ctx, "reply", async () => {
+    const embed = new EmbedBuilder()
+      .setTitle("🎬 Movie Night Session Status")
+      .setDescription("Session recovered from database after bot restart")
+      .addFields(
+        { name: "Channel", value: `<#${status.channelId}>`, inline: true },
+        { name: "Event Date", value: status.eventDate ?? "Unknown", inline: true },
+        { name: "Active Sessions", value: status.sessionCount.toString(), inline: true },
+        { name: "Total Recovered Minutes", value: status.totalRecoveredMinutes.toString(), inline: true }
+      )
+      .setColor(0x5865F2)
+      .setTimestamp();
 
-  await interaction.reply({ embeds: [embed], ephemeral: true });
+    await interaction.reply({ embeds: [embed], ephemeral: true });
+  });
 }

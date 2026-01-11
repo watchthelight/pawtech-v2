@@ -17,7 +17,7 @@ import {
 import { logger } from "../lib/logger.js";
 import { requireGatekeeper } from "../lib/config.js";
 import { db } from "../db/db.js";
-import { type CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep, withSql, ensureDeferred } from "../lib/cmdWrap.js";
 import { postAuditEmbed } from "../features/logger.js";
 
 // Multiple input options because blocked users often leave the server.
@@ -70,59 +70,70 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   // Require Gatekeeper role
-  if (!requireGatekeeper(
-    interaction,
-    "unblock",
-    "Removes permanent rejection from a user, allowing them to reapply."
-  )) return;
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    return requireGatekeeper(
+      interaction,
+      "unblock",
+      "Removes permanent rejection from a user, allowing them to reapply."
+    );
+  });
+  if (!hasPermission) return;
 
   // Resolve target user from options
-  let targetUser: User | null = null;
-  let targetUserId: string | null = null;
+  const resolved = await withStep(ctx, "resolve_target", async () => {
+    let targetUser: User | null = null;
+    let targetUserId: string | null = null;
 
-  // Priority 1: User mention/selection
-  const mentionedUser = interaction.options.getUser("target", false);
-  if (mentionedUser) {
-    targetUser = mentionedUser;
-    targetUserId = mentionedUser.id;
-  }
+    // Priority 1: User mention/selection
+    const mentionedUser = interaction.options.getUser("target", false);
+    if (mentionedUser) {
+      targetUser = mentionedUser;
+      targetUserId = mentionedUser.id;
+    }
 
-  // Priority 2: User ID string - useful when user left the server
-  if (!targetUserId) {
-    const userIdStr = interaction.options.getString("user_id", false);
-    if (userIdStr) {
-      targetUserId = userIdStr.trim();
-      // Attempt to resolve user object for DM notifications and display name.
-      // This can fail if the user deleted their account or we've never seen them.
-      try {
-        targetUser = await interaction.client.users.fetch(targetUserId);
-      } catch (err) {
-        logger.debug({ err, userId: targetUserId }, "[unblock] Could not fetch user by ID");
-        // Continue anyway - we can still unblock by ID alone
+    // Priority 2: User ID string - useful when user left the server
+    if (!targetUserId) {
+      const userIdStr = interaction.options.getString("user_id", false);
+      if (userIdStr) {
+        targetUserId = userIdStr.trim();
+        // Attempt to resolve user object for DM notifications and display name.
+        // This can fail if the user deleted their account or we've never seen them.
+        try {
+          targetUser = await interaction.client.users.fetch(targetUserId);
+        } catch (err) {
+          logger.debug({ err, userId: targetUserId }, "[unblock] Could not fetch user by ID");
+          // Continue anyway - we can still unblock by ID alone
+        }
       }
     }
-  }
 
-  // Priority 3: Username (query database for user_id)
-  if (!targetUserId) {
-    const username = interaction.options.getString("username", false);
-    if (username) {
-      // Search database for applications with matching username
-      // This is a fallback and may not be accurate if usernames change
-      logger.warn(
-        { guildId, username },
-        "[unblock] Username lookup not implemented - use user mention or ID instead"
-      );
-      await interaction.reply({
-        content: "❌ Username lookup is not supported. Please use a user mention or User ID.",
-        ephemeral: true,
-      });
-      return;
+    // Priority 3: Username (query database for user_id)
+    if (!targetUserId) {
+      const username = interaction.options.getString("username", false);
+      if (username) {
+        // Search database for applications with matching username
+        // This is a fallback and may not be accurate if usernames change
+        logger.warn(
+          { guildId, username },
+          "[unblock] Username lookup not implemented - use user mention or ID instead"
+        );
+        return { targetUser: null, targetUserId: null, unsupported: true };
+      }
     }
+
+    return { targetUser, targetUserId, unsupported: false };
+  });
+
+  if (resolved.unsupported) {
+    await interaction.reply({
+      content: "❌ Username lookup is not supported. Please use a user mention or User ID.",
+      ephemeral: true,
+    });
+    return;
   }
 
   // Validate we have a target
-  if (!targetUserId) {
+  if (!resolved.targetUserId) {
     await interaction.reply({
       content: "❌ Please provide a user via mention, User ID, or username.",
       ephemeral: true,
@@ -130,22 +141,26 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
+  const { targetUser, targetUserId } = resolved;
   const reason = interaction.options.getString("reason", false) || "none provided";
 
   // Public reply (ephemeral: false) because unblocking is a moderation action
   // that should be visible to the team. Deferring because DB + API calls follow.
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
   try {
     // Query database for permanent rejection status
-    const permRejectRow = db
-      .prepare(
-        `SELECT permanently_rejected, permanent_reject_at, user_id
+    const permRejectRow = await withStep(ctx, "check_status", async () => {
+      const query = `SELECT permanently_rejected, permanent_reject_at, user_id
          FROM application
          WHERE guild_id = ? AND user_id = ? AND permanently_rejected = 1
-         LIMIT 1`
-      )
-      .get(guildId, targetUserId) as PermRejectRow | undefined;
+         LIMIT 1`;
+      return withSql(ctx, query, () => {
+        return db.prepare(query).get(guildId, targetUserId) as PermRejectRow | undefined;
+      });
+    });
 
     if (!permRejectRow) {
       await interaction.editReply({
@@ -157,15 +172,16 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     // Clear the permanent rejection flag. Note this updates ALL applications
     // for this user in this guild, not just the most recent one.
     // This is intentional - a permaban applies to the user, not an application.
-    const updateResult = db
-      .prepare(
-        `UPDATE application
+    const updateResult = await withStep(ctx, "clear_rejection", async () => {
+      const updateQuery = `UPDATE application
          SET permanently_rejected = 0,
              permanent_reject_at = NULL,
              updated_at = datetime('now')
-         WHERE guild_id = ? AND user_id = ?`
-      )
-      .run(guildId, targetUserId);
+         WHERE guild_id = ? AND user_id = ?`;
+      return withSql(ctx, updateQuery, () => {
+        return db.prepare(updateQuery).run(guildId, targetUserId);
+      });
+    });
 
     if (updateResult.changes === 0) {
       logger.error(
@@ -190,45 +206,51 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     );
 
     // Log action to audit channel
-    await postAuditEmbed(guild, {
-      action: "unblock",
-      userId: interaction.user.id,
-      userTag: interaction.user.tag,
-      result: "success",
-      details: `Removed permanent rejection for <@${targetUserId}> (ID: ${targetUserId}). Reason: ${reason}`,
+    await withStep(ctx, "audit_log", async () => {
+      await postAuditEmbed(guild, {
+        action: "unblock",
+        userId: interaction.user.id,
+        userTag: interaction.user.tag,
+        result: "success",
+        details: `Removed permanent rejection for <@${targetUserId}> (ID: ${targetUserId}). Reason: ${reason}`,
+      });
     });
 
     // Send confirmation to moderator (public message as requested)
-    const userDisplay = targetUser ? `${targetUser.tag}` : `User ID ${targetUserId}`;
-    await interaction.editReply({
-      content: `✅ **${userDisplay}** has been unblocked and can reapply or participate again.\n*Reason:* ${reason}`,
+    await withStep(ctx, "reply", async () => {
+      const userDisplay = targetUser ? `${targetUser.tag}` : `User ID ${targetUserId}`;
+      await interaction.editReply({
+        content: `✅ **${userDisplay}** has been unblocked and can reapply or participate again.\n*Reason:* ${reason}`,
+      });
     });
 
     // Best-effort DM notification. Many users have DMs disabled or block bots,
     // so failures here are common and non-fatal.
-    if (targetUser) {
-      try {
-        await targetUser.send({
-          content: `Your permanent rejection from **${guild.name}** has been lifted by the moderation team. You may reapply or participate again, subject to the current rules.`,
-        });
-        logger.info(
+    await withStep(ctx, "notify_user", async () => {
+      if (targetUser) {
+        try {
+          await targetUser.send({
+            content: `Your permanent rejection from **${guild.name}** has been lifted by the moderation team. You may reapply or participate again, subject to the current rules.`,
+          });
+          logger.info(
+            { guildId, userId: targetUserId },
+            "[unblock] DM notification sent to user"
+          );
+        } catch (err) {
+          // Common failure modes: DMs disabled, bot blocked, user deleted account
+          logger.warn(
+            { err, guildId, userId: targetUserId },
+            "[unblock] Failed to DM user (may have DMs disabled or blocked bot)"
+          );
+          // Intentionally not notifying the mod - DM failures are expected
+        }
+      } else {
+        logger.debug(
           { guildId, userId: targetUserId },
-          "[unblock] DM notification sent to user"
+          "[unblock] Skipped DM - user not found in Discord API"
         );
-      } catch (err) {
-        // Common failure modes: DMs disabled, bot blocked, user deleted account
-        logger.warn(
-          { err, guildId, userId: targetUserId },
-          "[unblock] Failed to DM user (may have DMs disabled or blocked bot)"
-        );
-        // Intentionally not notifying the mod - DM failures are expected
       }
-    } else {
-      logger.debug(
-        { guildId, userId: targetUserId },
-        "[unblock] Skipped DM - user not found in Discord API"
-      );
-    }
+    });
   } catch (err) {
     logger.error(
       { err, guildId, userId: targetUserId, moderatorId: interaction.user.id },

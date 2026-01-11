@@ -18,7 +18,7 @@ import {
   EmbedBuilder,
   GuildMember,
 } from "discord.js";
-import type { CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep, withSql } from "../lib/cmdWrap.js";
 import { requireStaff } from "../lib/config.js";
 import { getArtistConfig, ART_TYPE_DISPLAY } from "../features/artistRotation/index.js";
 import {
@@ -344,8 +344,6 @@ async function handleJobs(
   ctx: CommandContext
 ): Promise<void> {
   const guildId = interaction.guildId;
-  // GuildMember cast: Discord.js types are conservative. In a guild command,
-  // member is always GuildMember, but TS doesn't know that.
   const member = interaction.member as GuildMember;
 
   if (!guildId) {
@@ -353,19 +351,27 @@ async function handleJobs(
     return;
   }
 
-  if (!isServerArtist(member, guildId)) {
-    await interaction.reply({
-      content: "You must be a Server Artist to use this command.",
-      ephemeral: true,
-    });
-    return;
-  }
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    if (!isServerArtist(member, guildId)) {
+      await interaction.reply({
+        content: "You must be a Server Artist to use this command.",
+        ephemeral: true,
+      });
+      return false;
+    }
+    return true;
+  });
+  if (!hasPermission) return;
 
-  // deferReply because getActiveJobsForArtist hits the DB and we want to
-  // stay under Discord's 3-second interaction deadline.
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
-  const jobs = getActiveJobsForArtist(guildId, member.id);
+  const jobs = await withStep(ctx, "fetch_jobs", async () => {
+    return withSql(ctx, "SELECT * FROM art_jobs WHERE artist_id = ?", () =>
+      getActiveJobsForArtist(guildId, member.id)
+    );
+  });
 
   if (jobs.length === 0) {
     const embed = new EmbedBuilder()
@@ -690,11 +696,17 @@ async function handleLeaderboard(
     return;
   }
 
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
   // Top 10 for both. Could be configurable but nobody's asked.
-  const monthlyStats = getMonthlyLeaderboard(guildId, 10);
-  const allTimeStats = getAllTimeLeaderboard(guildId, 10);
+  const { monthlyStats, allTimeStats } = await withStep(ctx, "fetch_stats", async () => {
+    return {
+      monthlyStats: withSql(ctx, "SELECT monthly leaderboard", () => getMonthlyLeaderboard(guildId, 10)),
+      allTimeStats: withSql(ctx, "SELECT alltime leaderboard", () => getAllTimeLeaderboard(guildId, 10)),
+    };
+  });
 
   const monthName = new Date().toLocaleString("default", { month: "long", year: "numeric" });
 

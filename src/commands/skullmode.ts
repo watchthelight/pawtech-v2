@@ -13,8 +13,8 @@ import {
   type ChatInputCommandInteraction,
   MessageFlags,
 } from "discord.js";
-import { type CommandContext } from "../lib/cmdWrap.js";
-import { requireMinRole, ROLE_IDS, SENIOR_MOD_PLUS, getConfig, upsertConfig } from "../lib/config.js";
+import { type CommandContext, withStep } from "../lib/cmdWrap.js";
+import { requireMinRole, ROLE_IDS, getConfig, upsertConfig } from "../lib/config.js";
 import { logger } from "../lib/logger.js";
 
 export const data = new SlashCommandBuilder()
@@ -40,39 +40,43 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     return;
   }
 
-  ctx.step("permission_check");
   // Require Senior Moderator+ role
-  if (!requireMinRole(interaction, ROLE_IDS.SENIOR_MOD, {
-    command: "skullmode",
-    description: "Configures skull emoji reaction odds (1-1000).",
-    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_MOD }],
-  })) return;
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    return requireMinRole(interaction, ROLE_IDS.SENIOR_MOD, {
+      command: "skullmode",
+      description: "Configures skull emoji reaction odds (1-1000).",
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_MOD }],
+    });
+  });
+  if (!hasPermission) return;
 
   const chance = interaction.options.getInteger("chance", true);
 
-  ctx.step("update_config");
-  const existingCfg = getConfig(interaction.guildId);
-  const isEnabled = existingCfg?.skullmode_enabled ?? false;
-
-  upsertConfig(interaction.guildId, { skullmode_odds: chance });
-
-  ctx.step("reply");
-  const statusNote = isEnabled
-    ? `Skull Mode is **ON** - now reacting to 1 in **${chance}** messages.`
-    : `Skull Mode odds set to 1 in **${chance}**. Enable it with \`/config set skullmode enabled:true\``;
-
-  await interaction.reply({
-    flags: MessageFlags.Ephemeral,
-    content: statusNote,
+  const isEnabled = await withStep(ctx, "update_config", async () => {
+    const existingCfg = getConfig(interaction.guildId!);
+    const enabled = existingCfg?.skullmode_enabled ?? false;
+    upsertConfig(interaction.guildId!, { skullmode_odds: chance });
+    return enabled;
   });
 
-  logger.info(
-    {
-      guildId: interaction.guildId,
-      odds: chance,
-      enabled: isEnabled,
-      moderatorId: interaction.user.id,
-    },
-    "[skullmode] odds updated"
-  );
+  await withStep(ctx, "reply", async () => {
+    const statusNote = isEnabled
+      ? `Skull Mode is **ON** - now reacting to 1 in **${chance}** messages.`
+      : `Skull Mode odds set to 1 in **${chance}**. Enable it with \`/config set skullmode enabled:true\``;
+
+    await interaction.reply({
+      flags: MessageFlags.Ephemeral,
+      content: statusNote,
+    });
+
+    logger.info(
+      {
+        guildId: interaction.guildId,
+        odds: chance,
+        enabled: isEnabled,
+        moderatorId: interaction.user.id,
+      },
+      "[skullmode] odds updated"
+    );
+  });
 }

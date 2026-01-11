@@ -33,6 +33,13 @@ function createMockEvent(overrides: Partial<WideEvent> = {}): WideEvent {
     serviceVersion: "4.8.0",
     environment: "test",
 
+    // Build identity
+    gitSha: "abc1234",
+    buildTime: "2024-01-15T09:00:00.000Z",
+    deployId: "deploy-20240115-090000-abc1234",
+    nodeVersion: "20.10.0",
+    hostname: "localhost",
+
     kind: "slash",
     command: "review",
     subcommand: null,
@@ -53,6 +60,14 @@ function createMockEvent(overrides: Partial<WideEvent> = {}): WideEvent {
     wasDeferred: false,
     wasReplied: true,
     outcome: "success",
+
+    // Response state
+    responseState: {
+      deferredAt: null,
+      repliedAt: 100,
+      errorCardSent: false,
+      failureReason: null,
+    },
 
     queries: [],
     totalDbTimeMs: 0,

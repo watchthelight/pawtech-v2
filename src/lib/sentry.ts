@@ -25,6 +25,7 @@ import {
 } from "@sentry/node";
 import { env } from "./env.js";
 import { logger } from "./logger.js";
+import { getBuildInfo } from "./buildInfo.js";
 import fs from "node:fs";
 import path from "node:path";
 
@@ -78,10 +79,15 @@ export function initializeSentry() {
   }
 
   try {
+    // Get build info for release tracking
+    // The sentryRelease field is formatted as: "pawtropolis-tech@{version}+{sha}"
+    // This enables Sentry to correlate errors with specific commits
+    const buildInfo = getBuildInfo();
+
     Sentry.init({
       dsn: env.SENTRY_DSN,
       environment: env.SENTRY_ENVIRONMENT || env.NODE_ENV,
-      release: `pawtropolis-tech@${getVersion()}`,
+      release: buildInfo.sentryRelease,
 
       // Performance monitoring - using same rate for traces and profiles means
       // every traced transaction also gets profiled. Tune these independently

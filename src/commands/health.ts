@@ -1,12 +1,24 @@
 /**
  * Pawtropolis Tech — src/commands/health.ts
- * WHAT: Simple /health check command showing uptime and WS ping.
+ * WHAT: Simple /health check command showing uptime, WS ping, and build identity.
  * WHY: Quick smoke test for bot responsiveness without touching DB.
+ *      Also serves as a deployment verification tool - shows exactly what code is running.
  * FLOWS:
- *  - Compute uptime/ws.ping → reply with an embed
+ *  - Compute uptime/ws.ping/buildInfo → reply with an embed
  * DOCS:
  *  - CommandInteraction: https://discord.js.org/#/docs/discord.js/main/class/CommandInteraction
  *  - Interaction replies: https://discord.js.org/#/docs/discord.js/main/typedef/InteractionReplyOptions
+ *
+ * BUILD IDENTITY:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * The /health command displays build identity to answer the question:
+ * "What code is actually running on the server?"
+ *
+ * This is critical for:
+ *   1. Verifying deployments succeeded (commit SHA matches what was pushed)
+ *   2. Debugging production issues (correlate errors to exact code version)
+ *   3. Identifying stale deployments (build timestamp shows when last deployed)
+ *   4. Runtime environment info (Node version, environment mode)
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 import { SlashCommandBuilder, EmbedBuilder, type ChatInputCommandInteraction } from "discord.js";
@@ -14,6 +26,7 @@ import { withStep, type CommandContext } from "../lib/cmdWrap.js";
 import { HEALTH_CHECK_TIMEOUT_MS } from "../lib/constants.js";
 import { getSchedulerHealth, type SchedulerHealth } from "../lib/schedulerHealth.js";
 import { logger } from "../lib/logger.js";
+import { getBuildInfo, getBuildAge } from "../lib/buildInfo.js";
 
 /*
  * Health Check Command
@@ -85,6 +98,46 @@ function formatSchedulerStatus(health: SchedulerHealth): string {
 }
 
 /**
+ * Formats build identity for display in the health embed.
+ *
+ * DISPLAY FORMAT:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * Line 1: Version + Git SHA (the "what" - exact code identification)
+ * Line 2: Build timestamp relative + Node version (the "when" and "environment")
+ * Line 3: Deploy ID if available (the "deployment" identity)
+ *
+ * Example output:
+ *   v4.9.2 (abc1234)
+ *   Built 2h ago • Node 20.10.0
+ *   Deploy: deploy-20260111-abc1234
+ *
+ * MISSING DATA HANDLING:
+ * If git SHA or build time is missing (local dev, failed injection), we show
+ * "unknown" or "N/A" rather than hiding the field entirely. This makes it
+ * obvious that build injection isn't working.
+ */
+function formatBuildIdentity(): string {
+  const build = getBuildInfo();
+  const lines: string[] = [];
+
+  // Line 1: Version + SHA
+  const shortSha = build.gitSha?.slice(0, 7) ?? "unknown";
+  lines.push(`v${build.version} (${shortSha})`);
+
+  // Line 2: Build time + Node version
+  const buildAge = getBuildAge();
+  const buildAgeStr = buildAge ?? "N/A";
+  lines.push(`Built ${buildAgeStr} • Node ${build.nodeVersion}`);
+
+  // Line 3: Deploy ID (if available)
+  if (build.deployId) {
+    lines.push(`Deploy: ${build.deployId}`);
+  }
+
+  return lines.join("\n");
+}
+
+/**
  * execute
  * WHAT: Replies with a small embed indicating status, uptime, and ping.
  * RETURNS: Promise<void>
@@ -103,13 +156,27 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
     const schedulerHealthMap = getSchedulerHealth();
 
     await withStep(ctx, "reply", async () => {
+      // ─────────────────────────────────────────────────────────────────────────
+      // BUILD IDENTITY COLLECTION
+      // Collected early so it's available for both the field and footer.
+      // This answers: "What exact code is running on this server?"
+      // ─────────────────────────────────────────────────────────────────────────
+      const buildIdentity = formatBuildIdentity();
+      const build = getBuildInfo();
+
       const embed = new EmbedBuilder()
         .setTitle("Health Check")
         .setColor(0x57f287)
         .addFields(
           { name: "Status", value: "Healthy", inline: true },
           { name: "Uptime", value: formatUptime(metrics.uptimeSec), inline: true },
-          { name: "WS Ping", value: `${metrics.ping}ms`, inline: true }
+          { name: "WS Ping", value: `${metrics.ping}ms`, inline: true },
+          // ─────────────────────────────────────────────────────────────────────
+          // BUILD IDENTITY FIELD
+          // Shows version, git SHA, build time, and deploy ID.
+          // Critical for: deployment verification, debugging, code correlation.
+          // ─────────────────────────────────────────────────────────────────────
+          { name: "Build", value: buildIdentity, inline: true }
         );
 
       // Add scheduler status fields if any schedulers are tracked
@@ -131,6 +198,14 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
         inline: false,
       });
 
+      // ─────────────────────────────────────────────────────────────────────────
+      // FOOTER: Environment + Hostname
+      // Shows what environment (production/development) and which server instance.
+      // Useful for: multi-server deployments, staging vs production verification.
+      // ─────────────────────────────────────────────────────────────────────────
+      embed.setFooter({
+        text: `${build.environment} • ${build.hostname}`,
+      });
       embed.setTimestamp();
 
       // Public by default (team status check), ephemeral only on timeout

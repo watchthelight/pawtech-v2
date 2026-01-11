@@ -58,27 +58,44 @@ fi
 echo "Starting deployment to ${REMOTE_HOST}..."
 
 # Step 1: Run tests
-echo "Step 1/6: Running tests..."
+echo "Step 1/7: Running tests..."
 npm test
 
 # Step 2: Build
-echo "Step 2/6: Building project..."
+echo "Step 2/7: Building project..."
 npm run build
 
-# Step 3: Create tarball
-echo "Step 3/6: Creating deployment tarball..."
-tar -czf ${TARBALL} dist migrations package.json package-lock.json
+# Step 3: Inject build metadata
+# ─────────────────────────────────────────────────────────────────────────────
+# This generates .env.build with:
+#   BUILD_GIT_SHA     - Git commit hash for exact code identification
+#   BUILD_TIMESTAMP   - ISO 8601 timestamp of when this build was created
+#   BUILD_DEPLOY_ID   - Unique deployment identifier (date+sha)
+#
+# These values are read by src/lib/buildInfo.ts at runtime, enabling:
+#   - Error correlation to exact commits in Sentry
+#   - Wide event logs with build identity
+#   - Error cards showing version+SHA
+#   - /health command with deployment info
+# ─────────────────────────────────────────────────────────────────────────────
+echo "Step 3/7: Injecting build metadata..."
+npx tsx scripts/inject-build-info.ts
 
-# Step 4: Upload to remote
-echo "Step 4/6: Uploading to remote server..."
+# Step 4: Create tarball
+# Include .env.build so the build metadata is available on the server
+echo "Step 4/7: Creating deployment tarball..."
+tar -czf ${TARBALL} dist migrations package.json package-lock.json .env.build
+
+# Step 5: Upload to remote
+echo "Step 5/7: Uploading to remote server..."
 scp ${TARBALL} ${REMOTE_USER}@${REMOTE_HOST}:${REMOTE_PATH}/
 
-# Step 5: Extract and install on remote
-echo "Step 5/6: Extracting and installing on remote..."
+# Step 6: Extract and install on remote
+echo "Step 6/7: Extracting and installing on remote..."
 ssh ${REMOTE_USER}@${REMOTE_HOST} "cd ${REMOTE_PATH} && tar -xzf ${TARBALL} && npm ci --omit=dev"
 
-# Step 6: Restart PM2
-echo "Step 6/6: Restarting PM2 process..."
+# Step 7: Restart PM2
+echo "Step 7/7: Restarting PM2 process..."
 ssh ${REMOTE_USER}@${REMOTE_HOST} "pm2 restart ${PM2_PROCESS}"
 
 # Cleanup

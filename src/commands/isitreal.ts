@@ -19,7 +19,7 @@ import {
   type Message,
 } from "discord.js";
 import { logger } from "../lib/logger.js";
-import { type CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep } from "../lib/cmdWrap.js";
 import { requireMinRole, ROLE_IDS, JUNIOR_MOD_PLUS, shouldBypass, hasRoleOrAbove, postPermissionDenied } from "../lib/config.js";
 import { detectAIForImages, buildAIDetectionEmbed } from "../features/aiDetection/index.js";
 import { isGuildMember } from "../lib/typeGuards.js";
@@ -59,70 +59,83 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) 
   }
 
   // Require Junior Moderator+ role
-  if (!requireMinRole(interaction, ROLE_IDS.JUNIOR_MOD, {
-    command: "isitreal",
-    description: "Detects AI-generated images in a message.",
-    requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.JUNIOR_MOD }],
-  })) return;
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    return requireMinRole(interaction, ROLE_IDS.JUNIOR_MOD, {
+      command: "isitreal",
+      description: "Detects AI-generated images in a message.",
+      requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.JUNIOR_MOD }],
+    });
+  });
+  if (!hasPermission) return;
 
   // Defer early - API calls will take time
-  await interaction.deferReply({ ephemeral: true });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: true });
+  });
 
   // Parse message ID/link from option
-  // Accepts either raw snowflake ID or full Discord message URL
-  // (the latter is what you get when you right-click -> Copy Message Link)
-  const messageInput = interaction.options.getString("message", true);
-  const messageId = parseMessageId(messageInput);
+  const { messageId, targetMessage } = await withStep(ctx, "fetch_message", async () => {
+    const messageInput = interaction.options.getString("message", true);
+    const parsedId = parseMessageId(messageInput);
 
-  if (!messageId) {
-    await interaction.editReply({
-      content: "Invalid message ID or link. Provide a message ID or a Discord message link.",
-    });
-    return;
-  }
+    if (!parsedId) {
+      await interaction.editReply({
+        content: "Invalid message ID or link. Provide a message ID or a Discord message link.",
+      });
+      return { messageId: null, targetMessage: null };
+    }
 
-  // Fetch the target message
-  let targetMessage: Message;
-  try {
-    targetMessage = await channel.messages.fetch(messageId);
-  } catch {
-    await interaction.editReply({
-      content: "Could not find the specified message in this channel.",
-    });
-    return;
-  }
+    // Fetch the target message
+    try {
+      const msg = await channel.messages.fetch(parsedId);
+      return { messageId: parsedId, targetMessage: msg };
+    } catch {
+      await interaction.editReply({
+        content: "Could not find the specified message in this channel.",
+      });
+      return { messageId: parsedId, targetMessage: null };
+    }
+  });
+  if (!targetMessage) return;
 
-  // Extract images from attachments and embeds
-  const imageUrls = extractImages(targetMessage);
+  // Extract and validate images
+  const imageUrls = await withStep(ctx, "extract_images", async () => {
+    const urls = extractImages(targetMessage);
 
-  if (imageUrls.length === 0) {
-    await interaction.editReply({
-      content: "No images found in the specified message.",
-    });
-    return;
-  }
+    if (urls.length === 0) {
+      await interaction.editReply({
+        content: "No images found in the specified message.",
+      });
+      return null;
+    }
 
-  // 10 image limit prevents accidental API bill explosions. Each image hits
-  // 4 external services. 10 images = 40 API calls. Someone pastes a 50-image
-  // gallery and suddenly we're broke. Ask me how I know.
-  if (imageUrls.length > 10) {
-    await interaction.editReply({
-      content: "Too many images (max 10). Please select a message with fewer images.",
-    });
-    return;
-  }
+    // 10 image limit prevents accidental API bill explosions
+    if (urls.length > 10) {
+      await interaction.editReply({
+        content: "Too many images (max 10). Please select a message with fewer images.",
+      });
+      return null;
+    }
 
-  // Run detection on all images (only enabled services for this guild)
-  const results = await detectAIForImages(imageUrls, guildId);
+    return urls;
+  });
+  if (!imageUrls) return;
+
+  // Run detection on all images
+  const results = await withStep(ctx, "detect_ai", async () => {
+    return detectAIForImages(imageUrls, guildId);
+  });
 
   // Build and send report embed
-  const embed = buildAIDetectionEmbed(results, targetMessage);
-  await interaction.editReply({ embeds: [embed] });
+  await withStep(ctx, "reply", async () => {
+    const embed = buildAIDetectionEmbed(results, targetMessage);
+    await interaction.editReply({ embeds: [embed] });
 
-  logger.info(
-    { guildId, userId: interaction.user.id, imageCount: imageUrls.length },
-    "[isitreal] AI detection completed"
-  );
+    logger.info(
+      { guildId, userId: interaction.user.id, imageCount: imageUrls.length },
+      "[isitreal] AI detection completed"
+    );
+  });
 }
 
 /**

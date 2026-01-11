@@ -2,6 +2,14 @@
  * Pawtropolis Tech -- src/commands/config/index.ts
  * WHAT: Main execute router for /config command.
  * WHY: Routes subcommands to appropriate handlers.
+ * FLOWS:
+ *  - /config set <setting> -> Modify a configuration value
+ *  - /config set-advanced <setting> -> Modify advanced/timing settings
+ *  - /config get <setting> -> View a configuration value
+ *  - /config poke <action> -> Manage poke system
+ *  - /config view -> View all configuration
+ *  - /config isitreal -> Configure AI detection
+ *  - /config toggleapis -> Toggle external API integrations
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -16,7 +24,11 @@ import {
 // Re-export command data
 export { data } from "./data.js";
 
-// Import handlers
+// ============================================================================
+// HANDLER IMPORTS
+// ============================================================================
+
+// Set: Roles
 import {
   executeSetModRoles,
   executeSetGatekeeper,
@@ -26,6 +38,7 @@ import {
   executeSetNotifyRole,
 } from "./setRoles.js";
 
+// Set: Channels
 import {
   executeSetModmailLogChannel,
   executeSetLogging,
@@ -36,6 +49,7 @@ import {
   executeSetSupportChannel,
 } from "./setChannels.js";
 
+// Set: Features
 import {
   executeSetReviewRoles,
   executeSetDadMode,
@@ -48,6 +62,7 @@ import {
   executeSetNotifyMode,
 } from "./setFeatures.js";
 
+// Set-Advanced: Timing & Thresholds
 import {
   executeSetFlagsThreshold,
   executeSetReapplyCooldown,
@@ -64,22 +79,26 @@ import {
   executeSetAvatarScanAdvanced,
 } from "./setAdvanced.js";
 
+// Artist Rotation
 import {
   executeSetArtistRotation,
   executeGetArtistRotation,
   executeSetArtistIgnoredUsers,
 } from "./artist.js";
 
+// Movie Night
 import {
   executeSetMovieThreshold,
   executeGetMovieConfig,
 } from "./movie.js";
 
+// Game Night
 import {
   executeSetGameThreshold,
   executeGetGameConfig,
 } from "./game.js";
 
+// Poke System
 import {
   executePokeAddCategory,
   executePokeRemoveCategory,
@@ -88,152 +107,229 @@ import {
   executePokeList,
 } from "./poke.js";
 
+// Get & View
 import {
   executeGetLogging,
   executeGetFlags,
   executeView,
 } from "./get.js";
 
+// Utilities
 import { executeIsitreal } from "./isitreal.js";
 import { executeToggleApis } from "./toggleapis.js";
 
+// ============================================================================
+// EXECUTE HANDLER
+// ============================================================================
+
 export async function execute(ctx: CommandContext<ChatInputCommandInteraction>) {
-  /**
-   * execute
-   * WHAT: Main command handler for /config — routes to appropriate subcommand.
-   * WHY: Provides centralized configuration management.
-   */
   const { interaction } = ctx;
 
+  // Validate guild scope
   if (!interaction.guildId || !interaction.guild) {
     ctx.step("invalid_scope");
     await interaction.reply({ flags: MessageFlags.Ephemeral, content: "Guild only." });
     return;
   }
 
+  // Permission check: Administrator+ role required
   ctx.step("permission_check");
-  // Require Administrator+ role
   if (!requireMinRole(interaction, ROLE_IDS.ADMINISTRATOR, {
     command: "config",
     description: "Modifies server configuration settings.",
     requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.ADMINISTRATOR }],
   })) return;
 
+  // Build route key for switch-based routing
+  ctx.step("route");
   const subcommandGroup = interaction.options.getSubcommandGroup(false);
   const subcommand = interaction.options.getSubcommand();
+  const routeKey = subcommandGroup ? `${subcommandGroup}:${subcommand}` : subcommand;
 
-  if (subcommandGroup === "set") {
-    if (subcommand === "mod_roles") {
+  switch (routeKey) {
+    // =========================================================================
+    // SET GROUP: Basic Configuration
+    // =========================================================================
+    case "set:mod_roles":
       await executeSetModRoles(ctx);
-    } else if (subcommand === "gatekeeper") {
+      break;
+    case "set:gatekeeper":
       await executeSetGatekeeper(ctx);
-    } else if (subcommand === "modmail_log_channel") {
+      break;
+    case "set:modmail_log_channel":
       await executeSetModmailLogChannel(ctx);
-    } else if (subcommand === "review_roles") {
+      break;
+    case "set:review_roles":
       await executeSetReviewRoles(ctx);
-    } else if (subcommand === "logging") {
+      break;
+    case "set:logging":
       await executeSetLogging(ctx);
-    } else if (subcommand === "flags_channel") {
+      break;
+    case "set:flags_channel":
       await executeSetFlagsChannel(ctx);
-    } else if (subcommand === "dadmode") {
+      break;
+    case "set:dadmode":
       await executeSetDadMode(ctx);
-    } else if (subcommand === "skullmode") {
+      break;
+    case "set:skullmode":
       await executeSetSkullMode(ctx);
-    } else if (subcommand === "pingdevonapp") {
+      break;
+    case "set:pingdevonapp":
       await executeSetPingDevOnApp(ctx);
-    } else if (subcommand === "movie_threshold") {
+      break;
+    case "set:movie_threshold":
       await executeSetMovieThreshold(ctx);
-    } else if (subcommand === "artist_rotation") {
+      break;
+    case "set:artist_rotation":
       await executeSetArtistRotation(ctx);
-    } else if (subcommand === "artist_ignored_users") {
+      break;
+    case "set:artist_ignored_users":
       await executeSetArtistIgnoredUsers(ctx);
-    } else if (subcommand === "backfill_channel") {
+      break;
+    case "set:backfill_channel":
       await executeSetBackfillChannel(ctx);
-    } else if (subcommand === "bot_dev_role") {
+      break;
+    case "set:bot_dev_role":
       await executeSetBotDevRole(ctx);
-    } else if (subcommand === "banner_sync_toggle") {
+      break;
+    case "set:banner_sync_toggle":
       await executeSetBannerSyncToggle(ctx);
-    } else if (subcommand === "reviewer_role") {
+      break;
+    case "set:reviewer_role":
       await executeSetReviewerRole(ctx);
-    } else if (subcommand === "leadership_role") {
+      break;
+    case "set:leadership_role":
       await executeSetLeadershipRole(ctx);
-    } else if (subcommand === "notify_role") {
+      break;
+    case "set:notify_role":
       await executeSetNotifyRole(ctx);
-    } else if (subcommand === "forum_channel") {
+      break;
+    case "set:forum_channel":
       await executeSetForumChannel(ctx);
-    } else if (subcommand === "notification_channel") {
+      break;
+    case "set:notification_channel":
       await executeSetNotificationChannel(ctx);
-    } else if (subcommand === "support_channel") {
+      break;
+    case "set:support_channel":
       await executeSetSupportChannel(ctx);
-    } else if (subcommand === "avatar_scan_toggle") {
+      break;
+    case "set:avatar_scan_toggle":
       await executeSetAvatarScanToggle(ctx);
-    } else if (subcommand === "listopen_output") {
+      break;
+    case "set:listopen_output":
       await executeSetListopenOutput(ctx);
-    } else if (subcommand === "modmail_delete") {
+      break;
+    case "set:modmail_delete":
       await executeSetModmailDelete(ctx);
-    } else if (subcommand === "notify_mode") {
+      break;
+    case "set:notify_mode":
       await executeSetNotifyMode(ctx);
-    }
-  } else if (subcommandGroup === "set-advanced") {
-    // Advanced/timing settings
-    if (subcommand === "flags_threshold") {
+      break;
+
+    // =========================================================================
+    // SET-ADVANCED GROUP: Timing & Thresholds
+    // =========================================================================
+    case "set-advanced:flags_threshold":
       await executeSetFlagsThreshold(ctx);
-    } else if (subcommand === "reapply_cooldown") {
+      break;
+    case "set-advanced:reapply_cooldown":
       await executeSetReapplyCooldown(ctx);
-    } else if (subcommand === "min_account_age") {
+      break;
+    case "set-advanced:min_account_age":
       await executeSetMinAccountAge(ctx);
-    } else if (subcommand === "min_join_age") {
+      break;
+    case "set-advanced:min_join_age":
       await executeSetMinJoinAge(ctx);
-    } else if (subcommand === "gate_answer_length") {
+      break;
+    case "set-advanced:gate_answer_length":
       await executeSetGateAnswerLength(ctx);
-    } else if (subcommand === "banner_sync_interval") {
+      break;
+    case "set-advanced:banner_sync_interval":
       await executeSetBannerSyncInterval(ctx);
-    } else if (subcommand === "modmail_forward_size") {
+      break;
+    case "set-advanced:modmail_forward_size":
       await executeSetModmailForwardSize(ctx);
-    } else if (subcommand === "retry_config") {
+      break;
+    case "set-advanced:retry_config":
       await executeSetRetryConfig(ctx);
-    } else if (subcommand === "circuit_breaker") {
+      break;
+    case "set-advanced:circuit_breaker":
       await executeSetCircuitBreaker(ctx);
-    } else if (subcommand === "flag_rate_limit") {
+      break;
+    case "set-advanced:flag_rate_limit":
       await executeSetFlagRateLimit(ctx);
-    } else if (subcommand === "notify_config") {
+      break;
+    case "set-advanced:notify_config":
       await executeSetNotifyConfig(ctx);
-    } else if (subcommand === "avatar_thresholds") {
+      break;
+    case "set-advanced:avatar_thresholds":
       await executeSetAvatarThresholds(ctx);
-    } else if (subcommand === "avatar_scan_advanced") {
+      break;
+    case "set-advanced:avatar_scan_advanced":
       await executeSetAvatarScanAdvanced(ctx);
-    } else if (subcommand === "game_threshold") {
+      break;
+    case "set-advanced:game_threshold":
       await executeSetGameThreshold(ctx);
-    }
-  } else if (subcommandGroup === "get") {
-    if (subcommand === "logging") {
+      break;
+
+    // =========================================================================
+    // GET GROUP: View Configuration
+    // =========================================================================
+    case "get:logging":
       await executeGetLogging(ctx);
-    } else if (subcommand === "flags") {
+      break;
+    case "get:flags":
       await executeGetFlags(ctx);
-    } else if (subcommand === "movie_config") {
+      break;
+    case "get:movie_config":
       await executeGetMovieConfig(ctx);
-    } else if (subcommand === "game_config") {
+      break;
+    case "get:game_config":
       await executeGetGameConfig(ctx);
-    } else if (subcommand === "artist_rotation") {
+      break;
+    case "get:artist_rotation":
       await executeGetArtistRotation(ctx);
-    }
-  } else if (subcommandGroup === "poke") {
-    if (subcommand === "add-category") {
+      break;
+
+    // =========================================================================
+    // POKE GROUP: Poke System Management
+    // =========================================================================
+    case "poke:add-category":
       await executePokeAddCategory(ctx);
-    } else if (subcommand === "remove-category") {
+      break;
+    case "poke:remove-category":
       await executePokeRemoveCategory(ctx);
-    } else if (subcommand === "exclude-channel") {
+      break;
+    case "poke:exclude-channel":
       await executePokeExcludeChannel(ctx);
-    } else if (subcommand === "include-channel") {
+      break;
+    case "poke:include-channel":
       await executePokeIncludeChannel(ctx);
-    } else if (subcommand === "list") {
+      break;
+    case "poke:list":
       await executePokeList(ctx);
-    }
-  } else if (subcommand === "view") {
-    await executeView(ctx);
-  } else if (subcommand === "isitreal") {
-    await executeIsitreal(ctx);
-  } else if (subcommand === "toggleapis") {
-    await executeToggleApis(ctx);
+      break;
+
+    // =========================================================================
+    // TOP-LEVEL SUBCOMMANDS
+    // =========================================================================
+    case "view":
+      await executeView(ctx);
+      break;
+    case "isitreal":
+      await executeIsitreal(ctx);
+      break;
+    case "toggleapis":
+      await executeToggleApis(ctx);
+      break;
+
+    // =========================================================================
+    // DEFAULT: Unknown Command
+    // =========================================================================
+    default:
+      await interaction.reply({
+        content: `Unknown configuration option: \`${routeKey}\``,
+        flags: MessageFlags.Ephemeral,
+      });
   }
 }

@@ -6,6 +6,43 @@
  *  - emitWideEvent(event) → shouldSample() → logger.info/error
  * DOCS:
  *  - https://loggingsucks.com (tail sampling strategy)
+ *
+ * LOG OUTPUT STRUCTURE:
+ * ─────────────────────────────────────────────────────────────────────────────
+ * The flattened log output includes these field categories:
+ *
+ * CORE IDENTITY:
+ *   traceId, timestamp, version, env
+ *
+ * BUILD IDENTITY (for correlating to exact code):
+ *   build_sha, build_time, build_deployId, build_node, build_host
+ *
+ * INTERACTION:
+ *   kind, command, subcommand, customId
+ *
+ * DISCORD:
+ *   guildId, channelId, userId, username
+ *
+ * USER:
+ *   isStaff, isAdmin, isOwner, roleCount
+ *
+ * EXECUTION:
+ *   outcome, durationMs, phaseCount, phases, wasDeferred, wasReplied
+ *
+ * RESPONSE STATE (for debugging interaction response lifecycle):
+ *   resp_deferredAt, resp_repliedAt, resp_errorCardSent, resp_failureReason
+ *
+ * DATABASE:
+ *   queryCount, totalDbTimeMs
+ *
+ * BUSINESS:
+ *   feature, action, entityCount, entities
+ *
+ * ERROR (only when outcome === "error"):
+ *   errorKind, errorCode, errorMessage, errorPhase, errorRetriable, sentryEventId
+ *
+ * CUSTOM:
+ *   attr_* (prefixed custom attributes)
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -104,53 +141,120 @@ function formatPhasesWithTiming(phases: PhaseRecord[], failedPhase?: string): st
 
 /**
  * Flatten WideEvent for structured logging.
+ *
  * This creates a flat object that log aggregators can query efficiently.
+ * The flattening strategy:
+ *   - Core fields are mapped directly
+ *   - Build identity fields are included for correlation
+ *   - Response state is flattened with "resp_" prefix
+ *   - Custom attributes use "attr_" prefix to avoid collisions
+ *   - Arrays are converted to counts + compact string representation
+ *
+ * FIELD NAMING CONVENTIONS:
+ * ─────────────────────────────────────────────────────────────────────────────
+ *   - Camel case for simple fields (userId, guildId)
+ *   - Underscore prefix for categories (build_, resp_, attr_)
+ *   - Count suffix for array lengths (phaseCount, queryCount)
+ *   - Detail suffix for verbose versions (phasesDetail)
+ *
+ * This naming makes queries easier:
+ *   - Find errors: outcome:"error"
+ *   - Find by commit: build_sha:"abc1234"
+ *   - Find slow: durationMs:>5000
+ *   - Find by feature: feature:"review" action:"approve"
  */
 function flattenForLogging(event: WideEvent): Record<string, unknown> {
   const flat: Record<string, unknown> = {
-    // Core identity
+    // ─────────────────────────────────────────────────────────────────────────
+    // CORE IDENTITY
+    // Essential fields for identifying and correlating requests
+    // ─────────────────────────────────────────────────────────────────────────
     traceId: event.traceId,
     timestamp: event.timestamp,
     version: event.serviceVersion,
     env: event.environment,
 
-    // Interaction
+    // ─────────────────────────────────────────────────────────────────────────
+    // BUILD IDENTITY
+    // Correlate logs to exact code version and deployment
+    // Prefixed with "build_" for clear categorization
+    // ─────────────────────────────────────────────────────────────────────────
+    build_sha: event.gitSha,
+    build_time: event.buildTime,
+    build_deployId: event.deployId,
+    build_node: event.nodeVersion,
+    build_host: event.hostname,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // INTERACTION CONTEXT
+    // What Discord interaction triggered this
+    // ─────────────────────────────────────────────────────────────────────────
     kind: event.kind,
     command: event.command,
     subcommand: event.subcommand,
     customId: event.customId,
 
-    // Discord context
+    // ─────────────────────────────────────────────────────────────────────────
+    // DISCORD CONTEXT
+    // Where in Discord this happened
+    // ─────────────────────────────────────────────────────────────────────────
     guildId: event.guildId,
     channelId: event.channelId,
     userId: event.userId,
     username: event.username,
 
-    // User context
+    // ─────────────────────────────────────────────────────────────────────────
+    // USER CONTEXT
+    // Permissions and authorization state
+    // ─────────────────────────────────────────────────────────────────────────
     isStaff: event.isStaff,
     isAdmin: event.isAdmin,
     isOwner: event.isOwner,
     roleCount: event.userRoles.length,
 
-    // Execution
+    // ─────────────────────────────────────────────────────────────────────────
+    // EXECUTION CONTEXT
+    // How the request was processed
+    // ─────────────────────────────────────────────────────────────────────────
     outcome: event.outcome,
     durationMs: event.durationMs,
     phaseCount: event.phases.length,
     phases: formatPhases(event.phases),
+
+    // Legacy fields (kept for backward compatibility)
     wasDeferred: event.wasDeferred,
     wasReplied: event.wasReplied,
 
-    // Database
+    // ─────────────────────────────────────────────────────────────────────────
+    // RESPONSE STATE
+    // Detailed tracking of interaction response lifecycle
+    // Prefixed with "resp_" for clear categorization
+    // ─────────────────────────────────────────────────────────────────────────
+    resp_deferredAt: event.responseState.deferredAt,
+    resp_repliedAt: event.responseState.repliedAt,
+    resp_errorCardSent: event.responseState.errorCardSent,
+    resp_failureReason: event.responseState.failureReason,
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // DATABASE CONTEXT
+    // Query execution details
+    // ─────────────────────────────────────────────────────────────────────────
     queryCount: event.queries.length,
     totalDbTimeMs: event.totalDbTimeMs,
 
-    // Business
+    // ─────────────────────────────────────────────────────────────────────────
+    // BUSINESS CONTEXT
+    // Feature-specific information
+    // ─────────────────────────────────────────────────────────────────────────
     feature: event.feature,
     action: event.action,
     entityCount: event.entitiesAffected.length,
   };
 
-  // Add error fields if present
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ERROR CONTEXT
+  // Only present when outcome === "error"
+  // ─────────────────────────────────────────────────────────────────────────────
   if (event.error) {
     flat.errorKind = event.error.kind;
     flat.errorCode = event.error.code;
@@ -158,17 +262,24 @@ function flattenForLogging(event: WideEvent): Record<string, unknown> {
     flat.errorPhase = event.error.phase;
     flat.errorRetriable = event.error.isRetriable;
     flat.sentryEventId = event.error.sentryEventId;
-    // Include detailed phase timing for errors
+    // Include detailed phase timing for errors - helps identify where time was spent
     flat.phasesDetail = formatPhasesWithTiming(event.phases, event.error.phase);
   }
 
-  // Spread custom attributes (they go last so they can't override core fields)
+  // ─────────────────────────────────────────────────────────────────────────────
+  // CUSTOM ATTRIBUTES
+  // Feature-specific data added via addAttr()
+  // Prefixed with "attr_" to avoid collisions with core fields
+  // ─────────────────────────────────────────────────────────────────────────────
   for (const [key, value] of Object.entries(event.attrs)) {
-    // Prefix custom attrs to avoid collisions
     flat[`attr_${key}`] = value;
   }
 
-  // Add entity references as compact string
+  // ─────────────────────────────────────────────────────────────────────────────
+  // ENTITY REFERENCES
+  // Compact representation of affected entities
+  // Format: "application:A1B2C3, user:123456789"
+  // ─────────────────────────────────────────────────────────────────────────────
   if (event.entitiesAffected.length > 0) {
     flat.entities = event.entitiesAffected.map((e) => `${e.type}:${e.code ?? e.id}`).join(", ");
   }

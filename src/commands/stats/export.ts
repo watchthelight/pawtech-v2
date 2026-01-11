@@ -2,12 +2,15 @@
  * Pawtropolis Tech -- src/commands/stats/export.ts
  * WHAT: Handler for /stats export - full CSV export of moderator metrics.
  * WHY: Provides data export for external analysis.
+ * FLOWS:
+ *  - /stats export [days] -> Exports all moderator stats as CSV file
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
 import {
   ChatInputCommandInteraction,
   AttachmentBuilder,
+  MessageFlags,
   db,
   nowUtc,
   logger,
@@ -15,13 +18,21 @@ import {
   ROLE_IDS,
   getAvgClaimToDecision,
   formatDuration,
+  withStep,
+  withSql,
+  ensureDeferred,
+  type CommandContext,
 } from "./shared.js";
 
 /**
  * Handle /stats export subcommand.
  * Exports all moderator metrics as CSV.
  */
-export async function handleExport(interaction: ChatInputCommandInteraction): Promise<void> {
+export async function handleExport(
+  ctx: CommandContext<ChatInputCommandInteraction>
+): Promise<void> {
+  const { interaction } = ctx;
+
   if (!interaction.guildId) {
     await interaction.reply({
       content: "This command must be run in a guild.",
@@ -37,15 +48,21 @@ export async function handleExport(interaction: ChatInputCommandInteraction): Pr
     requirements: [{ type: "hierarchy", minRoleId: ROLE_IDS.SENIOR_ADMIN }],
   })) return;
 
-  await interaction.deferReply({ ephemeral: true });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ flags: MessageFlags.Ephemeral });
+  });
 
-  const days = interaction.options.getInteger("days") ?? 30;
-  const windowStartS = nowUtc() - days * 86400;
+  const { days, windowStartS } = await withStep(ctx, "parse_options", async () => {
+    const d = interaction.options.getInteger("days") ?? 30;
+    return {
+      days: d,
+      windowStartS: nowUtc() - d * 86400,
+    };
+  });
 
   // Get ALL moderator stats (no limit)
-  const rows = db
-    .prepare(
-      `
+  const rows = await withStep(ctx, "fetch_data", async () => {
+    const exportQuery = `
       SELECT
         actor_id,
         COUNT(*) as total,
@@ -60,49 +77,57 @@ export async function handleExport(interaction: ChatInputCommandInteraction): Pr
         AND created_at_s >= ?
       GROUP BY actor_id
       ORDER BY total DESC, approvals DESC
-    `
-    )
-    .all(interaction.guildId, windowStartS) as Array<{
-    actor_id: string;
-    total: number;
-    approvals: number;
-    rejections: number;
-    modmail: number;
-    perm_reject: number;
-    kicks: number;
-  }>;
+    `;
+    return withSql(ctx, exportQuery, () => {
+      return db.prepare(exportQuery).all(interaction.guildId, windowStartS) as Array<{
+        actor_id: string;
+        total: number;
+        approvals: number;
+        rejections: number;
+        modmail: number;
+        perm_reject: number;
+        kicks: number;
+      }>;
+    });
+  });
 
   if (rows.length === 0) {
-    await interaction.editReply({
-      content: `No decisions found in the last ${days} days.`,
+    await withStep(ctx, "reply_empty", async () => {
+      await interaction.editReply({
+        content: `No decisions found in the last ${days} days.`,
+      });
     });
     return;
   }
 
   // Generate CSV
-  const csvLines = [
-    "Moderator ID,Total Decisions,Approvals,Rejections,Modmail,Perm Reject,Kicks,Avg Response Time (seconds),Avg Response Time (formatted)",
-  ];
+  const attachment = await withStep(ctx, "generate_csv", async () => {
+    const csvLines = [
+      "Moderator ID,Total Decisions,Approvals,Rejections,Modmail,Perm Reject,Kicks,Avg Response Time (seconds),Avg Response Time (formatted)",
+    ];
 
-  for (const row of rows) {
-    const avgTime = getAvgClaimToDecision(interaction.guildId, row.actor_id, windowStartS);
-    csvLines.push(
-      `${row.actor_id},${row.total},${row.approvals},${row.rejections},${row.modmail},${row.perm_reject},${row.kicks},${avgTime ?? ""},${formatDuration(avgTime)}`
+    for (const row of rows) {
+      const avgTime = getAvgClaimToDecision(interaction.guildId!, row.actor_id, windowStartS);
+      csvLines.push(
+        `${row.actor_id},${row.total},${row.approvals},${row.rejections},${row.modmail},${row.perm_reject},${row.kicks},${avgTime ?? ""},${formatDuration(avgTime)}`
+      );
+    }
+
+    const csvContent = csvLines.join("\n");
+    return new AttachmentBuilder(Buffer.from(csvContent, "utf-8"), {
+      name: `stats-full-export-${days}d-${Date.now()}.csv`,
+    });
+  });
+
+  await withStep(ctx, "reply", async () => {
+    await interaction.editReply({
+      content: `**Full Moderator Stats Export** (last ${days} days)\n${rows.length} moderators included`,
+      files: [attachment],
+    });
+
+    logger.info(
+      { guildId: interaction.guildId, days, count: rows.length },
+      "[stats:export] full CSV export generated"
     );
-  }
-
-  const csvContent = csvLines.join("\n");
-  const attachment = new AttachmentBuilder(Buffer.from(csvContent, "utf-8"), {
-    name: `stats-full-export-${days}d-${Date.now()}.csv`,
   });
-
-  await interaction.editReply({
-    content: `**Full Moderator Stats Export** (last ${days} days)\n${rows.length} moderators included`,
-    files: [attachment],
-  });
-
-  logger.info(
-    { guildId: interaction.guildId, days, count: rows.length },
-    "[stats:export] full CSV export generated"
-  );
 }

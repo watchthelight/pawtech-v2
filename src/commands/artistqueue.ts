@@ -24,7 +24,7 @@ import {
   EmbedBuilder,
   PermissionFlagsBits,
 } from "discord.js";
-import type { CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep, withSql } from "../lib/cmdWrap.js";
 import { logger } from "../lib/logger.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
 import {
@@ -171,7 +171,9 @@ async function handleList(
   ctx: CommandContext
 ): Promise<void> {
   // Public reply. Let everyone see the queue order to reduce conspiracy theories.
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
   const guildId = interaction.guildId;
   if (!guildId) {
@@ -179,7 +181,9 @@ async function handleList(
     return;
   }
 
-  const artists = getAllArtists(guildId);
+  const artists = await withStep(ctx, "fetch_artists", async () => {
+    return withSql(ctx, "SELECT * FROM artist_queue", () => getAllArtists(guildId));
+  });
 
   if (artists.length === 0) {
     const embed = new EmbedBuilder()

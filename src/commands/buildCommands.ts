@@ -52,6 +52,8 @@ import { data as isitrealData } from "./isitreal.js";
 import { data as helpData } from "./help/index.js";
 import { data as utilityData } from "./utility.js";
 import { data as developerData } from "./developer.js";
+import { data as testData } from "./test.js";
+import { data as skullmodeData } from "./skullmode.js";
 
 // Returns an array of command JSON objects for Discord's bulk command registration.
 // Discord has a limit of 100 slash commands per bot per guild, so we're fine here.
@@ -112,6 +114,8 @@ export function buildCommands() {
 
     // Developer/debugging tools
     developerData.toJSON(),
+    testData.toJSON(),
+    skullmodeData.toJSON(),
 
     /*
      * Context menu commands are registered alongside slash commands in Discord.js v14.

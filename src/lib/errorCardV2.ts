@@ -6,9 +6,38 @@
  *  - getErrorSeverity() → color selection
  *  - getExplanation() → human-readable error description
  *  - formatExecutionPath() → visual phase timeline
+ *  - formatBuildIdentity() → version + SHA + build age
+ *  - formatResponseState() → deferred/replied/error card status
  *  - postErrorCardV2() → build and send embed
  * DOCS:
  *  - Wide Events: https://loggingsucks.com
+ *
+ * ERROR CARD SECTIONS:
+ * ─────────────────────────────────────────────────────────────────────────────
+ *
+ * 1. DESCRIPTION - Human-readable explanation of what went wrong
+ *    → "The database is temporarily busy. Please try again."
+ *
+ * 2. EXECUTION PATH - Visual timeline of phases with failure marker
+ *    → "enter → validate → ❌ db_write"
+ *
+ * 3. DATABASE - Query count and failed SQL (if applicable)
+ *    → "3 queries, 45ms total / Failed: SELECT * FROM..."
+ *
+ * 4. YOUR CONTEXT - User permissions and role count
+ *    → "Staff • 5 roles"
+ *
+ * 5. BUILD IDENTITY - Version, git SHA, build age, node version
+ *    → "v4.9.2 (abc1234) • Built 2h ago • Node 20.10.0"
+ *
+ * 6. RESPONSE STATE - What the user saw (or didn't)
+ *    → "Deferred: No (error before defer) • Replied: No • Error Card: ✓ Sent"
+ *
+ * 7. TECHNICAL DETAILS - Error kind, code, retriable flag
+ *    → "Type: discord_api • Code: 50013 • Retriable: No"
+ *
+ * 8. FOOTER - Trace ID, Sentry ID, version+SHA for support
+ *    → "Trace: ABC123 | Sentry: 12345678 | v4.9.2+abc1234"
  */
 // SPDX-License-Identifier: LicenseRef-ANW-1.0
 
@@ -22,8 +51,9 @@ import {
 import { logger, redact } from "./logger.js";
 import { replyOrEdit } from "./cmdWrap.js";
 import { ctx as reqCtx } from "./reqctx.js";
-import type { WideEvent, WideEventError, PhaseRecord } from "./wideEvent.js";
+import type { WideEvent, WideEventError, PhaseRecord, ResponseState } from "./wideEvent.js";
 import type { ClassifiedError, ErrorKind } from "./errors.js";
+import { getBuildInfo, getBuildAge, getShortBuildId } from "./buildInfo.js";
 
 // ===== Severity System =====
 
@@ -210,6 +240,102 @@ function formatUserContext(event: WideEvent): string {
   return parts.join(" \u2022 ");
 }
 
+// ===== Build Identity Formatting =====
+
+/**
+ * Format build identity as a compact string for the error card.
+ *
+ * Shows:
+ *   - Version + short SHA: "v4.9.2 (abc1234)"
+ *   - Build age: "Built 2h ago"
+ *   - Node version: "Node 20.10.0"
+ *
+ * WHY SHOW BUILD INFO:
+ * When debugging production issues, you need to know:
+ *   1. What version of the code is running?
+ *   2. Is it a recent deployment or old code?
+ *   3. What runtime environment?
+ *
+ * This helps staff quickly identify if an error is from stale code
+ * or if a recent deployment introduced a regression.
+ */
+function formatBuildIdentity(event: WideEvent): string {
+  const parts: string[] = [];
+
+  // Version + SHA (most important)
+  const sha = event.gitSha ?? "dev";
+  parts.push(`v${event.serviceVersion} (${sha})`);
+
+  // Build age (if available)
+  const buildAge = getBuildAge();
+  if (buildAge) {
+    parts.push(`Built ${buildAge}`);
+  }
+
+  // Node version
+  parts.push(`Node ${event.nodeVersion}`);
+
+  return parts.join(" \u2022 ");
+}
+
+// ===== Response State Formatting =====
+
+/**
+ * Format response state as a multi-line summary.
+ *
+ * Shows:
+ *   - Deferred: Yes/No (with reason if no)
+ *   - Replied: Yes/No (with timing if yes)
+ *   - Error Card: Sent/Failed
+ *
+ * WHY SHOW RESPONSE STATE:
+ * When debugging, you need to know what the user actually saw:
+ *   - Did we acknowledge in time? (deferred)
+ *   - Did we send a response? (replied)
+ *   - If error, did they see the error card with trace ID?
+ *
+ * If all three are "No", the user saw Discord's generic "interaction failed"
+ * with no way to report the issue - that's the worst case scenario.
+ */
+function formatResponseState(event: WideEvent): string {
+  const rs = event.responseState;
+  const lines: string[] = [];
+
+  // Deferred status
+  if (rs.deferredAt) {
+    // Calculate how long after request start we deferred
+    const requestStart = new Date(event.timestamp).getTime();
+    const deferDelay = rs.deferredAt - requestStart;
+    lines.push(`Deferred: Yes (+${deferDelay}ms)`);
+  } else if (rs.failureReason) {
+    // We tried to respond but failed
+    lines.push(`Deferred: No (${rs.failureReason})`);
+  } else {
+    // Either we replied directly (fast) or crashed before deferring
+    lines.push("Deferred: No (direct reply or error before defer)");
+  }
+
+  // Replied status
+  if (rs.repliedAt) {
+    const requestStart = new Date(event.timestamp).getTime();
+    const replyDelay = rs.repliedAt - requestStart;
+    lines.push(`Replied: Yes (+${replyDelay}ms)`);
+  } else {
+    lines.push("Replied: No");
+  }
+
+  // Error card status (only relevant for errors)
+  if (event.outcome === "error") {
+    if (rs.errorCardSent) {
+      lines.push("Error Card: \u2713 Sent");
+    } else {
+      lines.push("Error Card: \u2717 Failed");
+    }
+  }
+
+  return lines.join("\n");
+}
+
 // ===== Main Export =====
 
 type ReplyCapableInteraction =
@@ -289,11 +415,31 @@ export async function postErrorCardV2(
     inline: true,
   });
 
-  // === Section 5: Error Details (for staff debugging) ===
+  // === Section 5: Build Identity ===
+  // Shows version, git SHA, build age, and node version
+  // Helps staff identify which code version caused the error
+  const buildIdentity = formatBuildIdentity(wideEvent);
+  embed.addFields({
+    name: "\uD83C\uDFD7\uFE0F Build Identity",
+    value: buildIdentity,
+    inline: true,
+  });
+
+  // === Section 6: Response State ===
+  // Shows what the user actually saw (deferred, replied, error card)
+  // Critical for debugging "interaction failed" scenarios
+  const responseState = formatResponseState(wideEvent);
+  embed.addFields({
+    name: "\uD83D\uDCE1 Response State",
+    value: responseState,
+    inline: true,
+  });
+
+  // === Section 7: Error Details (for staff debugging) ===
   if (error) {
     const errorCode = error.code ? `Code: ${error.code}` : "";
     const errorKind = `Type: ${error.kind}`;
-    const retriable = error.isRetriable ? "Retriable: Yes" : "";
+    const retriable = error.isRetriable ? "Retriable: Yes" : "Retriable: No";
     const details = [errorKind, errorCode, retriable].filter(Boolean).join(" \u2022 ");
     embed.addFields({
       name: "\uD83D\uDD27 Technical Details",
@@ -302,10 +448,12 @@ export async function postErrorCardV2(
     });
   }
 
-  // === Footer: Trace ID ===
+  // === Footer: Trace ID + Version ===
+  // Include version+SHA in footer for quick reference when reporting issues
+  const shortBuild = getShortBuildId();
   const traceInfo = sentryEventId
-    ? `Trace: ${wideEvent.traceId} | Sentry: ${sentryEventId.slice(0, 8)}`
-    : `Trace: ${wideEvent.traceId}`;
+    ? `Trace: ${wideEvent.traceId} | Sentry: ${sentryEventId.slice(0, 8)} | ${shortBuild}`
+    : `Trace: ${wideEvent.traceId} | ${shortBuild}`;
   embed.setFooter({
     text: `${traceInfo} | Report this ID to staff if needed`,
   });

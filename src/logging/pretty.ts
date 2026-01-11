@@ -46,6 +46,7 @@ export type ActionType =
   | "ops_health_resolve"
   | "listopen_view"
   | "listopen_view_all"
+  | "listopen_view_drafts"
   | "set_listopen_output"
   | "forum_post_ping"
   | "forum_post_ping_fail"
@@ -192,6 +193,11 @@ function getActionMeta(action: ActionType): ActionMeta {
     listopen_view_all: {
       title: "Viewed All Open Applications",
       color: 0xeb459e, // Pink (matches all view embed)
+      emoji: "📋",
+    },
+    listopen_view_drafts: {
+      title: "Viewed Draft Applications",
+      color: 0x99aab5, // Gray (matches drafts view embed)
       emoji: "📋",
     },
     set_listopen_output: {

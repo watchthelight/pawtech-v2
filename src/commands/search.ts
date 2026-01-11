@@ -19,7 +19,7 @@ import {
 import { db } from "../db/db.js";
 import { shortCode } from "../lib/ids.js";
 import { logger } from "../lib/logger.js";
-import type { CommandContext } from "../lib/cmdWrap.js";
+import { type CommandContext, withStep, withSql } from "../lib/cmdWrap.js";
 import { hasStaffPermissions, isReviewer } from "../lib/config.js";
 import { isOwner } from "../lib/owner.js";
 import { checkCooldown, formatCooldown, COOLDOWNS } from "../lib/rateLimiter.js";
@@ -140,40 +140,52 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
   const reviewerId = interaction.user.id;
 
   // Runtime permission check: reviewer role, owner, or staff permissions
-  const member = interaction.member
-    ? await interaction.guild.members.fetch(reviewerId).catch(() => null)
-    : null;
+  const hasPermission = await withStep(ctx, "permission_check", async () => {
+    const member = interaction.member
+      ? await interaction.guild!.members.fetch(reviewerId).catch(() => null)
+      : null;
 
-  const isOwnerUser = isOwner(reviewerId);
-  const isStaff = hasStaffPermissions(member, guildId);
-  const isReviewerUser = isReviewer(guildId, member);
+    const isOwnerUser = isOwner(reviewerId);
+    const isStaff = hasStaffPermissions(member, guildId);
+    const isReviewerUser = isReviewer(guildId, member);
 
-  if (!isOwnerUser && !isStaff && !isReviewerUser) {
-    await interaction.reply({
-      content:
-        "❌ You don't have permission to use this command. This command is restricted to reviewers, staff, and server administrators.",
-      ephemeral: true,
-    });
+    if (!isOwnerUser && !isStaff && !isReviewerUser) {
+      await interaction.reply({
+        content:
+          "❌ You don't have permission to use this command. This command is restricted to reviewers, staff, and server administrators.",
+        ephemeral: true,
+      });
 
-    logger.warn(
-      { userId: reviewerId, guildId, isOwner: isOwnerUser, isStaff, isReviewer: isReviewerUser },
-      "[search] unauthorized access attempt"
-    );
-    return;
-  }
+      logger.warn(
+        { userId: reviewerId, guildId, isOwner: isOwnerUser, isStaff, isReviewer: isReviewerUser },
+        "[search] unauthorized access attempt"
+      );
+      return false;
+    }
+    return true;
+  });
+  if (!hasPermission) return;
 
   // Rate limit: 30 seconds per user (prevents Discord API spam via username lookups)
-  const cooldownResult = checkCooldown("search", reviewerId, COOLDOWNS.SEARCH_MS);
-  if (!cooldownResult.allowed) {
-    await interaction.reply({
-      content: `This command is on cooldown. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
-      ephemeral: true,
-    });
-    return;
-  }
+  const passedRateLimit = await withStep(ctx, "rate_limit", async () => {
+    const cooldownResult = checkCooldown("search", reviewerId, COOLDOWNS.SEARCH_MS);
+    if (!cooldownResult.allowed) {
+      await interaction.reply({
+        content: `This command is on cooldown. Try again in ${formatCooldown(cooldownResult.remainingMs!)}.`,
+        ephemeral: true,
+      });
+      return false;
+    }
+    return true;
+  });
+  if (!passedRateLimit) return;
 
-  const targetUser = interaction.options.getUser("user");
-  const queryString = interaction.options.getString("query");
+  const { targetUser, queryString } = await withStep(ctx, "parse_options", async () => {
+    return {
+      targetUser: interaction.options.getUser("user"),
+      queryString: interaction.options.getString("query"),
+    };
+  });
 
   // Require at least one search parameter
   if (!targetUser && !queryString) {
@@ -184,7 +196,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     return;
   }
 
-  await interaction.deferReply({ ephemeral: false });
+  await withStep(ctx, "defer", async () => {
+    await interaction.deferReply({ ephemeral: false });
+  });
 
   // Declare outside try block for error logging
   let targetUserId: string | undefined;
@@ -258,7 +272,9 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
             WHERE a.guild_id = ?
             LIMIT 25
           `;
-          const candidateUserIds = db.prepare(usernameSearchQuery).all(guildId) as { user_id: string }[];
+          const candidateUserIds = withSql(ctx, usernameSearchQuery, () =>
+            db.prepare(usernameSearchQuery).all(guildId) as { user_id: string }[]
+          );
 
           // Helper for delay between API calls
           const delay = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
@@ -300,110 +316,123 @@ export async function execute(ctx: CommandContext<ChatInputCommandInteraction>):
     }
 
     // Query all applications for the user in this guild
-    // LEFT JOIN with review_card to get message link info
-    const query = `
-      SELECT
-        a.id,
-        a.status,
-        a.submitted_at,
-        a.resolved_at,
-        a.resolution_reason,
-        rc.channel_id,
-        rc.message_id
-      FROM application a
-      LEFT JOIN review_card rc ON rc.app_id = a.id
-      WHERE a.guild_id = ? AND a.user_id = ?
-      ORDER BY a.submitted_at DESC
-      LIMIT ?
-    `;
+    const { applications, totalApplications } = await withStep(ctx, "fetch_applications", async () => {
+      // LEFT JOIN with review_card to get message link info
+      const query = `
+        SELECT
+          a.id,
+          a.status,
+          a.submitted_at,
+          a.resolved_at,
+          a.resolution_reason,
+          rc.channel_id,
+          rc.message_id
+        FROM application a
+        LEFT JOIN review_card rc ON rc.app_id = a.id
+        WHERE a.guild_id = ? AND a.user_id = ?
+        ORDER BY a.submitted_at DESC
+        LIMIT ?
+      `;
 
-    const applications = db
-      .prepare(query)
-      .all(guildId, targetUserId, MAX_APPLICATIONS) as SearchResultRow[];
+      const apps = withSql(ctx, query, () =>
+        db.prepare(query).all(guildId, targetUserId, MAX_APPLICATIONS) as SearchResultRow[]
+      );
 
-    // Count total applications (in case there are more than MAX_APPLICATIONS)
-    const countQuery = `
-      SELECT COUNT(*) as total
-      FROM application
-      WHERE guild_id = ? AND user_id = ?
-    `;
-    const countResult = db.prepare(countQuery).get(guildId, targetUserId) as { total: number } | undefined;
-    const totalApplications = countResult?.total ?? 0;
+      // Count total applications (in case there are more than MAX_APPLICATIONS)
+      const countQuery = `
+        SELECT COUNT(*) as total
+        FROM application
+        WHERE guild_id = ? AND user_id = ?
+      `;
+      const countResult = withSql(ctx, countQuery, () =>
+        db.prepare(countQuery).get(guildId, targetUserId) as { total: number } | undefined
+      );
+
+      return { applications: apps, totalApplications: countResult?.total ?? 0 };
+    });
 
     // Handle no applications case
     if (applications.length === 0) {
-      const embed = new EmbedBuilder()
+      await withStep(ctx, "reply_empty", async () => {
+        const embed = new EmbedBuilder()
+          .setTitle(`Application History for ${displayName}`)
+          .setDescription("No applications found for this user.")
+          .setColor(0x5865f2) // Discord blurple
+          .setTimestamp()
+          .setFooter({ text: `User ID: ${targetUserId}` });
+
+        if (avatarUrl) {
+          embed.setThumbnail(avatarUrl);
+        }
+
+        await interaction.editReply({ embeds: [embed] });
+      });
+      return;
+    }
+
+    // Build the embed
+    const embed = await withStep(ctx, "build_embed", async () => {
+      const e = new EmbedBuilder()
         .setTitle(`Application History for ${displayName}`)
-        .setDescription("No applications found for this user.")
         .setColor(0x5865f2) // Discord blurple
         .setTimestamp()
         .setFooter({ text: `User ID: ${targetUserId}` });
 
       if (avatarUrl) {
-        embed.setThumbnail(avatarUrl);
+        e.setThumbnail(avatarUrl);
       }
 
+      // Add total count description
+      if (totalApplications > MAX_APPLICATIONS) {
+        e.setDescription(
+          `**Total Applications:** ${totalApplications}\n*Showing most recent ${MAX_APPLICATIONS}*`
+        );
+      } else {
+        e.setDescription(`**Total Applications:** ${totalApplications}`);
+      }
+
+      // Add each application as a field
+      for (const app of applications) {
+        const code = shortCode(app.id);
+        const emoji = getStatusEmoji(app.status);
+        const status = formatStatus(app.status);
+        const submittedAt = formatTimestamp(app.submitted_at);
+
+        // Build the field value
+        const lines: string[] = [];
+
+        // Add resolution reason if present (truncated)
+        if (app.resolution_reason) {
+          const reason = truncate(app.resolution_reason, 100);
+          lines.push(`Reason: "${reason}"`);
+        }
+
+        // Add link to review card if message exists
+        if (app.channel_id && app.message_id) {
+          const messageUrl = `https://discord.com/channels/${guildId}/${app.channel_id}/${app.message_id}`;
+          lines.push(`[View Card](${messageUrl})`);
+        }
+
+        const fieldValue = lines.length > 0 ? lines.join("\n") : "*No additional details*";
+
+        e.addFields({
+          name: `${emoji} #${code} • ${status} • ${submittedAt}`,
+          value: fieldValue,
+          inline: false,
+        });
+      }
+
+      return e;
+    });
+
+    await withStep(ctx, "reply", async () => {
       await interaction.editReply({ embeds: [embed] });
-      return;
-    }
 
-    // Build the embed
-    const embed = new EmbedBuilder()
-      .setTitle(`Application History for ${displayName}`)
-      .setColor(0x5865f2) // Discord blurple
-      .setTimestamp()
-      .setFooter({ text: `User ID: ${targetUserId}` });
-
-    if (avatarUrl) {
-      embed.setThumbnail(avatarUrl);
-    }
-
-    // Add total count description
-    if (totalApplications > MAX_APPLICATIONS) {
-      embed.setDescription(
-        `**Total Applications:** ${totalApplications}\n*Showing most recent ${MAX_APPLICATIONS}*`
+      logger.info(
+        { guildId, reviewerId, targetUserId, applicationCount: applications.length },
+        "[search] moderator searched user application history"
       );
-    } else {
-      embed.setDescription(`**Total Applications:** ${totalApplications}`);
-    }
-
-    // Add each application as a field
-    for (const app of applications) {
-      const code = shortCode(app.id);
-      const emoji = getStatusEmoji(app.status);
-      const status = formatStatus(app.status);
-      const submittedAt = formatTimestamp(app.submitted_at);
-
-      // Build the field value
-      const lines: string[] = [];
-
-      // Add resolution reason if present (truncated)
-      if (app.resolution_reason) {
-        const reason = truncate(app.resolution_reason, 100);
-        lines.push(`Reason: "${reason}"`);
-      }
-
-      // Add link to review card if message exists
-      if (app.channel_id && app.message_id) {
-        const messageUrl = `https://discord.com/channels/${guildId}/${app.channel_id}/${app.message_id}`;
-        lines.push(`[View Card](${messageUrl})`);
-      }
-
-      const fieldValue = lines.length > 0 ? lines.join("\n") : "*No additional details*";
-
-      embed.addFields({
-        name: `${emoji} #${code} • ${status} • ${submittedAt}`,
-        value: fieldValue,
-        inline: false,
-      });
-    }
-
-    await interaction.editReply({ embeds: [embed] });
-
-    logger.info(
-      { guildId, reviewerId, targetUserId, applicationCount: applications.length },
-      "[search] moderator searched user application history"
-    );
+    });
   } catch (err) {
     logger.error({ err, guildId, reviewerId, targetUserId: targetUserId ?? queryString }, "[search] command failed");
 

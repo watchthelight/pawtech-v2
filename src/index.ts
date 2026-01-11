@@ -269,6 +269,10 @@ commands.set(utility.data.name, wrapCommand("utility", utility.execute));
 import * as developer from "./commands/developer.js";
 commands.set(developer.data.name, wrapCommand("developer", developer.execute));
 
+// Test command (intentional error for logging verification)
+import * as test from "./commands/test.js";
+commands.set(test.data.name, wrapCommand("test", test.execute));
+
 client.once(Events.ClientReady, async () => {
   // schema self-heal before anything else
   // sudo make it work
