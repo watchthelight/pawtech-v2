@@ -1,6 +1,6 @@
 # Server Roles — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-11T15:38:32.808Z
+**Generated:** 2026-01-11T15:55:23.533Z
 **Guild ID:** 896070888594759740
 **Total Roles:** 223
 
@@ -40,7 +40,7 @@
 | 205 | Moderation Team | default | 15 |  | ManageMessages, MentionEveryone, ModerateMembers |
 | 204 | Staff on Break | default | 0 |  | - |
 | 203 | Gatekeeper | default | 7 |  | MentionEveryone |
-| 202 | Community Apps | #0b7c54 | 26 |  | Administrator, ManageChannels, ManageRoles |
+| 202 | Community Apps | #0b7c54 | 26 |  | ManageChannels, ManageRoles, ModerateMembers |
 | 201 | VRC Group Team | default | 2 |  | - |
 | 200 | Events Manager | default | 1 |  | - |
 | 199 | Event Host | default | 1 |  | - |
@@ -272,7 +272,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 | Moderation Team | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ✅ | ❌ |
 | Staff on Break | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Gatekeeper | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
-| Community Apps | ✅ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
+| Community Apps | ❌ | ❌ | ✅ | ✅ | ❌ | ❌ | ❌ | ❌ |
 | VRC Group Team | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Events Manager | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
 | Event Host | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ | ❌ |
@@ -371,7 +371,7 @@ Legend: ✅ = Has permission | ❌ = Does not have
 - **Members:** 26
 - **Mentionable:** No
 - **Hoisted:** No
-- **Permissions:** AddReactions, Administrator, AttachFiles, Connect, EmbedLinks, ManageChannels, ManageNicknames, ManageRoles, ModerateMembers, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, UseExternalEmojis, UseExternalStickers, ViewAuditLog, ViewChannel
+- **Permissions:** AddReactions, AttachFiles, Connect, EmbedLinks, ManageChannels, ManageNicknames, ManageRoles, ModerateMembers, ReadMessageHistory, SendMessages, SendMessagesInThreads, Speak, UseExternalEmojis, UseExternalStickers, ViewAuditLog, ViewChannel
 
 ### Community Ambassador
 - **ID:** 896070888762535967

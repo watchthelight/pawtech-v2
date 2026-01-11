@@ -1,6 +1,6 @@
 # Server Information — 🎆 Pawtropolis™ | Furry • LGBTQ+
 
-**Generated:** 2026-01-11T15:38:32.818Z
+**Generated:** 2026-01-11T15:55:23.545Z
 
 ---
 
@@ -101,7 +101,7 @@
 
 | Category | Count |
 |----------|-------|
-| Roles with Admin | 6 |
+| Roles with Admin | 5 |
 | Roles with Mod Perms | 9 |
 | Bot Roles | 5 |
 | Mentionable Roles | 6 |
